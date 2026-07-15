@@ -28,7 +28,7 @@ export class CLIChannel implements ChannelAdapter {
       }
       // Bub-style internal commands (comma prefix)
       if (text.startsWith(",")) {
-        const { execute, initInternalCommands } = await import("@/core/internal-commands.js");
+        const { execute, initInternalCommands } = await import("@/core/internal-commands/index.js");
         initInternalCommands(() => agent, () => process.env.PHUS_HOME ?? "./.phus");
         const result = await execute(text, "cli");
         if (result !== null && result !== "not-a-command") {

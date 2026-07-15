@@ -116,7 +116,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     const trimmed = cmd.trim();
     // Bub-style ,foo commands (also accepted in TUI)
     if (trimmed.startsWith(",")) {
-      const { execute, initInternalCommands } = await import("@/core/internal-commands.js");
+      const { execute, initInternalCommands } = await import("@/core/internal-commands/index.js");
       initInternalCommands(() => agent, () => process.env.PHUS_HOME ?? "./.phus");
       const result = await execute(trimmed, "tui");
       if (result === "__QUIT_TUI__") return "quit";
