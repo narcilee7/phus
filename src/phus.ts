@@ -18,6 +18,7 @@ import { logger } from "./core/logger.js";
 import { tailLogs } from "./commands/logs.js";
 import { healthCheck } from "./commands/health.js";
 import { resumeSession } from "./commands/resume.js";
+import { collectTasks, renderTasks } from "./commands/tasks.js";
 import { ExitCode, CliExit } from "./core/exit-codes.js";
 import { makeCtx, type HookContext } from "./core/hook.js";
 import type { ChannelAdapter } from "./channels/base.js";
@@ -148,6 +149,19 @@ program
     }
     console.log("\nDefault file_write roots: ./skills, ./.phus, ./tmp, ./out");
     console.log("Default bash blocklist: rm -rf /, fork bombs, curl|sh, dd if=, chmod -R 777 /, mkfs");
+  });
+
+program
+  .command("tasks")
+  .description("Show agent state, sessions, schedules, and recent checkpoints")
+  .option("--json", "emit JSON")
+  .action((opts: { json?: boolean }) => {
+    const out = collectTasks();
+    if (opts.json) {
+      console.log(JSON.stringify(out, null, 2));
+    } else {
+      console.log(renderTasks(out));
+    }
   });
 
 program

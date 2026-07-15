@@ -74,6 +74,7 @@ export class PhusAgent {
   private currentSessionId: string | undefined;
   private extraChannels: ChannelAdapter[] = [];
   private autoCompactCfg: AutoCompactConfig = DEFAULT_AUTO_COMPACT;
+  private autoCompactEnabled = true;
 
   constructor() {
     this.tape = new Tape();
@@ -86,6 +87,7 @@ export class PhusAgent {
     ];
 
     const profile = resolveProfile(process.env.PHUS_PROFILE);
+    this.autoCompactEnabled = profile.autoCompact !== false;
     this.piAgent = new Agent({
       initialState: {
         systemPrompt: SYSTEM_PROMPT_HEADER,
@@ -106,6 +108,8 @@ export class PhusAgent {
           hasPayload: !!payload,
         });
       } : undefined,
+      // B.4.2: parallel tool execution (faster but riskier)
+      toolExecution: profile.toolExecution ?? "sequential",
     });
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
@@ -343,8 +347,8 @@ export class PhusAgent {
    *
    *  Also runs auto-compaction here (B.2.5) before rebuilding context. */
   private async injectContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
-    // B.2.5: auto-compact if context is growing too large
-    if (this.currentSessionId) {
+    // B.2.5: auto-compact if context is growing too large (controlled by profile.autoCompact)
+    if (this.currentSessionId && this.autoCompactEnabled) {
       const cw = this.piAgent.state.model.contextWindow;
       await maybeCompact(
         this.tape,
@@ -373,15 +377,36 @@ export class PhusAgent {
     if (ctxResult) {
       dynamicContext = ctxResult;
     } else {
-      // Default: skills + recent tape
+      // Default: skills + smart-selected tape turns (B.4.3)
       const skillsCtx = this.skills.toPromptContext();
-      const tapeSummary = this.currentSessionId
-        ? this.tape.summary(this.currentSessionId, 10)
-        : "(no session yet)";
+      let tapeSummary: string;
+      if (this.currentSessionId) {
+        // Get the last user message as the query for relevance scoring
+        const lastUserMsg = [...this.piAgent.state.messages]
+          .reverse()
+          .find((m) => m.role === "user");
+        const query = (lastUserMsg as any)?.content ?? "";
+        const queryText = typeof query === "string"
+          ? query
+          : Array.isArray(query)
+            ? query.filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ")
+            : "";
+        const { selectRelevantTurns } = await import("../core/context-select.js");
+        const relevant = selectRelevantTurns(this.tape, this.currentSessionId, queryText);
+        tapeSummary = relevant
+          .map((t) => {
+            const u = (t.inbound.content ?? "").slice(0, 100).replace(/\n/g, " ");
+            const r = (t.modelOutput ?? "").slice(0, 100).replace(/\n/g, " ");
+            return `[${new Date(t.ts).toISOString().slice(11, 16)}] U: ${u} | P: ${r}`;
+          })
+          .join("\n") || "(empty)";
+      } else {
+        tapeSummary = "(no session yet)";
+      }
       const stats = this.tape.stats();
       dynamicContext =
         `## Current skills\n${skillsCtx}\n\n` +
-        `## Recent memory (last 10 turns of this session)\n${tapeSummary || "(empty)"}\n\n` +
+        `## Relevant past turns (B.4.3 smart select)\n${tapeSummary}\n\n` +
         `## Tape statistics\nTotal entries across all sessions: ${stats.totalEntries}\n` +
         `Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;
     }

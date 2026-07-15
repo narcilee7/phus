@@ -394,6 +394,12 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         return;
       }
 
+      case "tasks": {
+        const { collectTasks, renderTasks } = await import("../commands/tasks.js");
+        setItems((prev) => [...prev, makeSystem(renderTasks(collectTasks()), "info")]);
+        return;
+      }
+
       case "bash": {
         if (!arg) {
           setItems((prev) => [...prev, makeSystem("usage: /bash <command>", "warn")]);
