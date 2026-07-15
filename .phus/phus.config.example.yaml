@@ -1,0 +1,62 @@
+# ─── Provider profiles ────────────────────────────────────────
+# Multiple named profiles for different models / gateways.
+# Switch via PHUS_PROFILE env var, `--profile` flag, or `/profiles <name>` in TUI.
+#
+# Each profile:
+#   model        — <provider>/<modelId> as registered in pi-mono (required)
+#   baseUrl      — override provider's default URL (Volcano Ark, Azure, vLLM)
+#   modelId      — override the id sent on the wire (Volcano Ark ep-xxx IDs)
+#   headers      — extra HTTP headers (rarely needed)
+#   apiKeyEnv    — env var name to read API key from (auto-detected by default)
+#   thinkingLevel — off | minimal | low | medium | high | xhigh
+#   maxSteps     — max tool-use loop iterations (default: 50)
+#   description  — shown in `phus profiles` output
+#
+providers:
+  defaultProfile: smart
+
+  profiles:
+    # Default: Anthropic Claude direct
+    smart:
+      model: anthropic/claude-sonnet-4-20250514
+      thinkingLevel: medium
+      description: default — balanced quality + speed
+
+    # Cheap + fast for routine tasks
+    fast:
+      model: openai/gpt-4o-mini
+      thinkingLevel: low
+      description: cheap OpenAI for routine work
+
+    # Volcano Ark DeepSeek via OpenAI-compatible gateway
+    volcano:
+      model: deepseek/deepseek-v3-250324
+      baseUrl: https://ark.cn-beijing.volces.com/api/v3
+      modelId: deepseek-v3-250324        # or your ep-xxxxxxxx endpoint id
+      apiKeyEnv: VOLCANO_API_KEY
+      thinkingLevel: medium
+      description: Volcano Ark (火山方舟) DeepSeek-V3
+
+    # OpenRouter proxy
+    openrouter:
+      model: openrouter/anthropic/claude-3.5-sonnet
+      apiKeyEnv: OPENROUTER_API_KEY
+      thinkingLevel: medium
+      description: OpenRouter proxy (any model)
+
+    # Self-hosted vLLM
+    vllm:
+      model: openai/custom-model
+      baseUrl: https://your-vllm.internal/v1
+      apiKeyEnv: VLLM_API_KEY
+      description: self-hosted vLLM endpoint
+
+
+# ─── Plugins ───────────────────────────────────────────────────
+# Loaded in order. Last entry's `config` is passed to the plugin's
+# register(ctx) as ctx.config.
+plugins:
+  - name: my-plugin
+    path: ./plugins/my-plugin.ts
+    config:
+      debug: true

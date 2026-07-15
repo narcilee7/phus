@@ -26,6 +26,21 @@ export class CLIChannel implements ChannelAdapter {
         this.rl?.prompt();
         return;
       }
+      // Bub-style internal commands (comma prefix)
+      if (text.startsWith(",")) {
+        const { execute, initInternalCommands } = await import("../core/internal-commands.js");
+        initInternalCommands(() => agent, () => process.env.PHUS_HOME ?? "./.phus");
+        const result = await execute(text, "cli");
+        if (result !== null && result !== "not-a-command") {
+          console.log(result);
+        }
+        if (text === ",quit") {
+          this.rl?.close();
+          return;
+        }
+        this.rl?.prompt();
+        return;
+      }
       if (text === "/quit" || text === "/exit") {
         this.rl?.close();
         return;
@@ -76,16 +91,25 @@ export async function runOnce(prompt: string): Promise<void> {
     metadata: { chatId: "default" },
   });
   await agent.turn(envelope, channel);
-  await channel.send(
-    agent._internal.piAgent.state.messages
-      .filter((m) => m.role === "assistant")
-      .map((m) => ({
-        to: "default",
-        content: extractText(m),
-        type: "text" as const,
-        channel: "cli",
-      })),
-  );
+  const assistantTexts = agent._internal.piAgent.state.messages
+    .filter((m) => m.role === "assistant")
+    .map((m) => ({
+      to: "default",
+      content: extractText(m),
+      type: "text" as const,
+      channel: "cli",
+    }));
+
+  if (assistantTexts.length === 0 || assistantTexts.every((m) => !m.content.trim())) {
+    process.stderr.write(
+      "\n⚠️  Agent returned no text. Common causes:\n" +
+        "   • Wrong PHUS_MODEL_ID (gateway doesn't recognize the model name)\n" +
+        "   • Wrong PHUS_BASE_URL or DEEPSEEK_API_KEY\n" +
+        "   • Provider rejected the request (check `phus logs --follow`)\n\n",
+    );
+  }
+
+  await channel.send(assistantTexts);
 }
 
 function extractText(msg: any): string {

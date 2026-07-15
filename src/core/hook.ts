@@ -15,6 +15,8 @@ export type HookName =
   | "resolve_session"
   | "load_state"
   | "build_prompt"
+  | "system_prompt"
+  | "build_tape_context"
   | "before_llm_call"
   | "after_llm_call"
   | "before_tool_call"
@@ -22,9 +24,11 @@ export type HookName =
   | "render_outbound"
   | "dispatch_outbound"
   | "save_state"
-  | "system_prompt"
-  | "build_tape_context"
-  | "on_error";
+  | "on_error"
+  | "admit_message"
+  | "provide_channels"
+  | "register_cli_commands"
+  | "provide_steering_inbox";
 
 /** Context passed to every hook implementation. */
 export interface HookContext {

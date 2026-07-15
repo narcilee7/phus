@@ -23,6 +23,10 @@ export interface PluginContext {
   registerSkill: (skill: Skill) => void;
   /** Register a custom channel. */
   registerChannel: (channel: ChannelAdapter) => void;
+  /** Add a `,foo` internal command (Bub-style REPL). */
+  registerInternalCommand: (cmd: import("./internal-commands.js").InternalCommand) => void;
+  /** Add a Commander subcommand (called once at startup). */
+  registerCliCommand: (fn: (program: any) => void) => void;
   /** Plugin's own config slice from phus.config.yaml. */
   config: unknown;
 }
@@ -81,6 +85,15 @@ export function loadPlugins(
         hooks,
         registerSkill: (s) => skills.registerRuntime?.(s),
         registerChannel: (c) => channels.push(c),
+        registerInternalCommand: (cmd) => {
+          // Lazy import to avoid circular dep
+          import("./internal-commands.js").then((m) => m.register(cmd));
+        },
+        registerCliCommand: (fn) => {
+          // Lazy: collect into a queue; phus.ts drains it at startup
+          (globalThis as any).__phus_pending_cli_commands ||= [];
+          (globalThis as any).__phus_pending_cli_commands.push(fn);
+        },
         config,
       };
       const result = plugin.register(ctx);

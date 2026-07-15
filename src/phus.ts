@@ -14,6 +14,8 @@ import { traceSession } from "./commands/trace.js";
 import { logger } from "./core/logger.js";
 import { tailLogs } from "./commands/logs.js";
 import { healthCheck } from "./commands/health.js";
+import { makeCtx, type HookContext } from "./core/hook.js";
+import type { ChannelAdapter } from "./channels/base.js";
 
 const program = new Command();
 
@@ -39,7 +41,9 @@ program
 program
   .command("run <prompt>")
   .description("Run a single prompt and print the response")
-  .action(async (prompt: string) => {
+  .option("-p, --profile <name>", "Use a specific provider profile (overrides PHUS_PROFILE)")
+  .action(async (prompt: string, opts: { profile?: string }) => {
+    if (opts.profile) process.env.PHUS_PROFILE = opts.profile;
     await runOnce(prompt);
   });
 
@@ -51,33 +55,20 @@ program
   .option("--sse <port>", "Enable SSE channel on the given port")
   .action(async (opts: { telegram?: boolean; websocket?: string; sse?: string }) => {
     const mode = bootstrap();
-    if (mode === "default") {
-      console.log("[phus] no channels enabled; use --telegram / --websocket / --sse");
-      process.exit(1);
-    }
     const agent = new PhusAgent();
-    const channels: import("./channels/base.js").ChannelAdapter[] = [];
-    if (opts.telegram) {
-      const { TelegramChannel } = await import("./channels/telegram.js");
-      const token = process.env.TELEGRAM_TOKEN;
-      if (!token) {
-        console.error("[phus] TELEGRAM_TOKEN not set");
+
+    // A.1: collect channels from CLI flags + plugins' provide_channels hook
+    const channels = await collectChannels(agent, opts);
+
+    if (channels.length === 0) {
+      if (mode === "default") {
+        console.log("[phus] no channels enabled; use --telegram / --websocket / --sse or a plugin");
         process.exit(1);
       }
-      channels.push(new TelegramChannel(token));
-    }
-    if (opts.websocket) {
-      const { WebSocketChannel } = await import("./channels/websocket.js");
-      channels.push(new WebSocketChannel(parseInt(opts.websocket, 10)));
-    }
-    if (opts.sse) {
-      const { SSEChannel } = await import("./channels/sse.js");
-      channels.push(new SSEChannel(parseInt(opts.sse, 10)));
-    }
-    if (channels.length === 0) {
       console.log("[phus] no channels specified.");
       process.exit(1);
     }
+
     for (const ch of channels) {
       await ch.listen(agent);
       logger.info("channel.listening", { channel: ch.name });
@@ -138,6 +129,16 @@ program
     }
     console.log("\nDefault file_write roots: ./skills, ./.phus, ./tmp, ./out");
     console.log("Default bash blocklist: rm -rf /, fork bombs, curl|sh, dd if=, chmod -R 777 /, mkfs");
+  });
+
+program
+  .command("profiles")
+  .description("List configured provider profiles")
+  .action(async () => {
+    const { formatProfiles } = await import("./core/profile.js");
+    console.log(formatProfiles());
+    console.log(`\nactive: ${process.env.PHUS_PROFILE ?? "(default)"}`);
+    console.log(`set:    PHUS_PROFILE=<name>  or  phus run --profile <name> "..."`);
   });
 
 program
@@ -236,7 +237,102 @@ program
     await startTui();
   });
 
+// A.2: register_cli_commands hook — let plugins add `phus xxx` subcommands
+// Runs once, after built-in commands are registered but before parseAsync.
+await registerPluginCliCommands(program);
+
 program.parseAsync(process.argv).catch((err) => {
   console.error("[phus] fatal:", err);
   process.exit(1);
 });
+
+/**
+ * A.2: Drain the pending CLI command queue from plugins + run the
+ * register_cli_commands hook. The queue approach lets plugins loaded
+ * earlier (during phus.ts bootstrap) still register commands.
+ */
+async function registerPluginCliCommands(program: Command): Promise<void> {
+  // 1. Drain queue (set by PluginContext.registerCliCommand during plugin load)
+  const pending = ((globalThis as any).__phus_pending_cli_commands as Array<(p: any) => void>) ?? [];
+  for (const fn of pending) {
+    try { fn(program); } catch (err) {
+      logger.error("plugin.cli_command_failed", { error: (err as Error).message });
+    }
+  }
+  (globalThis as any).__phus_pending_cli_commands = [];
+
+  // 2. Run the hook (plugins that prefer the hook over the convenience API)
+  //    Note: we need a PhusAgent just to access the HookRegistry. We don't
+  //    actually start a turn — the agent is created lazily.
+  const tempAgent = new PhusAgent();
+  const ctx: HookContext = makeCtx({
+    sessionId: "",
+    state: {},
+    tape: tempAgent._internal.tape,
+    skills: tempAgent._internal.skills,
+    extras: { program },
+  });
+  await tempAgent._internal.hooks.execute(
+    "register_cli_commands",
+    ctx,
+    "broadcast",
+  );
+}
+
+/**
+ * A.1: collect channels from CLI flags + plugins' provide_channels hook.
+ * Plugins can register channels via either:
+ *   - the `provide_channels` hook (broadcast)
+ *   - the `ctx.registerChannel()` convenience on PluginContext (also goes through the hook)
+ */
+async function collectChannels(
+  agent: PhusAgent,
+  opts: { telegram?: boolean; websocket?: string; sse?: string },
+): Promise<ChannelAdapter[]> {
+  const channels: ChannelAdapter[] = [];
+
+  // CLI flags first (hardcoded)
+  if (opts.telegram) {
+    const { TelegramChannel } = await import("./channels/telegram.js");
+    const token = process.env.TELEGRAM_TOKEN;
+    if (!token) {
+      console.error("[phus] TELEGRAM_TOKEN not set");
+      process.exit(1);
+    }
+    channels.push(new TelegramChannel(token));
+  }
+  if (opts.websocket) {
+    const { WebSocketChannel } = await import("./channels/websocket.js");
+    channels.push(new WebSocketChannel(parseInt(opts.websocket, 10)));
+  }
+  if (opts.sse) {
+    const { SSEChannel } = await import("./channels/sse.js");
+    channels.push(new SSEChannel(parseInt(opts.sse, 10)));
+  }
+
+  // Plugins' provide_channels hook (broadcast) — appended after CLI flags
+  const ctx: HookContext = makeCtx({
+    sessionId: "",
+    state: {},
+    tape: agent._internal.tape,
+    skills: agent._internal.skills,
+  });
+  const pluginContributions = await agent._internal.hooks.execute<ChannelAdapter[][]>(
+    "provide_channels",
+    ctx,
+    "broadcast",
+  );
+  if (pluginContributions && pluginContributions.length > 0) {
+    for (const list of pluginContributions) {
+      if (Array.isArray(list)) channels.push(...list);
+    }
+  }
+
+  // Deduplicate by channel name (plugins may overlap with CLI flags)
+  const seen = new Set<string>();
+  return channels.filter((c) => {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+    return true;
+  });
+}

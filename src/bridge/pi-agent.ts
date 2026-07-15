@@ -26,16 +26,24 @@ import { SkillRegistry } from "../core/skill.js";
 import { createMetaTools } from "../core/meta.js";
 import { createExternalTools } from "./tools.js";
 import { defaultPolicy, evaluate, type PolicyRule } from "../core/policy.js";
+import { resolveProfile, modelFromProfile, apiKeyForProfile, loadProviderConfig } from "../core/profile.js";
+import { getDefaultInbox, type SteeringInbox } from "../core/steering.js";
 import { logger } from "../core/logger.js";
 import type { ChannelAdapter } from "../channels/base.js";
 
 function resolveModel(): Model<any> {
-  const spec = process.env.PHUS_MODEL ?? "anthropic/claude-sonnet-4-20250514";
-  const [provider, modelId] = spec.split("/", 2);
-  if (!provider || !modelId) {
-    throw new Error(`Invalid PHUS_MODEL="${spec}". Expected "<provider>/<modelId>", e.g. "openai/gpt-4o".`);
+  const profile = resolveProfile(process.env.PHUS_PROFILE);
+  const model = modelFromProfile(profile);
+  // Ensure API key env var is set for Pi's streamSimple to pick up
+  const key = apiKeyForProfile(profile);
+  if (key) {
+    const provider = profile.model.split("/", 1)[0];
+    if (provider) {
+      const envKey = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+      process.env[envKey] ??= key;
+    }
   }
-  return getModel(provider as any, modelId as any);
+  return model;
 }
 
 const SYSTEM_PROMPT_HEADER = `You are Phus (⛰️ 西西弗斯), a self-evolving agent.
@@ -74,16 +82,27 @@ export class PhusAgent {
       ...createExternalTools(),
     ];
 
+    const profile = resolveProfile(process.env.PHUS_PROFILE);
     this.piAgent = new Agent({
       initialState: {
         systemPrompt: SYSTEM_PROMPT_HEADER,
-        model: resolveModel(),
+        model: modelFromProfile(profile),
         tools,
         messages: [],
       },
       transformContext: async (messages) => this.injectContext(messages),
       beforeToolCall: async (ctx, signal) => this.beforeToolCall(ctx, signal),
       afterToolCall: async (ctx, signal) => this.afterToolCall(ctx, signal),
+      // Dynamic API key refresh — Pi calls this on every LLM request, so
+      // expiring OAuth tokens can be refreshed without restarting.
+      getApiKey: (provider) => this.resolveApiKey(provider),
+      // Wire-format debugging — set PHUS_DEBUG_WIRE=1 to log every payload.
+      onPayload: process.env.PHUS_DEBUG_WIRE ? (kind, payload) => {
+        logger.debug("wire.payload", {
+          kind,
+          hasPayload: !!payload,
+        });
+      } : undefined,
     });
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
@@ -92,6 +111,30 @@ export class PhusAgent {
     // Load plugins: they may register additional hooks / channels / skills.
     // Deferred via dynamic import to keep the constructor synchronous.
     void this.loadPluginsAsync();
+  }
+
+  /** Pi event handler — dispatches to Bub hooks. */
+  private handleEvent(event: AgentEvent): void {
+    if (event.type === "turn_end" && event.message?.role === "assistant") {
+      const last = event.message as any;
+      // after_llm_call hook (broadcast) — observers can log / meter / cap
+      void this.hooks.execute(
+        "after_llm_call",
+        makeCtx({
+          sessionId: this.currentSessionId ?? "",
+          state: {},
+          tape: this.tape,
+          skills: this.skills,
+          extras: {
+            stopReason: last.stopReason,
+            errorMessage: last.errorMessage,
+            usage: last.usage,
+            model: last.model,
+          },
+        }),
+        "broadcast",
+      );
+    }
   }
 
   private async loadPluginsAsync(): Promise<void> {
@@ -107,10 +150,13 @@ export class PhusAgent {
   /** Run one inbound envelope through the Bub hook chain. */
   async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
     const startedAt = Date.now();
+    let sessionId = "";  // hoisted so catch can read it
+
+    try {
 
     // 1. resolve_session (firstresult)
     const baseCtx = makeCtx({ envelope, sessionId: "", state: {}, tape: this.tape, skills: this.skills });
-    const sessionId = (await this.hooks.execute<string>(
+    sessionId = (await this.hooks.execute<string>(
       "resolve_session",
       baseCtx,
       "firstresult",
@@ -118,6 +164,35 @@ export class PhusAgent {
 
     this.currentSessionId = sessionId;
     this.piAgent.sessionId = sessionId;
+
+    // 1a. Drain steering inbox (firstresult) — inject any queued messages
+    //     as Pi's steer queue so they interrupt the next LLM call naturally.
+    const inbox = await this.hooks.execute<SteeringInbox>(
+      "provide_steering_inbox",
+      makeCtx({ sessionId, state: {}, tape: this.tape, skills: this.skills }),
+      "firstresult",
+    ) ?? getDefaultInbox();
+    const pending = await inbox.drainMessages();
+    for (const env of pending) {
+      this.piAgent.steer({
+        role: "user",
+        content: [{ type: "text", text: env.content }],
+        timestamp: env.ts,
+      });
+      logger.info("steering.injected", { from: env.from, sessionId });
+    }
+
+    // 1b. admit_message (firstresult) — admission control per session.
+    //     Default admits all; plugins can return { admit: false, reason }.
+    const admitDecision = (await this.hooks.execute<{ admit?: boolean; reason?: string }>(
+      "admit_message",
+      makeCtx({ envelope, sessionId, state: {}, tape: this.tape, skills: this.skills }),
+      "firstresult",
+    )) ?? { admit: true };
+    if (!admitDecision.admit) {
+      logger.info("turn.rejected", { sessionId, reason: admitDecision.reason });
+      throw new Error(`Message not admitted: ${admitDecision.reason ?? "(no reason)"}`);
+    }
 
     // 2. load_state (broadcast → merge)
     const state = (await this.hooks.execute<HookContext[]>(
@@ -236,29 +311,66 @@ export class PhusAgent {
     });
 
     return turn;
+    } catch (err: any) {
+      // on_error hook (broadcast) — observers can react, log, alert, etc.
+      await this.hooks.execute(
+        "on_error",
+        makeCtx({
+          envelope,
+          sessionId: sessionId ?? "",
+          state: {},
+          tape: this.tape,
+          skills: this.skills,
+          extras: { stage: "turn", error: err.message ?? String(err) },
+        }),
+        "broadcast",
+      );
+      logger.error("turn.failed", {
+        sessionId,
+        stage: "turn",
+        error: err.message ?? String(err),
+      });
+      throw err;
+    }
   }
 
-  /** Inject skills + tape summary into the system prompt on every LLM call. */
+  /** Inject skills + tape summary into the system prompt on every LLM call.
+   *  Uses the Bub hook chain: system_prompt (firstresult) → build_tape_context (firstresult).
+   *  Plugins can replace either entirely. Default impls compose the standard header. */
   private async injectContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
-    const skillsCtx = this.skills.toPromptContext();
-    const tapeSummary = this.currentSessionId
-      ? this.tape.summary(this.currentSessionId, 10)
-      : "(no session yet)";
-    const stats = this.tape.stats();
+    // 1. system_prompt (firstresult) — base system prompt
+    let systemPrompt: string;
+    const spResult = await this.hooks.execute<string>(
+      "system_prompt",
+      makeCtx({ sessionId: this.currentSessionId ?? "", state: {}, tape: this.tape, skills: this.skills }),
+      "firstresult",
+    );
+    systemPrompt = spResult ?? SYSTEM_PROMPT_HEADER;
 
-    const injected = `${SYSTEM_PROMPT_HEADER}
+    // 2. build_tape_context (firstresult) — dynamic context block (skills + tape)
+    const ctxResult = await this.hooks.execute<string>(
+      "build_tape_context",
+      makeCtx({ sessionId: this.currentSessionId ?? "", state: {}, tape: this.tape, skills: this.skills }),
+      "firstresult",
+    );
+    let dynamicContext: string;
+    if (ctxResult) {
+      dynamicContext = ctxResult;
+    } else {
+      // Default: skills + recent tape
+      const skillsCtx = this.skills.toPromptContext();
+      const tapeSummary = this.currentSessionId
+        ? this.tape.summary(this.currentSessionId, 10)
+        : "(no session yet)";
+      const stats = this.tape.stats();
+      dynamicContext =
+        `## Current skills\n${skillsCtx}\n\n` +
+        `## Recent memory (last 10 turns of this session)\n${tapeSummary || "(empty)"}\n\n` +
+        `## Tape statistics\nTotal entries across all sessions: ${stats.totalEntries}\n` +
+        `Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;
+    }
 
-## Current skills
-${skillsCtx}
-
-## Recent memory (last 10 turns of this session)
-${tapeSummary || "(empty)"}
-
-## Tape statistics
-Total entries across all sessions: ${stats.totalEntries}
-Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;
-
-    this.piAgent.state.systemPrompt = injected;
+    this.piAgent.state.systemPrompt = `${systemPrompt}\n\n${dynamicContext}`;
     return messages;
   }
 
@@ -319,13 +431,6 @@ Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", 
     return undefined;
   }
 
-  /** Subscribe handler — captures errors and (optionally) streaming text. */
-  private handleEvent(event: AgentEvent): void {
-    if (event.type === "agent_end") {
-      // No-op; turn() handles final persistence.
-    }
-  }
-
   /** Pull collected tool calls from the current Pi state. */
   private collectToolCalls(): Turn["toolCalls"] {
     const out: Turn["toolCalls"] = [];
@@ -382,6 +487,45 @@ Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", 
       policy: this.policy,
       channels: this.extraChannels,
     };
+  }
+
+  /** Dynamic API key resolver passed to Pi's getApiKey callback. */
+  private resolveApiKey(provider: string): string | undefined {
+    try {
+      const profile = resolveProfile(process.env.PHUS_PROFILE);
+      if (profile.apiKeyEnv && process.env[profile.apiKeyEnv]) {
+        return process.env[profile.apiKeyEnv];
+      }
+    } catch { /* ignore */ }
+    const envMap: Record<string, string> = {
+      "github-copilot": "COPILOT_GITHUB_TOKEN",
+      anthropic: "ANTHROPIC_OAUTH_TOKEN",
+    };
+    const direct = envMap[provider];
+    if (direct && process.env[direct]) return process.env[direct];
+    const upperKey = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+    return process.env[upperKey];
+  }
+
+  /** Abort the current turn. */
+  abort(): void {
+    this.piAgent.abort();
+    logger.info("turn.aborted");
+  }
+
+  /** Wait until the current turn completes. */
+  async waitForIdle(): Promise<void> {
+    return this.piAgent.waitForIdle();
+  }
+
+  /** Queue a steering message (interrupts mid-run). */
+  steer(message: import("@mariozechner/pi-agent-core").AgentMessage): void {
+    this.piAgent.steer(message);
+  }
+
+  /** Queue a follow-up message (runs after current turn finishes). */
+  followUp(message: import("@mariozechner/pi-agent-core").AgentMessage): void {
+    this.piAgent.followUp(message);
   }
 }
 
