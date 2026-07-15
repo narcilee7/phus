@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { readFile, writeFile } from "node:fs/promises";
 import { Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { withRetry, DEFAULT_RETRY } from "../core/retry.js";
 
 const execFileP = promisify(execFile);
 
@@ -16,19 +17,29 @@ export function createExternalTools(): AgentTool[] {
       name: "bash",
       label: "Bash",
       description:
-        "Execute a shell command. Runs via `sh -c` with a 30-second timeout. " +
+        "Execute a shell command. Runs via `sh -c`. Default timeout 30s; override with timeoutMs. " +
+        "Auto-retries once on transient errors (network/timeout). " +
         "Use for git, curl, package managers, etc. Avoid for reading/writing files — use file_read/file_write.",
       parameters: Type.Object({
         command: Type.String({ description: "Shell command to execute." }),
         cwd: Type.Optional(Type.String({ description: "Working directory. Defaults to $PWD." })),
+        timeoutMs: Type.Optional(Type.Number({ description: "Max execution time in ms. Default 30000." })),
       }),
       execute: async (_id, params) => {
-        const p = params as { command: unknown; cwd?: unknown };
-        const stdout = await execFileP("sh", ["-c", String(p.command)], {
-          cwd: (p.cwd as string | undefined) ?? process.cwd(),
-          timeout: 30_000,
-          maxBuffer: 5 * 1024 * 1024,
-        });
+        const p = params as { command: unknown; cwd?: unknown; timeoutMs?: number };
+        const cmd = String(p.command);
+        const cwd = (p.cwd as string | undefined) ?? process.cwd();
+        const timeoutMs = p.timeoutMs ?? 30_000;
+        // Retry once on transient network/timeout errors
+        const stdout = await withRetry(
+          () =>
+            execFileP("sh", ["-c", cmd], {
+              cwd,
+              timeout: timeoutMs,
+              maxBuffer: 5 * 1024 * 1024,
+            }),
+          { ...DEFAULT_RETRY, maxAttempts: 2, initialDelayMs: 500, maxDelayMs: 2000, jitter: false },
+        );
         return {
           content: [{ type: "text", text: (stdout.stdout ?? "") + (stdout.stderr ?? "") }],
           details: { stdout: stdout.stdout, stderr: stdout.stderr },

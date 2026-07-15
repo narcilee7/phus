@@ -9,6 +9,7 @@
 import type { Envelope, State, Skill } from "./types.js";
 import type { Tape } from "./tape.js";
 import type { SkillRegistry } from "./skill.js";
+import { logger } from "./logger.js";
 
 /** Names of hooks supported by Phus. Mirrors Bub's hookspecs.py. */
 export type HookName =
@@ -58,6 +59,11 @@ export interface RegisterOptions {
 export class HookRegistry {
   private hooks = new Map<HookName, Array<RegisteredHook>>();
   private modes = new Map<HookName, HookMode>();
+  private isolateErrors = false;
+
+  constructor(opts: { isolateErrors?: boolean } = {}) {
+    this.isolateErrors = opts.isolateErrors ?? false;
+  }
 
   /** Register an implementation for a hook. Default mode is `chain`. */
   register<T>(name: HookName, impl: HookImpl<T>, opts: RegisterOptions = {}): void {
@@ -71,15 +77,23 @@ export class HookRegistry {
     if (!this.modes.has(name)) this.modes.set(name, mode);
   }
 
-  /** Execute all implementations of a hook according to its registered mode. */
+  /** Execute all implementations of a hook according to its registered mode.
+   *
+   *  With `isolateErrors: true`, a single hook throwing does NOT abort the
+   *  chain — the error is logged via `logger.error` and the previous result
+   *  is used. Without isolation, the first throw propagates (Bub default). */
   async execute<T>(name: HookName, ctx: HookContext, mode?: HookMode): Promise<T> {
     const chain = this.hooks.get(name) ?? [];
     const effective = mode ?? this.modes.get(name) ?? "chain";
 
     if (effective === "firstresult") {
       for (const { impl } of chain) {
-        const r = await impl(ctx);
-        if (r !== undefined && r !== null) return r as T;
+        try {
+          const r = await impl(ctx);
+          if (r !== undefined && r !== null) return r as T;
+        } catch (err) {
+          this.handleHookError(name, err, ctx);
+        }
       }
       return undefined as T;
     }
@@ -87,14 +101,39 @@ export class HookRegistry {
     if (effective === "chain") {
       let current: HookContext = ctx;
       for (const { impl } of chain) {
-        current = (await impl(current)) ?? current;
+        try {
+          current = (await impl(current)) ?? current;
+        } catch (err) {
+          this.handleHookError(name, err, ctx);
+        }
       }
       return current as T;
     }
 
     // broadcast
-    const results = await Promise.all(chain.map(({ impl }) => impl(ctx)));
+    const results = await Promise.all(
+      chain.map(async ({ impl }) => {
+        try {
+          return await impl(ctx);
+        } catch (err) {
+          this.handleHookError(name, err, ctx);
+          return undefined;
+        }
+      }),
+    );
     return results.filter((r) => r !== undefined && r !== null) as T;
+  }
+
+  private handleHookError(name: HookName, err: unknown, ctx: HookContext): void {
+    if (this.isolateErrors) {
+      logger.error("hook.failed_isolated", {
+        hook: name,
+        sessionId: ctx.sessionId,
+        error: (err as Error).message ?? String(err),
+      });
+    } else {
+      throw err;
+    }
   }
 
   /** Inspect registered implementations (used by `phus hooks` diagnostic command). */

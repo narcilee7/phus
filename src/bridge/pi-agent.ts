@@ -65,7 +65,7 @@ Keep responses concise. Use tools when they help.`;
 
 export class PhusAgent {
   private piAgent: Agent;
-  private hooks = new HookRegistry();
+  private hooks = new HookRegistry({ isolateErrors: true });
   private tape: Tape;
   private skills: SkillRegistry;
   private policy: PolicyRule[];
