@@ -30,6 +30,8 @@ import { resolveProfile, modelFromProfile, apiKeyForProfile, loadProviderConfig 
 import { getDefaultInbox, type SteeringInbox } from "../core/steering.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "../core/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint } from "../core/checkpoint.js";
+import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "../core/provider-mesh.js";
+import { setMesh as setMeshSingleton, buildMesh } from "../core/provider-mesh-runtime.js";
 import { logger } from "../core/logger.js";
 import type { ChannelAdapter } from "../channels/base.js";
 
@@ -88,10 +90,54 @@ export class PhusAgent {
 
     const profile = resolveProfile(process.env.PHUS_PROFILE);
     this.autoCompactEnabled = profile.autoCompact !== false;
+
+    // Phase C: build runtime ProviderMesh if profile defines mesh endpoints.
+    // Single-endpoint profiles still work — they just have one endpoint in the mesh.
+    const endpoints: EndpointSpec[] = profile.mesh && profile.mesh.length > 0
+      ? profile.mesh.map((m) => ({
+          name: m.name,
+          provider: m.provider,
+          modelId: m.modelId,
+          baseUrl: m.baseUrl,
+          apiKeyEnv: m.apiKeyEnv,
+          priority: m.priority,
+          weight: m.weight,
+          costPerMillion: m.costPerMillion,
+          tags: m.tags,
+        }))
+      : [{
+          name: profile.name,
+          provider: profile.model.split("/", 1)[0]!,
+          modelId: profile.modelId ?? profile.model.split("/", 2)[1]!,
+          baseUrl: profile.baseUrl,
+          apiKeyEnv: profile.apiKeyEnv,
+          priority: 0,
+        }];
+    const meshPolicy: MeshPolicy = { strategy: profile.meshStrategy ?? "failover" };
+    const mesh = buildMesh(endpoints, meshPolicy);
+    setMeshSingleton(mesh);
+
+    // Pick the initial model: mesh picks the best endpoint.
+    const initialEp = mesh.pickEndpoint();
+    const initialModel = initialEp
+      ? (() => {
+          // Build a Pi Model from the picked endpoint
+          const ep = initialEp.spec;
+          const baseModel = modelFromProfile({
+            ...profile,
+            name: profile.name,
+            model: `${ep.provider}/${ep.modelId}`,
+          });
+          if (ep.baseUrl) baseModel.baseUrl = ep.baseUrl;
+          if (ep.modelId) baseModel.id = ep.modelId;
+          return baseModel;
+        })()
+      : modelFromProfile(profile);
+
     this.piAgent = new Agent({
       initialState: {
         systemPrompt: SYSTEM_PROMPT_HEADER,
-        model: modelFromProfile(profile),
+        model: initialModel,
         tools,
         messages: [],
       },

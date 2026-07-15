@@ -1,0 +1,121 @@
+# deploy/litellm-config.yaml
+# LiteLLM proxy configuration for Phus.
+#
+# Deploy: docker run -p 4000:4000 -v $PWD/deploy:/app/config \
+#   -e LITELLM_MASTER_KEY=sk-litellm-master ghcr.io/berriai/litellm:main \
+#   --config /app/config/litellm-config.yaml
+#
+# Then in Phus: PHUS_BASE_URL=http://localhost:4000/v1
+#              OPENAI_API_KEY=sk-litellm-master   (or LITELLM_MASTER_KEY)
+#
+# Docs: https://docs.litellm.ai/docs/proxy/configs
+
+model_list:
+  # ── OpenAI: gpt-4o / gpt-4o-mini / o1 ─────────────────────────────
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: openai/o1
+    litellm_params:
+      model: openai/o1
+      api_key: os.environ/OPENAI_API_KEY
+
+  # ── Anthropic: claude-sonnet / claude-opus / claude-haiku ─────────
+  - model_name: anthropic/claude-sonnet-4-20250514
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: anthropic/claude-3-5-haiku-20241022
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ── Volcano Ark (火山方舟) DeepSeek ──────────────────────────────
+  # Model IDs follow Volcano Ark's own naming (deepseek-v3-250324 etc.)
+  - model_name: openai/deepseek-v3-250324
+    litellm_params:
+      model: openai/deepseek-v3-250324
+      api_key: os.environ/DEEPSEEK_API_KEY
+      api_base: https://ark.cn-beijing.volces.com/api/v3
+  - model_name: openai/deepseek-v4-pro-260425
+    litellm_params:
+      model: openai/deepseek-v4-pro-260425
+      api_key: os.environ/DEEPSEEK_API_KEY
+      api_base: https://ark.cn-beijing.volces.com/api/v3
+
+  # ── DeepSeek direct ──────────────────────────────────────────────
+  - model_name: openai/deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+      api_base: https://api.deepseek.com/v1
+  - model_name: openai/deepseek-reasoner
+    litellm_params:
+      model: deepseek/deepseek-reasoner
+      api_key: os.environ/DEEPSEEK_API_KEY
+      api_base: https://api.deepseek.com/v1
+
+# ── Fallback chains (B.4.2 + LiteLLM routing) ──────────────────────
+# When a model in the list fails (rate limit / 5xx / timeout), LiteLLM
+# automatically retries on the next model in the list.
+#
+# Format: list of model names. Each model is tried in order. If all fail,
+# the request errors out.
+
+fallbacks:
+  # Premium tier: try Sonnet first, fall back to GPT-4o if Anthropic is down
+  - - anthropic/claude-sonnet-4-20250514
+    - openai/gpt-4o
+    - openai/deepseek-v4-pro-260425
+    - openai/deepseek-chat
+
+  # Cheap tier: try mini first, fall back to haiku if OpenAI is down
+  - - openai/gpt-4o-mini
+    - anthropic/claude-3-5-haiku-20241022
+    - openai/deepseek-v3-250324
+
+  # Chinese tier: Volcano first, fall back to DeepSeek direct
+  - - openai/deepseek-v3-250324
+    - openai/deepseek-v4-pro-260425
+    - openai/deepseek-chat
+
+# ── General settings ──────────────────────────────────────────────
+
+general_settings:
+  # Master key required to call the proxy (clients use this as their API key)
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+  # Telemetry
+  telemetry: False
+
+# ── Routing strategy ──────────────────────────────────────────────
+# Multiple deployments of the same model_name → LiteLLM load-balances.
+# Strategies: simple-shuffle | usage-based-v2 | latency-based-routing |
+#             cost-based-routing | throughput
+router_settings:
+  routing_strategy: simple-shuffle   # round-robin across deployments
+  num_retries: 3                     # retry on 429/5xx per model before fallback
+  timeout: 60                        # per-request timeout seconds
+  redis_host: null                   # no Redis (single instance OK)
+  enable_caching: False              # disabled; turn on with Redis if needed
+
+# ── Observability ─────────────────────────────────────────────────
+# LiteLLM exposes:
+#   - GET /health/liveliness
+#   - GET /health/readiness
+#   - GET /spend/logs                 (cost tracking)
+#   - GET /global/spend/teams
+#   - POST /key/generate              (mint sub-keys per user)
+litellm_settings:
+  success_callback: ["langfuse"]     # optional: forward traces
+  # drop_params: True                 # drop unsupported params instead of erroring
+  # set_verbose: False
+
+# ── Server bind ──────────────────────────────────────────────────
+# Set via env: LITELLM_PORT (default 4000), LITELLM_HOST (default 0.0.0.0)
+# Set LITELLM_MASTER_KEY=sk-litellm-master for the master admin key.

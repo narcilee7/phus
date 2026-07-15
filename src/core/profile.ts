@@ -45,8 +45,28 @@ export interface ProviderProfile {
   toolExecution?: "sequential" | "parallel";
   /** Auto-compact when context exceeds threshold. Default true. */
   autoCompact?: boolean;
+  /** Mesh endpoints for cross-provider failover (Phase C). */
+  mesh?: MeshSpec[];
+  /** Mesh routing strategy when multiple endpoints. Default: failover. */
+  meshStrategy?: "failover" | "weighted" | "cost-first" | "latency-first";
   /** Human-readable description for `phus profiles` output. */
   description?: string;
+}
+
+export interface MeshSpec {
+  name: string;
+  provider: string;
+  modelId: string;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  /** Priority for failover. Lower = preferred. Default: 0. */
+  priority?: number;
+  /** Weight for weighted strategy. Default: 1. */
+  weight?: number;
+  /** Cost per 1M tokens (USD). */
+  costPerMillion?: { input: number; output: number };
+  /** Tags (e.g. "premium", "cheap", "china"). */
+  tags?: string[];
 }
 
 export interface ProviderConfig {
