@@ -28,6 +28,8 @@ import { createExternalTools } from "./tools.js";
 import { defaultPolicy, evaluate, type PolicyRule } from "../core/policy.js";
 import { resolveProfile, modelFromProfile, apiKeyForProfile, loadProviderConfig } from "../core/profile.js";
 import { getDefaultInbox, type SteeringInbox } from "../core/steering.js";
+import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "../core/auto-compact.js";
+import { saveCheckpoint, loadLatestCheckpoint } from "../core/checkpoint.js";
 import { logger } from "../core/logger.js";
 import type { ChannelAdapter } from "../channels/base.js";
 
@@ -71,6 +73,7 @@ export class PhusAgent {
   private policy: PolicyRule[];
   private currentSessionId: string | undefined;
   private extraChannels: ChannelAdapter[] = [];
+  private autoCompactCfg: AutoCompactConfig = DEFAULT_AUTO_COMPACT;
 
   constructor() {
     this.tape = new Tape();
@@ -336,8 +339,21 @@ export class PhusAgent {
 
   /** Inject skills + tape summary into the system prompt on every LLM call.
    *  Uses the Bub hook chain: system_prompt (firstresult) → build_tape_context (firstresult).
-   *  Plugins can replace either entirely. Default impls compose the standard header. */
+   *  Plugins can replace either entirely. Default impls compose the standard header.
+   *
+   *  Also runs auto-compaction here (B.2.5) before rebuilding context. */
   private async injectContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
+    // B.2.5: auto-compact if context is growing too large
+    if (this.currentSessionId) {
+      const cw = this.piAgent.state.model.contextWindow;
+      await maybeCompact(
+        this.tape,
+        this.currentSessionId,
+        this.piAgent.state.messages,
+        cw,
+        this.autoCompactCfg,
+      );
+    }
     // 1. system_prompt (firstresult) — base system prompt
     let systemPrompt: string;
     const spResult = await this.hooks.execute<string>(
@@ -414,7 +430,9 @@ export class PhusAgent {
     return undefined;
   }
 
-  /** Write tool_result entries to Tape after the tool runs. */
+  /** Write tool_result entries to Tape after the tool runs.
+   *  Also saves a checkpoint of Pi's transcript after every tool call
+   *  (B.2.2 — enables crash recovery and resume). */
   private async afterToolCall(
     ctx: AfterToolCallContext,
     _signal?: AbortSignal,
@@ -428,6 +446,17 @@ export class PhusAgent {
       isError: ctx.isError,
       ts: Date.now(),
     });
+    // Save checkpoint after every tool call (cheap insurance against crashes)
+    try {
+      saveCheckpoint(
+        this.tape,
+        this.currentSessionId,
+        this.piAgent.state.messages,
+        ctx.toolCall.id,
+      );
+    } catch (err: any) {
+      logger.warn("checkpoint.save_failed", { error: err.message });
+    }
     return undefined;
   }
 
