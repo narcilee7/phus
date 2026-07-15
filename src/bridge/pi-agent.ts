@@ -62,6 +62,7 @@ export class PhusAgent {
   private skills: SkillRegistry;
   private policy: PolicyRule[];
   private currentSessionId: string | undefined;
+  private extraChannels: ChannelAdapter[] = [];
 
   constructor() {
     this.tape = new Tape();
@@ -87,6 +88,20 @@ export class PhusAgent {
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
     this.registerDefaultHooks();
+
+    // Load plugins: they may register additional hooks / channels / skills.
+    // Deferred via dynamic import to keep the constructor synchronous.
+    void this.loadPluginsAsync();
+  }
+
+  private async loadPluginsAsync(): Promise<void> {
+    const { loadPlugins } = await import("../core/plugin.js");
+    loadPlugins(this.hooks, this.extraChannels, {
+      registerRuntime: () => {
+        // Runtime-registered skills are not yet supported (SkillRegistry reads from disk
+        // synchronously in toPromptContext). Future: add an in-memory override.
+      },
+    });
   }
 
   /** Run one inbound envelope through the Bub hook chain. */
@@ -365,6 +380,7 @@ Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", 
       skills: this.skills,
       piAgent: this.piAgent,
       policy: this.policy,
+      channels: this.extraChannels,
     };
   }
 }

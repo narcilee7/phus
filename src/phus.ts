@@ -121,6 +121,27 @@ program
   });
 
 program
+  .command("plugins-list")
+  .description("List discovered plugins from $PHUS_HOME/plugins and phus.config.yaml")
+  .action(async () => {
+    const { loadPlugins } = await import("./core/plugin.js");
+    const { HookRegistry } = await import("./core/hook.js");
+    const hooks = new HookRegistry();
+    const channels: import("./channels/base.js").ChannelAdapter[] = [];
+    const loaded = loadPlugins(hooks, channels);
+    if (loaded.length === 0) {
+      console.log("No plugins found.");
+      console.log(`Search paths: $PHUS_HOME/plugins/  (PHUS_HOME=${process.env.PHUS_HOME ?? "./.phus"})`);
+      console.log(`Config file:  $PHUS_HOME/phus.config.yaml`);
+      return;
+    }
+    for (const p of loaded) {
+      const mark = p.status === "ok" ? "✅" : "❌";
+      console.log(`${mark} ${p.name}  ${p.path}${p.error ? `  — ${p.error}` : ""}`);
+    }
+  });
+
+program
   .command("trace <sessionId>")
   .description("Print a turn timeline for one session")
   .option("-l, --limit <n>", "Max entries to show", "50")
