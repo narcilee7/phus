@@ -22,13 +22,18 @@ program
   .description("⛰️  Phus — self-evolving agent. Push the stone up the mountain.")
   .version("0.1.0");
 
+// Default action: launch the TUI (interactive mode).
+program.action(async () => {
+  const { startTui } = await import("./tui/index.js");
+  await startTui();
+});
+
 program
   .command("chat")
-  .description("Interactive chat mode (stdin/stdout REPL)")
-  .action(() => {
-    const agent = new PhusAgent();
-    const channel = new CLIChannel();
-    channel.listen(agent);
+  .description("Alias for `phus tui` — launch the interactive TUI")
+  .action(async () => {
+    const { startTui } = await import("./tui/index.js");
+    await startTui();
   });
 
 program
@@ -221,6 +226,14 @@ program
       }
     }
     process.exit(status.ok ? 0 : 1);
+  });
+
+program
+  .command("tui")
+  .description("Launch the interactive ink-based TUI")
+  .action(async () => {
+    const { startTui } = await import("./tui/index.js");
+    await startTui();
   });
 
 program.parseAsync(process.argv).catch((err) => {
