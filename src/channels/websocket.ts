@@ -4,11 +4,12 @@
 
 import type { ChannelAdapter } from "./base.js";
 import type { Outbound } from "../core/types.js";
+import { logger } from "../core/logger.js";
 
 export class WebSocketChannel implements ChannelAdapter {
   readonly name = "websocket";
   constructor(_port: number) {
-    console.warn("[phus] WebSocketChannel is a stub — install ws to enable.");
+    logger.warn("channel.stub", { channel: "websocket" });
   }
   async listen(): Promise<void> {
     throw new Error("WebSocketChannel not implemented. Install ws and replace this stub.");

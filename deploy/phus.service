@@ -1,0 +1,43 @@
+# /etc/systemd/system/phus.service
+# Drop into place, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now phus
+#   sudo journalctl -u phus -f
+
+[Unit]
+Description=Phus — self-evolving agent
+Documentation=https://github.com/your-org/phus
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=phus
+Group=phus
+WorkingDirectory=/opt/phus
+ExecStart=/usr/bin/node /opt/phus/dist/phus.js gateway --websocket 8080
+Restart=on-failure
+RestartSec=5
+
+# Environment
+EnvironmentFile=-/etc/phus/phus.env
+Environment=PHUS_HOME=/var/lib/phus
+Environment=PHUS_LOG_FILE=/var/log/phus/phus.jsonl
+Environment=PHUS_TAPE_DB=/var/lib/phus/tape.sqlite
+Environment=PHUS_SKILLS_DIR=/var/lib/phus/skills
+Environment=NODE_ENV=production
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/phus /var/log/phus
+
+# Logging goes to journald by default; structured logs also at $PHUS_LOG_FILE.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=phus
+
+[Install]
+WantedBy=multi-user.target

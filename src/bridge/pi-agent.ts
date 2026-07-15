@@ -25,6 +25,8 @@ import { Tape } from "../core/tape.js";
 import { SkillRegistry } from "../core/skill.js";
 import { createMetaTools } from "../core/meta.js";
 import { createExternalTools } from "./tools.js";
+import { defaultPolicy, evaluate, type PolicyRule } from "../core/policy.js";
+import { logger } from "../core/logger.js";
 import type { ChannelAdapter } from "../channels/base.js";
 
 function resolveModel(): Model<any> {
@@ -58,11 +60,14 @@ export class PhusAgent {
   private hooks = new HookRegistry();
   private tape: Tape;
   private skills: SkillRegistry;
+  private policy: PolicyRule[];
   private currentSessionId: string | undefined;
+  private extraChannels: ChannelAdapter[] = [];
 
   constructor() {
     this.tape = new Tape();
     this.skills = new SkillRegistry();
+    this.policy = defaultPolicy();
 
     const tools: AgentTool[] = [
       ...createMetaTools(this.skills, this.tape).map(toAgentTool),
@@ -83,6 +88,20 @@ export class PhusAgent {
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
     this.registerDefaultHooks();
+
+    // Load plugins: they may register additional hooks / channels / skills.
+    // Deferred via dynamic import to keep the constructor synchronous.
+    void this.loadPluginsAsync();
+  }
+
+  private async loadPluginsAsync(): Promise<void> {
+    const { loadPlugins } = await import("../core/plugin.js");
+    loadPlugins(this.hooks, this.extraChannels, {
+      registerRuntime: () => {
+        // Runtime-registered skills are not yet supported (SkillRegistry reads from disk
+        // synchronously in toPromptContext). Future: add an in-memory override.
+      },
+    });
   }
 
   /** Run one inbound envelope through the Bub hook chain. */
@@ -209,6 +228,13 @@ export class PhusAgent {
     };
     this.tape.append({ kind: "turn", turn });
 
+    logger.info("turn.completed", {
+      sessionId,
+      durationMs: turn.durationMs,
+      toolCallCount: turn.toolCalls.length,
+      outboundCount: finalOutbounds.length,
+    });
+
     return turn;
   }
 
@@ -242,6 +268,29 @@ Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", 
     _signal?: AbortSignal,
   ): Promise<BeforeToolCallResult | undefined> {
     if (!this.currentSessionId) return undefined;
+
+    // Operator-equivalence policy check (Bub principle):
+    // evaluate first; if blocked, return {block: true, reason} and skip execution.
+    const decision = evaluate(this.policy, {
+      toolName: ctx.toolCall.name,
+      args: (ctx.args as Record<string, unknown>) ?? {},
+      cwd: process.cwd(),
+    });
+    if (!decision.allow) {
+      logger.warn("tool.blocked_by_policy", {
+        sessionId: this.currentSessionId,
+        tool: ctx.toolCall.name,
+        reason: decision.reason,
+      });
+      return { block: true, reason: decision.reason };
+    }
+
+    logger.debug("tool.call", {
+      sessionId: this.currentSessionId,
+      tool: ctx.toolCall.name,
+      toolCallId: ctx.toolCall.id,
+    });
+
     this.tape.append({
       kind: "tool_call",
       sessionId: this.currentSessionId,
@@ -330,6 +379,8 @@ Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", 
       tape: this.tape,
       skills: this.skills,
       piAgent: this.piAgent,
+      policy: this.policy,
+      channels: this.extraChannels,
     };
   }
 }

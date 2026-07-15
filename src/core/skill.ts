@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "yaml";
 import type { Skill } from "./types.js";
+import { logger } from "./logger.js";
 
 const SKILL_FILE = "SKILL.md";
 
@@ -55,7 +56,7 @@ export class SkillRegistry {
     const raw = fs.readFileSync(filePath, "utf-8");
     const { fm, body } = splitFrontmatter(raw);
     if (!fm.name || !fm.description) {
-      console.warn(`[skills] skipping ${skillDir}: missing name or description in frontmatter`);
+      logger.warn("skill.invalid_frontmatter", { path: skillDir, reason: "missing name or description" });
       return undefined;
     }
 
@@ -131,7 +132,7 @@ export function splitFrontmatter(raw: string): { fm: Frontmatter; body: string }
   try {
     fm = (yaml.parse(m[1] ?? "") as Frontmatter) ?? {};
   } catch (err) {
-    console.warn("[skills] failed to parse frontmatter:", err);
+    logger.warn("skill.frontmatter_parse_failed", { error: (err as Error).message });
   }
   return { fm, body: (m[2] ?? "").trim() };
 }

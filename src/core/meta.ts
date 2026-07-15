@@ -95,5 +95,27 @@ export function createMetaTools(skills: SkillRegistry, tape: Tape): MetaTool[] {
       parameters: Type.Object({}),
       execute: async () => tape.stats(),
     },
+    {
+      name: "compact_session",
+      description:
+        "Manually compact the current session's tape. Summarizes older turns " +
+        "into an anchor and keeps the most recent turns intact. Use when the " +
+        "session is getting long and you want to preserve context without " +
+        "consuming tokens on raw history.",
+      parameters: Type.Object({
+        sessionId: Type.Optional(Type.String({ description: "Session to compact. Defaults to current." })),
+        keepRecent: Type.Optional(Type.Number({ description: "How many recent turns to keep. Default 10." })),
+      }),
+      execute: async (args) => {
+        // Lazy import to avoid circular deps at module load.
+        const { compactSession } = await import("./compaction.js");
+        const sessionId = String(args.sessionId ?? "");
+        const keepRecent = args.keepRecent ? Number(args.keepRecent) : 10;
+        // Use deterministic summarization when invoked from inside the agent
+        // (recursive LLM call would be costly and confusing).
+        const result = await compactSession(tape, sessionId, { keepRecent });
+        return { ok: true, ...result };
+      },
+    },
   ];
 }
