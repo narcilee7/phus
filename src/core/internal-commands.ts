@@ -351,6 +351,149 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     },
   });
 
+  // ,schedule list
+  register({
+    name: "schedule.list",
+    description: "list all registered schedules",
+    handler: async () => {
+      const { getScheduler } = await import("./scheduler-runtime.js");
+      const sched = getScheduler();
+      if (!sched) return "(scheduler not initialized — only runs in gateway mode)";
+      const list = sched.list();
+      if (list.length === 0) return "(no schedules registered)";
+      return list.map((s: any) =>
+        `  ${s.enabled === false ? "○" : "●"} ${s.name.padEnd(24)} ${s.cron.padEnd(14)} → ${s.hookName}`,
+      ).join("\n");
+    },
+  });
+
+  // ,schedule.add name=foo cron="*/5 * * * *" hookName=system_prompt
+  register({
+    name: "schedule.add",
+    description: "add a new schedule",
+    usage: "name=<n> cron=\"<expr>\" hookName=<hook>",
+    handler: async ({ args }) => {
+      const name = args.name;
+      const cron = args.cron;
+      const hookName = args.hookName;
+      if (!name || !cron || !hookName) {
+        return "usage: ,schedule.add name=<n> cron=\"<expr>\" hookName=<hook>";
+      }
+      const { getScheduler } = await import("./scheduler-runtime.js");
+      const sched = getScheduler();
+      if (!sched) return "(scheduler not initialized — only runs in gateway mode)";
+      try {
+        sched.register({ name, cron, hookName: hookName as any, payload: args.payload ? JSON.parse(String(args.payload)) : undefined });
+        return `✓ schedule "${name}" added (${cron})`;
+      } catch (err: any) {
+        return `failed: ${err.message}`;
+      }
+    },
+  });
+
+  // ,schedule.remove name=foo
+  register({
+    name: "schedule.remove",
+    description: "remove a schedule",
+    usage: "name=<n>",
+    handler: async ({ args }) => {
+      const name = args.name;
+      if (!name) return "usage: ,schedule.remove name=<n>";
+      const { getScheduler } = await import("./scheduler-runtime.js");
+      const sched = getScheduler();
+      if (!sched) return "(scheduler not initialized)";
+      const ok = sched.unregister(name);
+      return ok ? `✓ schedule "${name}" removed` : `not found: ${name}`;
+    },
+  });
+
+  // ,schedule.enable name=foo / ,schedule.disable name=foo
+  register({
+    name: "schedule.enable",
+    description: "enable a disabled schedule",
+    usage: "name=<n>",
+    handler: async ({ args }) => {
+      const name = args.name;
+      if (!name) return "usage: ,schedule.enable name=<n>";
+      const { getScheduler } = await import("./scheduler-runtime.js");
+      const sched = getScheduler();
+      if (!sched) return "(scheduler not initialized)";
+      return sched.setEnabled(name, true) ? `✓ enabled "${name}"` : `not found: ${name}`;
+    },
+  });
+
+  register({
+    name: "schedule.disable",
+    description: "disable a schedule (keeps registration, stops firing)",
+    usage: "name=<n>",
+    handler: async ({ args }) => {
+      const name = args.name;
+      if (!name) return "usage: ,schedule.disable name=<n>";
+      const { getScheduler } = await import("./scheduler-runtime.js");
+      const sched = getScheduler();
+      if (!sched) return "(scheduler not initialized)";
+      return sched.setEnabled(name, false) ? `○ disabled "${name}"` : `not found: ${name}`;
+    },
+  });
+
+  // Alias: ,schedule -> ,schedule.list
+  register({
+    name: "schedule",
+    description: "alias for ,schedule.list",
+    handler: async () => {
+      const { execute } = await import("./internal-commands.js");
+      const r = await execute(",schedule.list", "tui");
+      return r === "not-a-command" ? null : r;
+    },
+  });
+
+  // ,skill-review — list drafts awaiting human approval
+  register({
+    name: "skill-review",
+    description: "list skill drafts awaiting human approval (B.4.4)",
+    handler: async () => {
+      const { DraftsStore } = await import("./drafts.js");
+      const drafts = new DraftsStore();
+      const list = await drafts.list();
+      if (list.length === 0) return "(no drafts)";
+      return list.map((d) => `  ${d.name.padEnd(28)} ${d.description}`).join("\n");
+    },
+  });
+
+  // ,skill-review.approve name=<n>
+  register({
+    name: "skill-review.approve",
+    description: "move a draft into active skills/",
+    usage: "name=<draft-name>",
+    handler: async ({ args }) => {
+      const name = args.name;
+      if (!name) return "usage: ,skill-review.approve name=<draft-name>";
+      const { DraftsStore } = await import("./drafts.js");
+      const drafts = new DraftsStore();
+      try {
+        const path = await drafts.approve(name);
+        return `✓ approved "${name}" → ${path}`;
+      } catch (err: any) {
+        return `approve failed: ${err.message}`;
+      }
+    },
+  });
+
+  // ,skill-review.reject name=<n>
+  register({
+    name: "skill-review.reject",
+    description: "delete a draft",
+    usage: "name=<draft-name>",
+    handler: async ({ args }) => {
+      const name = args.name;
+      if (!name) return "usage: ,skill-review.reject name=<draft-name>";
+      const { DraftsStore } = await import("./drafts.js");
+      const drafts = new DraftsStore();
+      const ok = await drafts.reject(name);
+      return ok ? `✗ rejected "${name}"` : `not found: ${name}`;
+    },
+  });
+
   // ,clear
   register({
     name: "clear",

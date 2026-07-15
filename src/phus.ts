@@ -7,6 +7,9 @@
 //   phus hooks                      - list registered hooks (diagnostic)
 
 import { Command } from "commander";
+import fs from "node:fs";
+import yaml from "yaml";
+import path from "node:path";
 import { CLIChannel, runOnce } from "./channels/cli.js";
 import { PhusAgent } from "./bridge/pi-agent.js";
 import { bootstrap } from "./core/startup.js";
@@ -14,6 +17,9 @@ import { traceSession } from "./commands/trace.js";
 import { logger } from "./core/logger.js";
 import { tailLogs } from "./commands/logs.js";
 import { healthCheck } from "./commands/health.js";
+import { resumeSession } from "./commands/resume.js";
+import { collectTasks, renderTasks } from "./commands/tasks.js";
+import { ExitCode, CliExit } from "./core/exit-codes.js";
 import { makeCtx, type HookContext } from "./core/hook.js";
 import type { ChannelAdapter } from "./channels/base.js";
 
@@ -74,9 +80,22 @@ program
       logger.info("channel.listening", { channel: ch.name });
     }
 
+    // B.3: start the scheduler (loads schedules from phus.config.yaml)
+    const { Scheduler } = await import("./core/scheduler.js");
+    const { setScheduler } = await import("./core/scheduler-runtime.js");
+    const scheduler = new Scheduler(agent._internal.hooks);
+    setScheduler(scheduler);
+    for (const sch of loadSchedulesFromConfig()) {
+      try { scheduler.register(sch); } catch (err: any) {
+        logger.error("schedule.config_register_failed", { name: sch.name, error: err.message });
+      }
+    }
+    scheduler.start();
+
     // Graceful shutdown on SIGTERM/SIGINT (systemd / docker stop).
     const shutdown = async (sig: string) => {
       logger.info("gateway.shutdown", { signal: sig });
+      scheduler.stop();
       for (const ch of channels) await ch.close?.();
       process.exit(0);
     };
@@ -85,6 +104,7 @@ program
 
     logger.info("gateway.started", {
       channels: channels.map((c) => c.name),
+      schedules: scheduler.list().length,
       pid: process.pid,
     });
   });
@@ -129,6 +149,19 @@ program
     }
     console.log("\nDefault file_write roots: ./skills, ./.phus, ./tmp, ./out");
     console.log("Default bash blocklist: rm -rf /, fork bombs, curl|sh, dd if=, chmod -R 777 /, mkfs");
+  });
+
+program
+  .command("tasks")
+  .description("Show agent state, sessions, schedules, and recent checkpoints")
+  .option("--json", "emit JSON")
+  .action((opts: { json?: boolean }) => {
+    const out = collectTasks();
+    if (opts.json) {
+      console.log(JSON.stringify(out, null, 2));
+    } else {
+      console.log(renderTasks(out));
+    }
   });
 
 program
@@ -240,6 +273,37 @@ program
 // A.2: register_cli_commands hook — let plugins add `phus xxx` subcommands
 // Runs once, after built-in commands are registered but before parseAsync.
 await registerPluginCliCommands(program);
+
+program
+  .command("resume <sessionId> [prompt]")
+  .description("Resume a session from its latest checkpoint (B.2.3)")
+  .action(async (sessionId: string, prompt?: string) => {
+    try {
+      await resumeSession(sessionId, prompt ?? "");
+    } catch (err) {
+      if (err instanceof CliExit) {
+        console.error(`[phus] ${err.message}`);
+        process.exit(err.code);
+      }
+      throw err;
+    }
+  });
+
+/**
+ * B.3: Load schedules from phus.config.yaml::schedules[]
+ */
+function loadSchedulesFromConfig(): any[] {
+  try {
+    const home = process.env.PHUS_HOME ?? "./.phus";
+    const cfgPath = path.join(home, "phus.config.yaml");
+    if (!fs.existsSync(cfgPath)) return [];
+    const cfg = yaml.parse(fs.readFileSync(cfgPath, "utf-8")) as { schedules?: any[] };
+    return cfg?.schedules ?? [];
+  } catch (err: any) {
+    logger.error("schedule.config_load_failed", { error: err.message });
+    return [];
+  }
+}
 
 program.parseAsync(process.argv).catch((err) => {
   console.error("[phus] fatal:", err);

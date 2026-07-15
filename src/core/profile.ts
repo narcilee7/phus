@@ -41,6 +41,10 @@ export interface ProviderProfile {
     medium?: number;
     high?: number;
   };
+  /** Tool execution strategy: sequential (default) or parallel. B.4.2. */
+  toolExecution?: "sequential" | "parallel";
+  /** Auto-compact when context exceeds threshold. Default true. */
+  autoCompact?: boolean;
   /** Human-readable description for `phus profiles` output. */
   description?: string;
 }

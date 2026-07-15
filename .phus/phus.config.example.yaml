@@ -60,3 +60,31 @@ plugins:
     path: ./plugins/my-plugin.ts
     config:
       debug: true
+
+
+# ─── Schedules (B.3) ───────────────────────────────────────────
+# Cron-style hooks that fire on a schedule. Only runs in gateway mode.
+# 5-field standard cron: "minute hour day-of-month month day-of-week"
+#
+# Fired hook receives HookContext with extras = {
+#   schedule: <name>, cron: <expr>, payload: <object>, firedAt: <ms>
+# }
+schedules:
+  # Top of every hour — example: refresh context, prune checkpoints
+  - name: hourly-checkin
+    cron: "0 * * * *"
+    hookName: system_prompt
+    description: hourly context refresh
+
+  # 3 AM daily — example: auto-compact old sessions
+  - name: daily-compact
+    cron: "0 3 * * *"
+    hookName: save_state
+    description: daily compaction hook
+
+  # Disabled by default — opt in via ,schedule.enable heartbeat-tick
+  - name: heartbeat-tick
+    cron: "*/15 * * * *"
+    hookName: provide_steering_inbox
+    enabled: false
+    description: inject "still alive?" nudge every 15 min

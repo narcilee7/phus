@@ -28,6 +28,8 @@ import { createExternalTools } from "./tools.js";
 import { defaultPolicy, evaluate, type PolicyRule } from "../core/policy.js";
 import { resolveProfile, modelFromProfile, apiKeyForProfile, loadProviderConfig } from "../core/profile.js";
 import { getDefaultInbox, type SteeringInbox } from "../core/steering.js";
+import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "../core/auto-compact.js";
+import { saveCheckpoint, loadLatestCheckpoint } from "../core/checkpoint.js";
 import { logger } from "../core/logger.js";
 import type { ChannelAdapter } from "../channels/base.js";
 
@@ -65,12 +67,14 @@ Keep responses concise. Use tools when they help.`;
 
 export class PhusAgent {
   private piAgent: Agent;
-  private hooks = new HookRegistry();
+  private hooks = new HookRegistry({ isolateErrors: true });
   private tape: Tape;
   private skills: SkillRegistry;
   private policy: PolicyRule[];
   private currentSessionId: string | undefined;
   private extraChannels: ChannelAdapter[] = [];
+  private autoCompactCfg: AutoCompactConfig = DEFAULT_AUTO_COMPACT;
+  private autoCompactEnabled = true;
 
   constructor() {
     this.tape = new Tape();
@@ -83,6 +87,7 @@ export class PhusAgent {
     ];
 
     const profile = resolveProfile(process.env.PHUS_PROFILE);
+    this.autoCompactEnabled = profile.autoCompact !== false;
     this.piAgent = new Agent({
       initialState: {
         systemPrompt: SYSTEM_PROMPT_HEADER,
@@ -103,6 +108,8 @@ export class PhusAgent {
           hasPayload: !!payload,
         });
       } : undefined,
+      // B.4.2: parallel tool execution (faster but riskier)
+      toolExecution: profile.toolExecution ?? "sequential",
     });
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
@@ -336,8 +343,21 @@ export class PhusAgent {
 
   /** Inject skills + tape summary into the system prompt on every LLM call.
    *  Uses the Bub hook chain: system_prompt (firstresult) → build_tape_context (firstresult).
-   *  Plugins can replace either entirely. Default impls compose the standard header. */
+   *  Plugins can replace either entirely. Default impls compose the standard header.
+   *
+   *  Also runs auto-compaction here (B.2.5) before rebuilding context. */
   private async injectContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
+    // B.2.5: auto-compact if context is growing too large (controlled by profile.autoCompact)
+    if (this.currentSessionId && this.autoCompactEnabled) {
+      const cw = this.piAgent.state.model.contextWindow;
+      await maybeCompact(
+        this.tape,
+        this.currentSessionId,
+        this.piAgent.state.messages,
+        cw,
+        this.autoCompactCfg,
+      );
+    }
     // 1. system_prompt (firstresult) — base system prompt
     let systemPrompt: string;
     const spResult = await this.hooks.execute<string>(
@@ -357,15 +377,36 @@ export class PhusAgent {
     if (ctxResult) {
       dynamicContext = ctxResult;
     } else {
-      // Default: skills + recent tape
+      // Default: skills + smart-selected tape turns (B.4.3)
       const skillsCtx = this.skills.toPromptContext();
-      const tapeSummary = this.currentSessionId
-        ? this.tape.summary(this.currentSessionId, 10)
-        : "(no session yet)";
+      let tapeSummary: string;
+      if (this.currentSessionId) {
+        // Get the last user message as the query for relevance scoring
+        const lastUserMsg = [...this.piAgent.state.messages]
+          .reverse()
+          .find((m) => m.role === "user");
+        const query = (lastUserMsg as any)?.content ?? "";
+        const queryText = typeof query === "string"
+          ? query
+          : Array.isArray(query)
+            ? query.filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ")
+            : "";
+        const { selectRelevantTurns } = await import("../core/context-select.js");
+        const relevant = selectRelevantTurns(this.tape, this.currentSessionId, queryText);
+        tapeSummary = relevant
+          .map((t) => {
+            const u = (t.inbound.content ?? "").slice(0, 100).replace(/\n/g, " ");
+            const r = (t.modelOutput ?? "").slice(0, 100).replace(/\n/g, " ");
+            return `[${new Date(t.ts).toISOString().slice(11, 16)}] U: ${u} | P: ${r}`;
+          })
+          .join("\n") || "(empty)";
+      } else {
+        tapeSummary = "(no session yet)";
+      }
       const stats = this.tape.stats();
       dynamicContext =
         `## Current skills\n${skillsCtx}\n\n` +
-        `## Recent memory (last 10 turns of this session)\n${tapeSummary || "(empty)"}\n\n` +
+        `## Relevant past turns (B.4.3 smart select)\n${tapeSummary}\n\n` +
         `## Tape statistics\nTotal entries across all sessions: ${stats.totalEntries}\n` +
         `Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;
     }
@@ -414,7 +455,9 @@ export class PhusAgent {
     return undefined;
   }
 
-  /** Write tool_result entries to Tape after the tool runs. */
+  /** Write tool_result entries to Tape after the tool runs.
+   *  Also saves a checkpoint of Pi's transcript after every tool call
+   *  (B.2.2 — enables crash recovery and resume). */
   private async afterToolCall(
     ctx: AfterToolCallContext,
     _signal?: AbortSignal,
@@ -428,6 +471,17 @@ export class PhusAgent {
       isError: ctx.isError,
       ts: Date.now(),
     });
+    // Save checkpoint after every tool call (cheap insurance against crashes)
+    try {
+      saveCheckpoint(
+        this.tape,
+        this.currentSessionId,
+        this.piAgent.state.messages,
+        ctx.toolCall.id,
+      );
+    } catch (err: any) {
+      logger.warn("checkpoint.save_failed", { error: err.message });
+    }
     return undefined;
   }
 
