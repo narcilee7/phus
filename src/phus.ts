@@ -13,6 +13,7 @@ import { bootstrap } from "./core/startup.js";
 import { traceSession } from "./commands/trace.js";
 import { logger } from "./core/logger.js";
 import { tailLogs } from "./commands/logs.js";
+import { healthCheck } from "./commands/health.js";
 
 const program = new Command();
 
@@ -74,8 +75,22 @@ program
     }
     for (const ch of channels) {
       await ch.listen(agent);
-      console.log(`[phus] 📡 ${ch.name} channel listening`);
+      logger.info("channel.listening", { channel: ch.name });
     }
+
+    // Graceful shutdown on SIGTERM/SIGINT (systemd / docker stop).
+    const shutdown = async (sig: string) => {
+      logger.info("gateway.shutdown", { signal: sig });
+      for (const ch of channels) await ch.close?.();
+      process.exit(0);
+    };
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
+
+    logger.info("gateway.started", {
+      channels: channels.map((c) => c.name),
+      pid: process.pid,
+    });
   });
 
 program
@@ -175,6 +190,37 @@ program
       limit: parseInt(opts.limit, 10),
       json: opts.json,
     });
+  });
+
+program
+  .command("compact <sessionId>")
+  .description("Compact a session's tape: summarize old turns into an anchor")
+  .option("-k, --keep-recent <n>", "How many recent turns to keep", "10")
+  .action(async (sessionId: string, opts: { keepRecent: string }) => {
+    const { compactSession } = await import("./core/compaction.js");
+    const { Tape } = await import("./core/tape.js");
+    const tape = new Tape(process.env.PHUS_TAPE_DB ?? "./tape.sqlite");
+    const result = await compactSession(tape, sessionId, {
+      keepRecent: parseInt(opts.keepRecent, 10),
+    });
+    tape.close();
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+program
+  .command("health")
+  .description("Health check (exit 0 if healthy)")
+  .option("--json", "Emit JSON")
+  .action((opts: { json?: boolean }) => {
+    const status = healthCheck();
+    if (opts.json) {
+      console.log(JSON.stringify(status, null, 2));
+    } else {
+      for (const [k, v] of Object.entries(status.checks)) {
+        console.log(`${v.ok ? "✅" : "❌"} ${k}: ${v.detail ?? ""}`);
+      }
+    }
+    process.exit(status.ok ? 0 : 1);
   });
 
 program.parseAsync(process.argv).catch((err) => {

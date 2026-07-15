@@ -1,0 +1,29 @@
+# docker-compose.yml — run Phus as a long-lived gateway.
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f phus
+
+services:
+  phus:
+    build: .
+    image: phus:local
+    container_name: phus
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # WebSocket
+    volumes:
+      - phus-home:/app/.phus
+      - phus-logs:/app/logs
+    environment:
+      PHUS_MODEL: ${PHUS_MODEL:-openrouter/deepseek/deepseek-chat-v3}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "node", "dist/phus.js", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  phus-home:
+  phus-logs:
