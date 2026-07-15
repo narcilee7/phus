@@ -35,7 +35,7 @@ import { getDefaultInbox, PiSteeringInbox } from "@/core/steering.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint } from "@/core/checkpoint.js";
-import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/provider-mesh.js";
+import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/provider-mesh/index.js";
 import { setMesh as setMeshSingleton, buildMesh } from "@/core/provider-mesh-runtime.js";
 import { logger } from "@/core/logger.js";
 import type { ChannelAdapter } from "@/channels/base.js";

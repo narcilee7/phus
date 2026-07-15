@@ -1,6 +1,6 @@
 // test/provider-mesh.test.ts
 import { describe, expect, it, vi } from "vitest";
-import { ProviderMesh, type EndpointSpec } from "../src/core/provider-mesh.js";
+import { ProviderMesh, type EndpointSpec } from "../src/core/provider-mesh/index.js";
 
 function ep(name: string, overrides: Partial<EndpointSpec> = {}): EndpointSpec {
   return {
