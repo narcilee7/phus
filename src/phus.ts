@@ -23,6 +23,7 @@ import { ExitCode, CliExit } from "@/core/exit-codes.js";
 import { makeCtx, type HookContext } from "@/core/hook.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { drainPendingCliCommands } from "@/core/plugin/cli-queue.js";
+import { initInternalCommands } from "@/core/internal-commands/index.js";
 import { asSessionId } from "@/types/brand.js";
 
 const program = new Command();
@@ -63,10 +64,11 @@ program
   .option("--sse <port>", "Enable SSE channel on the given port")
   .action(async (opts: { telegram?: boolean; websocket?: string; sse?: string }) => {
     const mode = bootstrap();
-    const agent = new PhusAgent();
+    const handle = await PhusAgent.create();
+    const agent = handle.agent;
 
     // A.1: collect channels from CLI flags + plugins' provide_channels hook
-    const channels = await collectChannels(agent, opts);
+    const channels = await collectChannels(handle.internals, opts);
 
     if (channels.length === 0) {
       if (mode === "default") {
@@ -78,15 +80,21 @@ program
     }
 
     for (const ch of channels) {
-      await ch.listen(agent);
+      await ch.listen(handle.internals);
       logger.info("channel.listening", { channel: ch.name });
     }
 
     // B.3: start the scheduler (loads schedules from phus.config.yaml)
     const { Scheduler } = await import("@/core/scheduler.js");
-    const { setScheduler } = await import("@/core/scheduler-runtime.js");
-    const scheduler = new Scheduler(agent._internal.hooks);
-    setScheduler(scheduler);
+    const scheduler = new Scheduler(handle.internals._internal.hooks);
+    // Wire the scheduler + mesh into the internal-commands registry so
+    // ,schedule.* and ,mesh reach the live instances without going
+    // through module-level singletons.
+    initInternalCommands(
+      () => handle.internals,
+      () => process.env.PHUS_HOME ?? "./.phus",
+      { mesh: handle.internals._internal.mesh, scheduler },
+    );
     for (const sch of loadSchedulesFromConfig()) {
       try { scheduler.register(sch); } catch (err: any) {
         logger.error("schedule.config_register_failed", { name: sch.name, error: err.message });
@@ -95,10 +103,19 @@ program
     scheduler.start();
 
     // Graceful shutdown on SIGTERM/SIGINT (systemd / docker stop).
+    // Phase 4: dispose() releases the mesh health timer + tape handle
+    // and the scheduler stops — everything owned by the agent gets
+    // torn down cleanly.
+    let shuttingDown = false;
     const shutdown = async (sig: string) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
       logger.info("gateway.shutdown", { signal: sig });
-      scheduler.stop();
-      for (const ch of channels) await ch.close?.();
+      try { scheduler.stop(); } catch { /* ignore */ }
+      for (const ch of channels) {
+        try { await ch.close?.(); } catch { /* ignore */ }
+      }
+      await handle.dispose();
       process.exit(0);
     };
     process.on("SIGTERM", () => shutdown("SIGTERM"));
@@ -114,51 +131,55 @@ program
 program
   .command("hooks")
   .description("List all registered hooks (diagnostic)")
-  .action(() => {
-    const agent = new PhusAgent();
-    console.log(JSON.stringify(agent._internal.hooks.report(), null, 2));
+  .action(async () => {
+    const handle = await PhusAgent.create();
+    console.log(JSON.stringify(handle.internals._internal.hooks.report(), null, 2));
+    await handle.dispose();
   });
 
 program
   .command("skills")
   .description("List all discovered skills")
-  .action(() => {
-    const agent = new PhusAgent();
-    for (const skill of agent._internal.skills.getAll()) {
+  .action(async () => {
+    const handle = await PhusAgent.create();
+    for (const skill of handle.internals._internal.skills.getAll()) {
       console.log(`- ${skill.name} (v${skill.metadata.version ?? "?"}, by ${skill.metadata.author ?? "?"})`);
       console.log(`  ${skill.description}`);
       console.log(`  ${skill.location}`);
     }
+    await handle.dispose();
   });
 
 program
   .command("tape")
   .description("Print tape statistics")
-  .action(() => {
-    const agent = new PhusAgent();
-    const stats = agent._internal.tape.stats();
+  .action(async () => {
+    const handle = await PhusAgent.create();
+    const stats = handle.internals._internal.tape.stats();
     console.log(JSON.stringify(stats, null, 2));
+    await handle.dispose();
   });
 
 program
   .command("policy")
   .description("Print active safety policy (operator-equivalence allowlist)")
-  .action(() => {
-    const agent = new PhusAgent();
+  .action(async () => {
+    const handle = await PhusAgent.create();
     console.log("Active policy rules:");
-    for (const rule of agent._internal.policy) {
+    for (const rule of handle.internals._internal.policy) {
       console.log(`  - tool: ${rule.toolName}`);
     }
     console.log("\nDefault file_write roots: ./skills, ./.phus, ./tmp, ./out");
     console.log("Default bash blocklist: rm -rf /, fork bombs, curl|sh, dd if=, chmod -R 777 /, mkfs");
+    await handle.dispose();
   });
 
 program
   .command("tasks")
   .description("Show agent state, sessions, schedules, and recent checkpoints")
   .option("--json", "emit JSON")
-  .action((opts: { json?: boolean }) => {
-    const out = collectTasks();
+  .action(async (opts: { json?: boolean }) => {
+    const out = await collectTasks();
     if (opts.json) {
       console.log(JSON.stringify(out, null, 2));
     } else {
@@ -334,16 +355,21 @@ async function registerPluginCliCommands(program: Command): Promise<void> {
   // 2. Run the hook (plugins that prefer the hook over the convenience API)
   //    Note: we need a PhusAgent just to access the HookRegistry. We don't
   //    actually start a turn — the agent is created lazily.
-  const tempAgent = new PhusAgent();
+  const tempHandle = await PhusAgent.create();
+  initInternalCommands(
+    () => tempHandle.internals,
+    () => process.env.PHUS_HOME ?? "./.phus",
+    { mesh: tempHandle.internals._internal.mesh },
+  );
   const ctx: HookContext = makeCtx({
     // No session — `register_cli_commands` runs at module load,
     // not during a turn. The hook may ignore sessionId if it doesn't care.
     state: {},
-    tape: tempAgent._internal.tape,
-    skills: tempAgent._internal.skills,
+    tape: tempHandle.internals._internal.tape,
+    skills: tempHandle.internals._internal.skills,
     extras: { program },
   });
-  await tempAgent._internal.hooks.execute(
+  await tempHandle.internals._internal.hooks.execute(
     "register_cli_commands",
     ctx,
     "broadcast",

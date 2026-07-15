@@ -82,7 +82,9 @@ export class CLIChannel implements ChannelAdapter {
 export async function runOnce(prompt: string): Promise<void> {
   // Lazy import so `chat` mode doesn't pull in unused code paths.
   const { PhusAgent } = await import("@/bridge/pi-agent.js");
-  const agent = new PhusAgent();
+  const handle = await PhusAgent.create();
+  const agent = handle.agent;
+  const internals = handle.internals;
   const channel = new CLIChannel();
   const envelope = makeTextEnvelope({
     from: "user",
@@ -91,16 +93,16 @@ export async function runOnce(prompt: string): Promise<void> {
     metadata: { chatId: "default" },
   });
   await agent.turn(envelope, channel);
-  const assistantTexts = agent._internal.piAgent.state.messages
-    .filter((m) => m.role === "assistant")
-    .map((m) => ({
+  const assistantTexts = internals._internal.piAgent.state.messages
+    .filter((m: any) => m.role === "assistant")
+    .map((m: any) => ({
       to: "default",
       content: extractText(m),
       type: "text" as const,
       channel: "cli",
     }));
 
-  if (assistantTexts.every((m) => !m.content.trim())) {
+  if (assistantTexts.every((m: any) => !m.content.trim())) {
     process.stderr.write(
       "\n⚠️  Agent returned no text. Common causes:\n" +
         "   • Wrong PHUS_MODEL_ID (gateway doesn't recognize the model name)\n" +
@@ -109,7 +111,8 @@ export async function runOnce(prompt: string): Promise<void> {
     );
   }
 
-  await channel.send(assistantTexts);
+  await channel.send(assistantTexts as any);
+  await handle.dispose();
 }
 
 function extractText(msg: any): string {

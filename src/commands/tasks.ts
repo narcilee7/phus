@@ -19,12 +19,16 @@ export interface TasksOutput {
   recentCheckpoints: Array<{ sessionId: string; ts: number; turnId?: string }>;
 }
 
-export function collectTasks(): TasksOutput {
-  const agent = new PhusAgent();
-  const model = agent._internal.piAgent.state.model;
-  const tape = agent._internal.tape;
+export async function collectTasks(): Promise<TasksOutput> {
+  const handle = await PhusAgent.create();
+  const { internals } = handle;
+  const model = internals._internal.piAgent.state.model;
+  const tape = internals._internal.tape;
 
-  const lastCp = loadLatestCheckpoint(tape, (agent as any)._currentSessionId ?? "default");
+  const lastCp = loadLatestCheckpoint(
+    tape,
+    (internals as any)._currentSessionId ?? "default",
+  );
 
   const schedules = (getScheduler()?.list() ?? []).map((s) => {
     let nextFire: string | undefined;
@@ -44,18 +48,20 @@ export function collectTasks(): TasksOutput {
   });
 
   const sessions = Object.entries(tape.stats().sessions)
-    .sort((a, b) => b[1] - a[1])
-    .map(([id, entries]) => ({ id, entries }));
+    .sort((a, b) => (b[1] as number) - (a[1] as number))
+    .map(([id, entries]) => ({ id, entries: entries as number }));
 
-  const recentCheckpoints = listCheckpoints(tape, (agent as any)._currentSessionId ?? "")
+  const recentCheckpoints = listCheckpoints(tape, (internals as any)._currentSessionId ?? "")
     .slice(0, 5)
     .map((cp) => ({ sessionId: cp.sessionId, ts: cp.ts, turnId: cp.turnId }));
+
+  await handle.dispose();
 
   return {
     agent: {
       model: `${model.provider}/${model.id}`,
-      thinking: agent._internal.piAgent.state.thinkingLevel,
-      messageCount: agent._internal.piAgent.state.messages.length,
+      thinking: String(internals._internal.piAgent.state.thinkingLevel ?? ""),
+      messageCount: internals._internal.piAgent.state.messages.length,
       lastCheckpoint: lastCp
         ? { ts: lastCp.ts, messages: Array.isArray(lastCp.messages) ? lastCp.messages.length : 0 }
         : undefined,

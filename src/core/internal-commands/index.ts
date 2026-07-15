@@ -95,8 +95,14 @@ function defaultRegistry(): InternalCommandRegistry {
 export function initInternalCommands(
   getAgent: () => unknown,
   getHome: () => string,
+  extras?: { mesh?: import("@/core/provider-mesh/contract.js").MeshLike; scheduler?: unknown },
 ): void {
-  const next: InternalCommandServices = { getAgent, getHome };
+  const next: InternalCommandServices = {
+    getAgent,
+    getHome,
+    mesh: extras?.mesh,
+    scheduler: extras?.scheduler as any,
+  };
   if (_defaultServices && servicesEqual(_defaultServices, next)) {
     // Make sure builtins are still registered (a previous test or
     // runtime call might have cleared them).
@@ -110,7 +116,10 @@ export function initInternalCommands(
 }
 
 function servicesEqual(a: InternalCommandServices, b: InternalCommandServices): boolean {
-  return a.getAgent === b.getAgent && a.getHome === b.getHome;
+  return a.getAgent === b.getAgent
+    && a.getHome === b.getHome
+    && a.mesh === b.mesh
+    && a.scheduler === b.scheduler;
 }
 
 /** Reset both the default services and the default registry. Tests

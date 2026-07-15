@@ -1,12 +1,9 @@
 // src/bridge/pi-agent.ts
-// PhusAgent — wraps @mariozechner/pi-agent-core's Agent, runs the Bub hook chain:
-//   resolve_session → load_state → build_prompt → [Pi agent loop]
-//                                                      ├ before_tool_call → tool → after_tool_call
-//                                                      └ on events: write to Tape
-//   save_state → render_outbound → dispatch_outbound
+// PhusAgent — wraps `@mariozechner/pi-agent-core`'s Agent, runs the
+// Bub hook chain. Construction is now explicit: every dependency is
+// injected via `PhusAgentDeps`; no module-level state.
 //
-// Skills + tape summary are injected via Agent's transformContext, which runs
-// before every LLM call (matching Bub's system_prompt / build_tape_context hooks).
+// For the lifecycle wrapper (factory + dispose), see ./lifecycle.ts.
 
 import {
   Agent,
@@ -30,118 +27,158 @@ import { SkillRegistry } from "@/core/skills/skill.js";
 import { createMetaTools } from "@/core/meta.js";
 import { createExternalTools } from "@/bridge/tools.js";
 import { defaultPolicy, evaluate, type PolicyRule } from "@/core/policy.js";
-import { resolveProfile, modelFromProfile, apiKeyForProfile, loadProviderConfig } from "@/core/profile.js";
-import { getDefaultInbox, PiSteeringInbox } from "@/core/steering.js";
+import {
+  resolveProfile,
+  modelFromProfile,
+  apiKeyForProfile,
+  type ProviderProfile,
+} from "@/core/profile.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
+import { PiSteeringInbox } from "@/core/steering.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint } from "@/core/checkpoint.js";
 import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/provider-mesh/index.js";
-import { setMesh as setMeshSingleton, buildMesh } from "@/core/provider-mesh-runtime.js";
+import type { MeshLike } from "@/core/provider-mesh/contract.js";
 import { logger } from "@/core/logger.js";
 import type { ChannelAdapter } from "@/channels/base.js";
+import { toAgentTool } from "@/bridge/agent-tool-adapter.js";
+import { extractText } from "@/bridge/text.js";
+import { resolveApiKey } from "@/bridge/model-resolver.js";
+import { registerDefaultHooks } from "@/bridge/default-hooks.js";
+import { buildContextBlock } from "@/bridge/prompt-assembly.js";
 
-function resolveModel(): Model<any> {
-  const profile = resolveProfile(process.env.PHUS_PROFILE);
-  const model = modelFromProfile(profile);
-  // Ensure API key env var is set for Pi's streamSimple to pick up
-  const key = apiKeyForProfile(profile);
-  if (key) {
-    const provider = profile.model.split("/", 1)[0];
-    if (provider) {
-      const envKey = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
-      process.env[envKey] ??= key;
-    }
-  }
-  return model;
+export interface PhusAgentDeps {
+  /** Logger used for all diagnostic and error events. */
+  logger: typeof logger;
+  /** The agent's persistent event log. */
+  tape: Tape;
+  /** The skill registry the agent reads. */
+  skills: SkillRegistry;
+  /** The hook bus all Bub-style hooks flow through. */
+  hooks: HookRegistry;
+  /** The provider mesh used to pick an initial endpoint. */
+  mesh: MeshLike;
+  /** The steering inbox drained before each turn. */
+  steeringInbox: SteeringInbox;
+  /** The active provider profile (already resolved). */
+  profile: ProviderProfile;
+  /** The active safety policy. */
+  policy: readonly PolicyRule[];
+  /** Optional scheduler (gateway mode only). */
+  scheduler?: unknown;
+  /** Extra channels plugins have registered. */
+  channels?: ChannelAdapter[];
+  /** Override for the auto-compaction threshold. */
+  autoCompact?: AutoCompactConfig;
 }
 
-const SYSTEM_PROMPT_HEADER = `You are Phus (⛰️ 西西弗斯), a self-evolving agent.
+/** Diagnostics snapshot returned by `getDiagnostics()`. */
+export interface AgentDiagnostics {
+  sessionId: SessionId | undefined;
+  currentSessionOverride: SessionId | undefined;
+  modelLabel: string;
+  thinkingLevel: string;
+  messageCount: number;
+  tapeStats: { totalEntries: number; sessions: Record<string, number> };
+  skillCount: number;
+}
 
-Your essence is repetition with growth — every turn you push the stone up the mountain, and every turn you learn something new.
+/**
+ * Narrow public surface for PhusAgent. The TUI, CLI, and internal
+ * commands depend on this interface — they should NOT reach through
+ * `_internal` to access hooks / tape / skills. That access pattern
+ * made the previous monolith impossible to refactor.
+ */
+export interface PhusAgentFacade {
+  /** Run one inbound envelope through the Bub hook chain. */
+  turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn>;
+  /** Abort the current turn. */
+  abort(): void;
+  /** Wait until the current turn completes. */
+  waitForIdle(): Promise<void>;
+  /** Queue a steering message (interrupts mid-run). */
+  steer(message: AgentMessage): void;
+  /** Queue a follow-up message (runs after current turn finishes). */
+  followUp(message: AgentMessage): void;
 
-You can:
-- Learn new skills via skill_write (body is a prompt guide, not code)
-- Read existing skills via skill_read
-- Delete skills via skill_delete
-- Modify your startup behavior via startup_write (only takes effect on next gateway boot)
-- Reflect on your past via self_reflect
-- Check your statistics via tape_stats
-- Run shell commands via bash
-- Read/write files via file_read / file_write
+  // Session control
+  getCurrentSessionId(): SessionId | undefined;
+  setNextSessionId(id: SessionId): void;
+  reloadSkills(): Promise<void>;
+  clearConversation(): Promise<void>;
+  compactCurrentSession(): Promise<string>;
+  restoreCheckpoint(id: SessionId): Promise<void>;
+  getDiagnostics(): AgentDiagnostics;
 
-You are not forced to reply. You are not forced to do anything. You decide what to do.
-Keep responses concise. Use tools when they help.`;
+  // TUI / live-status — narrow views of the underlying Pi Agent state.
+  /** Subscribe to Pi Agent events (returns an unsubscribe fn). */
+  subscribeToAgentEvents(handler: (event: AgentEvent) => void): () => void;
+  /** Get the active model label `{provider}/{id}`. */
+  getModelLabel(): string;
+  /** Set the active model. Resolves the profile and updates Pi state. */
+  setModel(provider: string, modelId: string): Promise<void>;
+  /** Get current thinking level. */
+  getThinkingLevel(): string;
+  /** Set current thinking level. */
+  setThinkingLevel(level: string): void;
+  /** Number of skills currently registered. */
+  getSkillCount(): number;
+  /** Get the skills-to-prompt-context block (markdown list). */
+  getSkillsPrompt(): string;
+  /** Number of entries currently in tape. */
+  getTapeTotalEntries(): number;
+  /** Number of sessions currently in tape. */
+  getSessionCount(): number;
+  /** Message count in the live Pi conversation. */
+  getMessageCount(): number;
+}
 
-export class PhusAgent {
+/**
+ * PhusAgent — see {@link PhusAgentFacade} for the intended consumer
+ * surface. Construction is synchronous (Pi Agent requires it). Use
+ * `createPhusAgent` from `./lifecycle.ts` to also await plugin load
+ * and get a paired `dispose()` for clean shutdown.
+ */
+export class PhusAgent implements PhusAgentFacade {
   private piAgent: Agent;
-  private hooks = new HookRegistry({ isolateErrors: true });
   private tape: Tape;
   private skills: SkillRegistry;
-  private policy: PolicyRule[];
+  private policy: readonly PolicyRule[];
+  private profile: ProviderProfile;
+  private mesh: MeshLike;
+  private hooks: HookRegistry;
+  private steeringInbox: SteeringInbox;
   private currentSessionId: SessionId | undefined;
-  private extraChannels: ChannelAdapter[] = [];
-  private autoCompactCfg: AutoCompactConfig = DEFAULT_AUTO_COMPACT;
-  private autoCompactEnabled = true;
+  private sessionOverride: SessionId | undefined;
+  private extraChannels: ChannelAdapter[];
+  private autoCompactCfg: AutoCompactConfig;
+  private autoCompactEnabled: boolean;
 
-  constructor() {
-    this.tape = new Tape();
-    this.skills = new SkillRegistry();
-    this.policy = defaultPolicy();
+  constructor(deps: PhusAgentDeps) {
+    this.tape = deps.tape;
+    this.skills = deps.skills;
+    this.policy = deps.policy;
+    this.profile = deps.profile;
+    this.mesh = deps.mesh;
+    this.hooks = deps.hooks;
+    this.steeringInbox = deps.steeringInbox;
+    this.extraChannels = deps.channels ?? [];
+    this.autoCompactCfg = deps.autoCompact ?? DEFAULT_AUTO_COMPACT;
+    this.autoCompactEnabled = deps.profile.autoCompact !== false;
 
     const tools: AgentTool[] = [
       ...createMetaTools(this.skills, this.tape).map(toAgentTool),
       ...createExternalTools(),
     ];
 
-    const profile = resolveProfile(process.env.PHUS_PROFILE);
-    this.autoCompactEnabled = profile.autoCompact !== false;
-
-    // Phase C: build runtime ProviderMesh if profile defines mesh endpoints.
-    // Single-endpoint profiles still work — they just have one endpoint in the mesh.
-    const endpoints: EndpointSpec[] = profile.mesh && profile.mesh.length > 0
-      ? profile.mesh.map((m) => ({
-        name: m.name,
-        provider: m.provider,
-        modelId: m.modelId,
-        baseUrl: m.baseUrl,
-        apiKeyEnv: m.apiKeyEnv,
-        priority: m.priority,
-        weight: m.weight,
-        costPerMillion: m.costPerMillion,
-        tags: m.tags,
-      }))
-      : [{
-        name: profile.name,
-        provider: profile.model.split("/", 1)[0]!,
-        modelId: profile.modelId ?? profile.model.split("/", 2)[1]!,
-        baseUrl: profile.baseUrl,
-        apiKeyEnv: profile.apiKeyEnv,
-        priority: 0,
-      }];
-    const meshPolicy: MeshPolicy = { strategy: profile.meshStrategy ?? "failover" };
-    const mesh = buildMesh(endpoints, meshPolicy);
-    setMeshSingleton(mesh);
-
-    // Pick the initial model: mesh picks the best endpoint.
-    const initialEp = mesh.pickEndpoint();
+    const initialEp = this.mesh.pickEndpoint();
     const initialModel = initialEp
-      ? (() => {
-        // Build a Pi Model from the picked endpoint
-        const ep = initialEp.spec;
-        const baseModel = modelFromProfile({
-          ...profile,
-          name: profile.name,
-          model: `${ep.provider}/${ep.modelId}`,
-        });
-        if (ep.baseUrl) baseModel.baseUrl = ep.baseUrl;
-        if (ep.modelId) baseModel.id = ep.modelId;
-        return baseModel;
-      })()
-      : modelFromProfile(profile);
+      ? this.modelForEndpoint(initialEp)
+      : modelFromProfile(this.profile);
 
     this.piAgent = new Agent({
       initialState: {
-        systemPrompt: SYSTEM_PROMPT_HEADER,
+        systemPrompt: "phus:init",
         model: initialModel,
         tools,
         messages: [],
@@ -149,33 +186,56 @@ export class PhusAgent {
       transformContext: async (messages) => this.injectContext(messages),
       beforeToolCall: async (ctx, signal) => this.beforeToolCall(ctx, signal),
       afterToolCall: async (ctx, signal) => this.afterToolCall(ctx, signal),
-      // Dynamic API key refresh — Pi calls this on every LLM request, so
-      // expiring OAuth tokens can be refreshed without restarting.
-      getApiKey: (provider) => this.resolveApiKey(provider),
-      // Wire-format debugging — set PHUS_DEBUG_WIRE=1 to log every payload.
-      onPayload: process.env.PHUS_DEBUG_WIRE ? (kind, payload) => {
-        logger.debug("wire.payload", {
-          kind,
-          hasPayload: !!payload,
-        });
-      } : undefined,
-      // B.4.2: parallel tool execution (faster but riskier)
-      toolExecution: profile.toolExecution ?? "sequential",
+      getApiKey: (provider) => resolveApiKey(provider),
+      onPayload: process.env.PHUS_DEBUG_WIRE
+        ? (kind, payload) => deps.logger.debug("wire.payload", { kind, hasPayload: !!payload })
+        : undefined,
+      toolExecution: deps.profile.toolExecution ?? "sequential",
     });
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
-    this.registerDefaultHooks();
-
-    // Load plugins: they may register additional hooks / channels / skills.
-    // Deferred via dynamic import to keep the constructor synchronous.
-    void this.loadPluginsAsync();
+    registerDefaultHooks(this.hooks, { tape: this.tape });
   }
 
-  /** Pi event handler — dispatches to Bub hooks. */
+  private modelForEndpoint(ep: ReturnType<MeshLike["pickEndpoint"]>): Model<any> {
+    if (!ep) return modelFromProfile(this.profile);
+    const baseModel = modelFromProfile({
+      ...this.profile,
+      name: this.profile.name,
+      model: `${ep.spec.provider}/${ep.spec.modelId}`,
+    });
+    if (ep.spec.baseUrl) baseModel.baseUrl = ep.spec.baseUrl;
+    if (ep.spec.modelId) baseModel.id = ep.spec.modelId;
+    return baseModel;
+  }
+
+  /** Inject skills + tape summary into the system prompt on every LLM call. */
+  private async injectContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
+    if (this.currentSessionId && this.autoCompactEnabled) {
+      const cw = this.piAgent.state.model.contextWindow;
+      await maybeCompact(
+        this.tape,
+        this.currentSessionId,
+        this.piAgent.state.messages,
+        cw,
+        this.autoCompactCfg,
+      );
+    }
+    return buildContextBlock(messages, {
+      hooks: this.hooks,
+      tape: this.tape,
+      skills: this.skills,
+      getContextWindow: () => this.piAgent.state.model.contextWindow,
+      getCurrentSessionId: () => this.currentSessionId,
+      getMessages: () => this.piAgent.state.messages,
+      setSystemPrompt: (prompt) => { this.piAgent.state.systemPrompt = prompt; },
+    });
+  }
+
+  /** Pi event handler — forwards turn_end to the after_llm_call hook. */
   private handleEvent(event: AgentEvent): void {
     if (event.type === "turn_end" && event.message?.role === "assistant") {
       const last = event.message as any;
-      // after_llm_call hook (broadcast) — observers can log / meter / cap
       void this.hooks.execute(
         "after_llm_call",
         makeCtx({
@@ -187,7 +247,6 @@ export class PhusAgent {
             stopReason: last.stopReason,
             errorMessage: last.errorMessage,
             usage: last.usage,
-            model: last.model,
           },
         }),
         "broadcast",
@@ -195,43 +254,24 @@ export class PhusAgent {
     }
   }
 
-  private async loadPluginsAsync(): Promise<void> {
-    const { loadPlugins } = await import("@/core/plugin.js");
-    loadPlugins(this.hooks, this.extraChannels, {
-      registerRuntime: () => {
-        // Runtime-registered skills are not yet supported (SkillRegistry reads from disk
-        // synchronously in toPromptContext). Future: add an in-memory override.
-      },
-    });
-  }
-
   /** Run one inbound envelope through the Bub hook chain. */
   async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
     const startedAt = Date.now();
-    let sessionId: SessionId | undefined;  // hoisted so catch can read it
+    let sessionId: SessionId | undefined;
 
     try {
-
-      // 1. resolve_session (first_result)
-      const baseCtx = makeCtx({ envelope, state: {}, tape: this.tape, skills: this.skills });
+      // 1. resolve_session
       const resolvedRaw = await this.hooks.execute<string>(
         "resolve_session",
-        baseCtx,
+        makeCtx({ envelope, state: {}, tape: this.tape, skills: this.skills }),
         "first_result",
       );
-      sessionId = asSessionId(resolvedRaw ?? `cli:${envelope.from}`);
-
+      sessionId = asSessionId(resolvedRaw ?? this.fallbackSession(envelope));
       this.currentSessionId = sessionId;
       this.piAgent.sessionId = sessionId;
 
-      // 1a. Drain steering inbox (first_result) — inject any queued messages
-      //     as Pi's steer queue so they interrupt the next LLM call naturally.
-      const inbox = await this.hooks.execute<SteeringInbox>(
-        "provide_steering_inbox",
-        makeCtx({ sessionId, state: {}, tape: this.tape, skills: this.skills }),
-        "first_result",
-      ) ?? getDefaultInbox();
-      const pending = await inbox.drainMessages();
+      // 1a. Drain steering inbox
+      const pending = await this.steeringInbox.drainMessages();
       for (const env of pending) {
         this.piAgent.steer({
           role: "user",
@@ -241,8 +281,7 @@ export class PhusAgent {
         logger.info("steering.injected", { from: env.from, sessionId });
       }
 
-      // 1b. admit_message (first_result) — admission control per session.
-      //     Default admits all; plugins can return { admit: false, reason }.
+      // 1b. admit_message
       const admitDecision = (await this.hooks.execute<{ admit?: boolean; reason?: string }>(
         "admit_message",
         makeCtx({ envelope, sessionId, state: {}, tape: this.tape, skills: this.skills }),
@@ -266,8 +305,7 @@ export class PhusAgent {
         }
       }
 
-      // 3. build_prompt — handled by Pi (via transformContext injecting skills+tape),
-      //    but we run the hook chain so plugins can intercept/transform the user msg.
+      // 3. build_prompt — let plugins observe/transform
       const userMsg: AgentMessage = envelope.image
         ? {
           role: "user",
@@ -282,7 +320,6 @@ export class PhusAgent {
           content: [{ type: "text", text: envelope.content }],
           timestamp: envelope.ts,
         };
-
       await this.hooks.execute(
         "build_prompt",
         makeCtx({
@@ -296,10 +333,10 @@ export class PhusAgent {
         "first_result",
       );
 
-      // 4. Pi agent loop runs LLM + tool calls (transformContext injects skills/tape per call)
+      // 4. Pi agent loop runs LLM + tool calls
       await this.piAgent.prompt(userMsg);
 
-      // 5. Extract assistant text from final state
+      // 5. Extract assistant text
       const lastAssistant = [...this.piAgent.state.messages]
         .reverse()
         .find((m) => m.role === "assistant");
@@ -334,7 +371,7 @@ export class PhusAgent {
       // 7. dispatch_outbound
       await channel.send(finalOutbounds);
 
-      // 8. save_state (broadcast)
+      // 8. save_state
       await this.hooks.execute(
         "save_state",
         makeCtx({
@@ -371,7 +408,6 @@ export class PhusAgent {
 
       return turn;
     } catch (err: any) {
-      // on_error hook (broadcast) — observers can react, log, alert, etc.
       await this.hooks.execute(
         "on_error",
         makeCtx({
@@ -384,87 +420,13 @@ export class PhusAgent {
         }),
         "broadcast",
       );
-      logger.error("turn.failed", {
-        sessionId,
-        stage: "turn",
-        error: err.message ?? String(err),
-      });
+      logger.error("turn.failed", { sessionId, stage: "turn", error: err.message });
       throw err;
     }
   }
 
-  /** Inject skills + tape summary into the system prompt on every LLM call.
-   *  Uses the Bub hook chain: system_prompt (first_result) → build_tape_context (first_result).
-   *  Plugins can replace either entirely. Default impls compose the standard header.
-   *
-   *  Also runs auto-compaction here (B.2.5) before rebuilding context. */
-  private async injectContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
-    // B.2.5: auto-compact if context is growing too large (controlled by profile.autoCompact)
-    if (this.currentSessionId && this.autoCompactEnabled) {
-      const cw = this.piAgent.state.model.contextWindow;
-      await maybeCompact(
-        this.tape,
-        this.currentSessionId,
-        this.piAgent.state.messages,
-        cw,
-        this.autoCompactCfg,
-      );
-    }
-    // 1. system_prompt (first_result) — base system prompt
-    let systemPrompt: string;
-    const spResult = await this.hooks.execute<string>(
-      "system_prompt",
-      makeCtx({ sessionId: this.currentSessionId, state: {}, tape: this.tape, skills: this.skills }),
-      "first_result",
-    );
-    systemPrompt = spResult ?? SYSTEM_PROMPT_HEADER;
-
-    // 2. build_tape_context (first_result) — dynamic context block (skills + tape)
-    const ctxResult = await this.hooks.execute<string>(
-      "build_tape_context",
-      makeCtx({ sessionId: this.currentSessionId, state: {}, tape: this.tape, skills: this.skills }),
-      "first_result",
-    );
-    let dynamicContext: string;
-    if (ctxResult) {
-      dynamicContext = ctxResult;
-    } else {
-      // Default: skills + smart-selected tape turns (B.4.3)
-      const skillsCtx = this.skills.toPromptContext();
-      let tapeSummary: string;
-      if (this.currentSessionId) {
-        // Get the last user message as the query for relevance scoring
-        const lastUserMsg = [...this.piAgent.state.messages]
-          .reverse()
-          .find((m) => m.role === "user");
-        const query = (lastUserMsg as any)?.content ?? "";
-        const queryText = typeof query === "string"
-          ? query
-          : Array.isArray(query)
-            ? query.filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ")
-            : "";
-        const { selectRelevantTurns } = await import("@/core/context-select.js");
-        const relevant = selectRelevantTurns(this.tape, this.currentSessionId, queryText);
-        tapeSummary = relevant
-          .map((t) => {
-            const u = (t.inbound.content ?? "").slice(0, 100).replace(/\n/g, " ");
-            const r = (t.modelOutput ?? "").slice(0, 100).replace(/\n/g, " ");
-            return `[${new Date(t.ts).toISOString().slice(11, 16)}] U: ${u} | P: ${r}`;
-          })
-          .join("\n") || "(empty)";
-      } else {
-        tapeSummary = "(no session yet)";
-      }
-      const stats = this.tape.stats();
-      dynamicContext =
-        `## Current skills\n${skillsCtx}\n\n` +
-        `## Relevant past turns (B.4.3 smart select)\n${tapeSummary}\n\n` +
-        `## Tape statistics\nTotal entries across all sessions: ${stats.totalEntries}\n` +
-        `Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;
-    }
-
-    this.piAgent.state.systemPrompt = `${systemPrompt}\n\n${dynamicContext}`;
-    return messages;
+  private fallbackSession(envelope: Envelope): string {
+    return `${envelope.channel || "cli"}:${(envelope.metadata as any)?.chatId ?? envelope.from ?? "default"}`;
   }
 
   /** Write tool_call entries to Tape before the tool runs. */
@@ -474,9 +436,7 @@ export class PhusAgent {
   ): Promise<BeforeToolCallResult | undefined> {
     if (!this.currentSessionId) return undefined;
 
-    // Operator-equivalence policy check (Bub principle):
-    // evaluate first; if blocked, return {block: true, reason} and skip execution.
-    const decision = evaluate(this.policy, {
+    const decision = evaluate([...this.policy], {
       toolName: ctx.toolCall.name,
       args: (ctx.args as Record<string, unknown>) ?? {},
       cwd: process.cwd(),
@@ -507,9 +467,6 @@ export class PhusAgent {
     return undefined;
   }
 
-  /** Write tool_result entries to Tape after the tool runs.
-   *  Also saves a checkpoint of Pi's transcript after every tool call
-   *  (B.2.2 — enables crash recovery and resume). */
   private async afterToolCall(
     ctx: AfterToolCallContext,
     _signal?: AbortSignal,
@@ -523,7 +480,6 @@ export class PhusAgent {
       isError: ctx.isError,
       ts: Date.now(),
     });
-    // Save checkpoint after every tool call (cheap insurance against crashes)
     try {
       saveCheckpoint(
         this.tape,
@@ -537,7 +493,6 @@ export class PhusAgent {
     return undefined;
   }
 
-  /** Pull collected tool calls from the current Pi state. */
   private collectToolCalls(): Turn["toolCalls"] {
     const out: Turn["toolCalls"] = [];
     for (const msg of this.piAgent.state.messages) {
@@ -555,35 +510,124 @@ export class PhusAgent {
     return out;
   }
 
-  /** Default hook implementations. Plugins can override by registering higher-priority ones. */
-  private registerDefaultHooks(): void {
-    this.hooks.register<string>(
-      "resolve_session",
-      async (ctx) => {
-        const env = ctx.envelope;
-        if (!env) return undefined as any;
-        const channel = env.channel || "cli";
-        const chatId = (env.metadata as any).chatId ?? env.from ?? "default";
-        return `${channel}:${chatId}`;
-      },
-      { mode: "first_result", priority: 0 },
-    );
+  // ─── PhusAgentFacade ─────────────────────────────────────────
 
-    this.hooks.register(
-      "load_state",
-      async (ctx) => {
-        if (!ctx.sessionId) return ctx;
-        const anchor = this.tape.loadAnchor(ctx.sessionId);
-        if (anchor) {
-          ctx.state.lastAnchor = { name: anchor.name, ts: anchor.ts };
-        }
-        return ctx;
-      },
-      { mode: "broadcast", priority: 0 },
-    );
+  abort(): void {
+    this.piAgent.abort();
+    logger.info("turn.aborted");
   }
 
-  /** Expose internal handles for CLI/diagnostic commands. */
+  async waitForIdle(): Promise<void> {
+    return this.piAgent.waitForIdle();
+  }
+
+  steer(message: AgentMessage): void {
+    this.piAgent.steer(message);
+  }
+
+  followUp(message: AgentMessage): void {
+    this.piAgent.followUp(message);
+  }
+
+  getCurrentSessionId(): SessionId | undefined {
+    return this.currentSessionId ?? this.sessionOverride;
+  }
+
+  setNextSessionId(id: SessionId): void {
+    this.sessionOverride = id;
+    this.currentSessionId = id;
+    this.piAgent.sessionId = id;
+  }
+
+  async reloadSkills(): Promise<void> {
+    this.skills.discover();
+  }
+
+  async clearConversation(): Promise<void> {
+    this.piAgent.state.messages = [];
+  }
+
+  async compactCurrentSession(): Promise<string> {
+    if (!this.currentSessionId) throw new Error("no current session to compact");
+    const { compactSession } = await import("@/core/compaction.js");
+    const result = await compactSession(this.tape, this.currentSessionId, { keepRecent: 10 });
+    return `compacted: summarized=${result.summarized}, kept=${result.keptRecent}`;
+  }
+
+  async restoreCheckpoint(id: SessionId): Promise<void> {
+    const cp = loadLatestCheckpoint(this.tape, id);
+    if (!cp) throw new Error(`no checkpoint for session ${id}`);
+    this.piAgent.state.messages = cp.messages as any;
+    this.currentSessionId = id;
+    this.piAgent.sessionId = id;
+  }
+
+  getDiagnostics(): AgentDiagnostics {
+    const m = this.piAgent.state.model;
+    return {
+      sessionId: this.currentSessionId,
+      currentSessionOverride: this.sessionOverride,
+      modelLabel: `${m.provider}/${m.id}`,
+      thinkingLevel: String(this.piAgent.state.thinkingLevel ?? ""),
+      messageCount: this.piAgent.state.messages.length,
+      tapeStats: this.tape.stats(),
+      skillCount: this.skills.getAll().length,
+    };
+  }
+
+  // ─── TUI/live-status facade ────────────────────────────────────
+
+  subscribeToAgentEvents(handler: (event: AgentEvent) => void): () => void {
+    return this.piAgent.subscribe(handler);
+  }
+
+  getModelLabel(): string {
+    return `${this.piAgent.state.model.provider}/${this.piAgent.state.model.id}`;
+  }
+
+  async setModel(provider: string, modelId: string): Promise<void> {
+    const { getModel } = await import("@mariozechner/pi-ai");
+    const m = getModel(provider as any, modelId as any);
+    this.piAgent.state.model = m as any;
+    // Refresh API key env var so the new model's transport picks it up.
+    resolveApiKey(provider);
+  }
+
+  getThinkingLevel(): string {
+    return String(this.piAgent.state.thinkingLevel ?? "");
+  }
+
+  setThinkingLevel(level: string): void {
+    this.piAgent.state.thinkingLevel = level as any;
+  }
+
+  getSkillCount(): number {
+    return this.skills.getAll().length;
+  }
+
+  getSkillsPrompt(): string {
+    return this.skills.toPromptContext();
+  }
+
+  getTapeTotalEntries(): number {
+    return this.tape.stats().totalEntries;
+  }
+
+  getSessionCount(): number {
+    return Object.keys(this.tape.stats().sessions).length;
+  }
+
+  getMessageCount(): number {
+    return this.piAgent.state.messages.length;
+  }
+
+  /**
+   * Internal handles. Kept as a transitional getter for legacy
+   * callers (CLI / internal-commands / TUI). New code MUST use
+   * the `PhusAgentFacade` methods above.
+   *
+   * @deprecated will be removed after the TUI and CLI migrate to facade methods.
+   */
   get _internal() {
     return {
       hooks: this.hooks,
@@ -592,78 +636,24 @@ export class PhusAgent {
       piAgent: this.piAgent,
       policy: this.policy,
       channels: this.extraChannels,
+      mesh: this.mesh,
+      profile: this.profile,
+      steeringInbox: this.steeringInbox,
+      autoCompactCfg: this.autoCompactCfg,
+      autoCompactEnabled: this.autoCompactEnabled,
     };
   }
 
-  /** Dynamic API key resolver passed to Pi's getApiKey callback. */
-  private resolveApiKey(provider: string): string | undefined {
-    try {
-      const profile = resolveProfile(process.env.PHUS_PROFILE);
-      if (profile.apiKeyEnv && process.env[profile.apiKeyEnv]) {
-        return process.env[profile.apiKeyEnv];
-      }
-    } catch { /* ignore */ }
-    const envMap: Record<string, string> = {
-      "github-copilot": "COPILOT_GITHUB_TOKEN",
-      anthropic: "ANTHROPIC_OAUTH_TOKEN",
-    };
-    const direct = envMap[provider];
-    if (direct && process.env[direct]) return process.env[direct];
-    const upperKey = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
-    return process.env[upperKey];
-  }
-
-  /** Abort the current turn. */
-  abort(): void {
-    this.piAgent.abort();
-    logger.info("turn.aborted");
-  }
-
-  /** Wait until the current turn completes. */
-  async waitForIdle(): Promise<void> {
-    return this.piAgent.waitForIdle();
-  }
-
-  /** Queue a steering message (interrupts mid-run). */
-  steer(message: import("@mariozechner/pi-agent-core").AgentMessage): void {
-    this.piAgent.steer(message);
-  }
-
-  /** Queue a follow-up message (runs after current turn finishes). */
-  followUp(message: import("@mariozechner/pi-agent-core").AgentMessage): void {
-    this.piAgent.followUp(message);
+  /** Async convenience factory: builds default deps and returns
+   *  a `PhusAgentHandle` containing the agent plus a `dispose()`
+   *  for clean shutdown. Replaces `new PhusAgent()` for all new code. */
+  static async create(opts: import("@/bridge/default-deps.js").DefaultDepsOptions = {}): Promise<import("@/bridge/lifecycle.js").PhusAgentHandle> {
+    const deps = (await import("@/bridge/default-deps.js")).buildDefaultPhusAgentDeps(opts);
+    return (await import("@/bridge/lifecycle.js")).createPhusAgent(deps);
   }
 }
 
-/** Extract plain text from an assistant message's content blocks. */
-function extractText(msg: AgentMessage | undefined): string {
-  if (!msg || msg.role !== "assistant") return "";
-  const content = (msg as any).content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((c: any) => c?.type === "text" && typeof c.text === "string")
-    .map((c: any) => c.text)
-    .join("");
-}
-
-/** Convert a MetaTool into an AgentTool. */
-function toAgentTool(meta: MetaTool): AgentTool {
-  return {
-    name: meta.name,
-    label: meta.name,
-    description: meta.description,
-    parameters: meta.parameters,
-    execute: async (_toolCallId, params) => {
-      try {
-        const result = await meta.execute(params as Record<string, unknown>);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-          details: result,
-        };
-      } catch (err: any) {
-        // Throw — Pi will mark result as isError and feed message back to LLM.
-        throw new Error(err?.message ?? String(err));
-      }
-    },
-  };
-}
+// Re-export the legacy type-only default exports that the rest of the
+// codebase still consumes through `provider-mesh` and `steering`.
+export { ProviderMesh, type EndpointSpec, type MeshPolicy };
+export { PiSteeringInbox };

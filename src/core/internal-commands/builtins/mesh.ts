@@ -4,15 +4,14 @@
 import type { InternalCommand, InternalCommandServices } from "../types.js";
 
 export function defineMeshCommands(
-  _services: InternalCommandServices,
+  services: InternalCommandServices,
 ): InternalCommand[] {
   return [
     {
       name: "mesh",
       description: "show runtime provider mesh status (endpoints, circuits, stats)",
       handler: async () => {
-        const { getActiveMesh } = await import("@/core/provider-mesh-runtime.js");
-        const mesh = getActiveMesh();
+        const mesh = services.mesh;
         if (!mesh) return "(no active mesh — set profile.mesh in phus.config.yaml)";
         const stats = mesh.stats();
         const lines: string[] = [];

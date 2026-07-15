@@ -56,7 +56,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
-    const unsub = agent._internal.piAgent.subscribe((event: any) => {
+    const unsub = agent.subscribeToAgentEvents((event: any) => {
       switch (event.type) {
         case "message_update": {
           const ame = event.assistantMessageEvent;
@@ -96,12 +96,10 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   useEffect(() => {
     const tick = () => {
       try {
-        const s = agent._internal.tape.stats();
-        const skillCount = agent._internal.skills.getAll().length;
-        const sessions = agent._internal.piAgent.state.messages
-          .filter((m) => m.role === "user" || m.role === "assistant")
-          .length;
-        setStats({ entries: s.totalEntries, skills: skillCount, turns: sessions });
+        const entries = agent.getTapeTotalEntries();
+        const skills = agent.getSkillCount();
+        const turns = agent.getMessageCount();
+        setStats({ entries, skills, turns });
       } catch {
         /* ignore */
       }
@@ -117,7 +115,11 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     // Bub-style ,foo commands (also accepted in TUI)
     if (trimmed.startsWith(",")) {
       const { execute, initInternalCommands } = await import("@/core/internal-commands/index.js");
-      initInternalCommands(() => agent, () => process.env.PHUS_HOME ?? "./.phus");
+      initInternalCommands(
+        () => agent,
+        () => process.env.PHUS_HOME ?? "./.phus",
+        { mesh: agent._internal.mesh },
+      );
       const result = await execute(trimmed, "tui");
       if (result === "__QUIT_TUI__") return "quit";
       if (result === "__CLEAR_TUI__") {
@@ -397,7 +399,8 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
 
       case "tasks": {
         const { collectTasks, renderTasks } = await import("@/commands/tasks.js");
-        setItems((prev) => [...prev, makeSystem(renderTasks(collectTasks()), "info")]);
+        const out = await collectTasks();
+        setItems((prev) => [...prev, makeSystem(renderTasks(out), "info")]);
         return;
       }
 

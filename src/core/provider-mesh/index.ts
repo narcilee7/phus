@@ -1,8 +1,8 @@
 // src/core/provider-mesh/index.ts
 // ProviderMesh — composes types, routing, circuit, health, and stats
 // into a single class. Public API is unchanged from the previous
-// monolithic implementation so external consumers (buildMesh,
-// provider-mesh-runtime, internal-commands) do not need to change.
+// monolithic implementation so external consumers (bridge/, internal-
+// commands builtins) do not need to change.
 
 import { EventEmitter } from "node:events";
 import { logger } from "@/core/logger.js";
@@ -140,4 +140,18 @@ export class ProviderMesh extends EventEmitter implements MeshLike {
   private emitCircuit(event: CircuitChangeEvent): void {
     this.emit("circuit-change", event);
   }
+}
+
+/** Build a ProviderMesh from a list of endpoint specs and start its
+ *  health-check loop. Convenience wrapper used by `buildDefaultPhusAgentDeps`. */
+export function buildMesh(
+  endpoints: EndpointSpec[],
+  policy: MeshPolicy = {},
+): ProviderMesh {
+  if (endpoints.length === 0) {
+    throw new Error("ProviderMesh requires at least one endpoint");
+  }
+  const mesh = new ProviderMesh(endpoints, policy);
+  mesh.startHealthChecks();
+  return mesh;
 }

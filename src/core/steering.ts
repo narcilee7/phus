@@ -56,15 +56,3 @@ export class PiSteeringInbox implements SteeringInbox {
     logger.debug(SteeringEvent.DRAINED, { count });
   }
 }
-
-/** Singleton for the default case. Reset on each gateway restart if needed. */
-let defaultInbox: PiSteeringInbox | undefined;
-
-export function getDefaultInbox(): PiSteeringInbox {
-  if (!defaultInbox) defaultInbox = new PiSteeringInbox();
-  return defaultInbox;
-}
-
-export function resetDefaultInbox(): void {
-  defaultInbox = undefined;
-}

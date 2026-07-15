@@ -39,4 +39,22 @@ export interface InternalCommandServices {
   getAgent: () => unknown;
   /** Phus home directory (for skills, drafts, ...). */
   getHome: () => string;
+  /** Provider mesh (or undefined if no mesh has been built yet). */
+  mesh?: import("@/core/provider-mesh/contract.js").MeshLike;
+  /** Scheduler (or undefined if not running in gateway mode). */
+  scheduler?: import("@/core/scheduler.js").Scheduler | undefined;
+}
+
+/** Narrow view of the scheduler surface used by the `,schedule.*`
+ *  builtins. The concrete `Scheduler` class satisfies this. */
+export interface SchedulerLike {
+  list(): ReadonlyArray<{
+    name: string;
+    cron: string;
+    hookName: string;
+    enabled: boolean | undefined;
+  }>;
+  register(schedule: unknown): void;
+  unregister(name: unknown): boolean;
+  setEnabled(name: unknown, enabled: boolean): boolean;
 }

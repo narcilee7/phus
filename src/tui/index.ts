@@ -8,7 +8,10 @@ import { PhusAgent } from "@/bridge/pi-agent.js";
 import { logger } from "@/core/logger.js";
 
 export async function startTui(): Promise<void> {
-  const agent = new PhusAgent();
+  const handle = await PhusAgent.create();
+  // App.tsx currently consumes the concrete `PhusAgent` so it can read
+  // internals during the migration to facade. Pass the internals.
+  const agent = handle.internals;
   const sessionId = "tui:user";
   const model = agent._internal.piAgent.state.model;
   const modelLabel = `${model.provider}/${model.id}`;
@@ -19,5 +22,6 @@ export async function startTui(): Promise<void> {
 
   logger.info("tui.started", { sessionId, model: modelLabel });
   await waitUntilExit();
+  await handle.dispose();
   logger.info("tui.exited", { sessionId });
 }

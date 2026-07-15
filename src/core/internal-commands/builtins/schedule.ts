@@ -4,36 +4,29 @@
 import { asScheduleName } from "@/types/brand.js";
 import type { InternalCommand, InternalCommandServices } from "../types.js";
 
-async function getSchedulerOrMessage(): Promise<
-  | { ok: true; sched: import("@/core/scheduler.js").Scheduler }
-  | { ok: false; message: string }
-> {
-  const { getScheduler } = await import("@/core/scheduler-runtime.js");
-  const sched = getScheduler();
-  if (!sched) {
-    return {
-      ok: false,
-      message: "(scheduler not initialized — only runs in gateway mode)",
-    };
-  }
-  return { ok: true, sched };
+function notInitializedMessage(): string {
+  return "(scheduler not initialized — only runs in gateway mode)";
+}
+
+function sched(services: InternalCommandServices) {
+  return services.scheduler ?? null;
 }
 
 export function defineScheduleCommands(
-  _services: InternalCommandServices,
+  services: InternalCommandServices,
 ): InternalCommand[] {
   return [
     {
       name: "schedule.list",
       description: "list all registered schedules",
       handler: async () => {
-        const r = await getSchedulerOrMessage();
-        if (!r.ok) return r.message;
-        const list = r.sched.list();
+        const s = sched(services);
+        if (!s) return notInitializedMessage();
+        const list = s.list();
         if (list.length === 0) return "(no schedules registered)";
         return list
-          .map((s: any) =>
-            `  ${s.enabled === false ? "○" : "●"} ${s.name.padEnd(24)} ${s.cron.padEnd(14)} → ${s.hookName}`,
+          .map((sch: any) =>
+            `  ${sch.enabled === false ? "○" : "●"} ${sch.name.padEnd(24)} ${sch.cron.padEnd(14)} → ${sch.hookName}`,
           )
           .join("\n");
       },
@@ -49,10 +42,10 @@ export function defineScheduleCommands(
         if (!name || !cron || !hookName) {
           return "usage: ,schedule.add name=<n> cron=\"<expr>\" hookName=<hook>";
         }
-        const r = await getSchedulerOrMessage();
-        if (!r.ok) return r.message;
+        const s = sched(services);
+        if (!s) return notInitializedMessage();
         try {
-          r.sched.register({
+          s.register({
             name: asScheduleName(name),
             cron,
             hookName: hookName as any,
@@ -71,9 +64,9 @@ export function defineScheduleCommands(
       handler: async ({ args }) => {
         const name = args.name;
         if (!name) return "usage: ,schedule.remove name=<n>";
-        const r = await getSchedulerOrMessage();
-        if (!r.ok) return r.message;
-        const ok = r.sched.unregister(name as any);
+        const s = sched(services);
+        if (!s) return notInitializedMessage();
+        const ok = s.unregister(name as any);
         return ok ? `✓ schedule "${name}" removed` : `not found: ${name}`;
       },
     },
@@ -84,9 +77,9 @@ export function defineScheduleCommands(
       handler: async ({ args }) => {
         const name = args.name;
         if (!name) return "usage: ,schedule.enable name=<n>";
-        const r = await getSchedulerOrMessage();
-        if (!r.ok) return r.message;
-        return r.sched.setEnabled(name as any, true) ? `✓ enabled "${name}"` : `not found: ${name}`;
+        const s = sched(services);
+        if (!s) return notInitializedMessage();
+        return s.setEnabled(name as any, true) ? `✓ enabled "${name}"` : `not found: ${name}`;
       },
     },
     {
@@ -96,25 +89,22 @@ export function defineScheduleCommands(
       handler: async ({ args }) => {
         const name = args.name;
         if (!name) return "usage: ,schedule.disable name=<n>";
-        const r = await getSchedulerOrMessage();
-        if (!r.ok) return r.message;
-        return r.sched.setEnabled(name as any, false) ? `○ disabled "${name}"` : `not found: ${name}`;
+        const s = sched(services);
+        if (!s) return notInitializedMessage();
+        return s.setEnabled(name as any, false) ? `○ disabled "${name}"` : `not found: ${name}`;
       },
     },
     {
       name: "schedule",
       description: "alias for ,schedule.list",
-      handler: async ({ surface }) => {
-        // Re-execute through the same registry the caller is using.
-        // The builtin body uses getAgent()._internal directly today; we
-        // delegate to ,schedule.list which already does the work.
-        const r = await getSchedulerOrMessage();
-        if (!r.ok) return r.message;
-        const list = r.sched.list();
+      handler: async () => {
+        const s = sched(services);
+        if (!s) return notInitializedMessage();
+        const list = s.list();
         if (list.length === 0) return "(no schedules registered)";
         return list
-          .map((s: any) =>
-            `  ${s.enabled === false ? "○" : "●"} ${s.name.padEnd(24)} ${s.cron.padEnd(14)} → ${s.hookName}`,
+          .map((sch: any) =>
+            `  ${sch.enabled === false ? "○" : "●"} ${sch.name.padEnd(24)} ${sch.cron.padEnd(14)} → ${sch.hookName}`,
           )
           .join("\n");
       },
