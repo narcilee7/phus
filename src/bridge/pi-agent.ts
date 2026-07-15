@@ -25,6 +25,7 @@ import { Tape } from "../core/tape.js";
 import { SkillRegistry } from "../core/skill.js";
 import { createMetaTools } from "../core/meta.js";
 import { createExternalTools } from "./tools.js";
+import { defaultPolicy, evaluate, type PolicyRule } from "../core/policy.js";
 import type { ChannelAdapter } from "../channels/base.js";
 
 function resolveModel(): Model<any> {
@@ -58,11 +59,13 @@ export class PhusAgent {
   private hooks = new HookRegistry();
   private tape: Tape;
   private skills: SkillRegistry;
+  private policy: PolicyRule[];
   private currentSessionId: string | undefined;
 
   constructor() {
     this.tape = new Tape();
     this.skills = new SkillRegistry();
+    this.policy = defaultPolicy();
 
     const tools: AgentTool[] = [
       ...createMetaTools(this.skills, this.tape).map(toAgentTool),
@@ -242,6 +245,18 @@ Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", 
     _signal?: AbortSignal,
   ): Promise<BeforeToolCallResult | undefined> {
     if (!this.currentSessionId) return undefined;
+
+    // Operator-equivalence policy check (Bub principle):
+    // evaluate first; if blocked, return {block: true, reason} and skip execution.
+    const decision = evaluate(this.policy, {
+      toolName: ctx.toolCall.name,
+      args: (ctx.args as Record<string, unknown>) ?? {},
+      cwd: process.cwd(),
+    });
+    if (!decision.allow) {
+      return { block: true, reason: decision.reason };
+    }
+
     this.tape.append({
       kind: "tool_call",
       sessionId: this.currentSessionId,
@@ -330,6 +345,7 @@ Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", 
       tape: this.tape,
       skills: this.skills,
       piAgent: this.piAgent,
+      policy: this.policy,
     };
   }
 }

@@ -10,6 +10,7 @@ import { Command } from "commander";
 import { CLIChannel, runOnce } from "./channels/cli.js";
 import { PhusAgent } from "./bridge/pi-agent.js";
 import { bootstrap } from "./core/startup.js";
+import { traceSession } from "./commands/trace.js";
 
 const program = new Command();
 
@@ -102,6 +103,34 @@ program
     const agent = new PhusAgent();
     const stats = agent._internal.tape.stats();
     console.log(JSON.stringify(stats, null, 2));
+  });
+
+program
+  .command("policy")
+  .description("Print active safety policy (operator-equivalence allowlist)")
+  .action(() => {
+    const agent = new PhusAgent();
+    console.log("Active policy rules:");
+    for (const rule of agent._internal.policy) {
+      console.log(`  - tool: ${rule.toolName}`);
+    }
+    console.log("\nDefault file_write roots: ./skills, ./.phus, ./tmp, ./out");
+    console.log("Default bash blocklist: rm -rf /, fork bombs, curl|sh, dd if=, chmod -R 777 /, mkfs");
+  });
+
+program
+  .command("trace <sessionId>")
+  .description("Print a turn timeline for one session")
+  .option("-l, --limit <n>", "Max entries to show", "50")
+  .option("-k, --kind <kind>", "Filter: turn | tool_call | tool_result | error | anchor")
+  .option("--json", "Emit raw JSON instead of human-readable")
+  .action((sessionId: string, opts: { limit: string; kind?: string; json?: boolean }) => {
+    const dbPath = process.env.PHUS_TAPE_DB ?? "./tape.sqlite";
+    traceSession(dbPath, sessionId, {
+      limit: parseInt(opts.limit, 10),
+      kind: opts.kind as any,
+      json: opts.json,
+    });
   });
 
 program.parseAsync(process.argv).catch((err) => {
