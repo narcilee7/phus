@@ -26,25 +26,41 @@ export function createExternalTools(): AgentTool[] {
         cwd: Type.Optional(Type.String({ description: "Working directory. Defaults to $PWD." })),
         timeoutMs: Type.Optional(Type.Number({ description: "Max execution time in ms. Default 30000." })),
       }),
-      execute: async (_id, params) => {
+      execute: async (toolCallId, params) => {
         const p = params as { command: unknown; cwd?: unknown; timeoutMs?: number };
         const cmd = String(p.command);
         const cwd = (p.cwd as string | undefined) ?? process.cwd();
         const timeoutMs = p.timeoutMs ?? 30_000;
-        // Retry once on transient network/timeout errors
-        const stdout = await withRetry(
-          () =>
-            execFileP("sh", ["-c", cmd], {
-              cwd,
-              timeout: timeoutMs,
-              maxBuffer: 5 * 1024 * 1024,
-            }),
-          { ...DEFAULT_RETRY, maxAttempts: 2, initialDelayMs: 500, maxDelayMs: 2000, jitter: false },
-        );
-        return {
-          content: [{ type: "text", text: (stdout.stdout ?? "") + (stdout.stderr ?? "") }],
-          details: { stdout: stdout.stdout, stderr: stdout.stderr },
-        };
+        // B.2.4: emit heartbeat every 5s for long-running commands so the
+        // TUI / log can show "still working" instead of dead silence.
+        let heartbeat: NodeJS.Timeout | undefined;
+        const startedAt = Date.now();
+        if (timeoutMs > 10_000) {
+          heartbeat = setInterval(() => {
+            logger.debug("tool.bash.heartbeat", {
+              toolCallId,
+              elapsedMs: Date.now() - startedAt,
+              timeoutMs,
+            });
+          }, 5000);
+        }
+        try {
+          const stdout = await withRetry(
+            () =>
+              execFileP("sh", ["-c", cmd], {
+                cwd,
+                timeout: timeoutMs,
+                maxBuffer: 5 * 1024 * 1024,
+              }),
+            { ...DEFAULT_RETRY, maxAttempts: 2, initialDelayMs: 500, maxDelayMs: 2000, jitter: false },
+          );
+          return {
+            content: [{ type: "text", text: (stdout.stdout ?? "") + (stdout.stderr ?? "") }],
+            details: { stdout: stdout.stdout, stderr: stdout.stderr, durationMs: Date.now() - startedAt },
+          };
+        } finally {
+          if (heartbeat) clearInterval(heartbeat);
+        }
       },
     },
     {
