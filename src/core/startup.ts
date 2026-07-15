@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
+import { logger } from "./logger.js";
 
 export type StartupMode = "custom" | "fallback" | "default";
 
@@ -25,20 +26,20 @@ export function startupScriptPath(): string {
 export function bootstrap(timeoutMs = 30_000): StartupMode {
   const script = startupScriptPath();
   if (!fs.existsSync(script)) {
-    console.log("[phus] ⛰️  No startup.sh — using default gateway.");
+    logger.info("startup.not_found", { path: script });
     return "default";
   }
-  console.log(`[phus] ⛰️  Found startup.sh — executing self-defined bootstrap...`);
+  logger.info("startup.found", { path: script });
   try {
     const out = execFileSync("sh", [script], {
       encoding: "utf-8",
       timeout: timeoutMs,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    if (out.trim()) console.log(out);
+    if (out.trim()) logger.info("startup.output", { output: out });
     return "custom";
   } catch (err: any) {
-    console.error(`[phus] ⚠️  startup.sh failed (${err.message}); falling back to default.`);
+    logger.error("startup.failed", { path: script, error: err.message });
     return "fallback";
   }
 }

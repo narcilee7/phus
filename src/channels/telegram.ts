@@ -4,11 +4,12 @@
 
 import type { ChannelAdapter } from "./base.js";
 import type { Outbound } from "../core/types.js";
+import { logger } from "../core/logger.js";
 
 export class TelegramChannel implements ChannelAdapter {
   readonly name = "telegram";
   constructor(_token: string) {
-    console.warn("[phus] TelegramChannel is a stub — install telegraf to enable.");
+    logger.warn("channel.stub", { channel: "telegram" });
   }
   async listen(): Promise<void> {
     throw new Error("TelegramChannel not implemented. Install telegraf and replace this stub.");

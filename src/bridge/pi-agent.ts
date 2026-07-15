@@ -26,6 +26,7 @@ import { SkillRegistry } from "../core/skill.js";
 import { createMetaTools } from "../core/meta.js";
 import { createExternalTools } from "./tools.js";
 import { defaultPolicy, evaluate, type PolicyRule } from "../core/policy.js";
+import { logger } from "../core/logger.js";
 import type { ChannelAdapter } from "../channels/base.js";
 
 function resolveModel(): Model<any> {
@@ -212,6 +213,13 @@ export class PhusAgent {
     };
     this.tape.append({ kind: "turn", turn });
 
+    logger.info("turn.completed", {
+      sessionId,
+      durationMs: turn.durationMs,
+      toolCallCount: turn.toolCalls.length,
+      outboundCount: finalOutbounds.length,
+    });
+
     return turn;
   }
 
@@ -254,8 +262,19 @@ Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", 
       cwd: process.cwd(),
     });
     if (!decision.allow) {
+      logger.warn("tool.blocked_by_policy", {
+        sessionId: this.currentSessionId,
+        tool: ctx.toolCall.name,
+        reason: decision.reason,
+      });
       return { block: true, reason: decision.reason };
     }
+
+    logger.debug("tool.call", {
+      sessionId: this.currentSessionId,
+      tool: ctx.toolCall.name,
+      toolCallId: ctx.toolCall.id,
+    });
 
     this.tape.append({
       kind: "tool_call",

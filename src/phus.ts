@@ -11,6 +11,8 @@ import { CLIChannel, runOnce } from "./channels/cli.js";
 import { PhusAgent } from "./bridge/pi-agent.js";
 import { bootstrap } from "./core/startup.js";
 import { traceSession } from "./commands/trace.js";
+import { logger } from "./core/logger.js";
+import { tailLogs } from "./commands/logs.js";
 
 const program = new Command();
 
@@ -129,6 +131,27 @@ program
     traceSession(dbPath, sessionId, {
       limit: parseInt(opts.limit, 10),
       kind: opts.kind as any,
+      json: opts.json,
+    });
+  });
+
+program
+  .command("logs")
+  .description("Query the structured JSON log")
+  .option("-f, --follow", "Stream new log lines as they arrive")
+  .option("-s, --session <sessionId>", "Filter to one session")
+  .option("-l, --level <level>", "Minimum log level (fatal/error/warn/info/debug/trace)", "info")
+  .option("-e, --event <event>", "Filter to one event name")
+  .option("-n, --limit <n>", "Show last N entries (no -f)", "50")
+  .option("--json", "Emit raw JSON lines")
+  .action(async (opts: { follow?: boolean; session?: string; level: string; event?: string; limit: string; json?: boolean }) => {
+    const file = process.env.PHUS_LOG_FILE ?? "./logs/phus.jsonl";
+    await tailLogs(file, {
+      follow: opts.follow,
+      session: opts.session,
+      level: opts.level as any,
+      event: opts.event,
+      limit: parseInt(opts.limit, 10),
       json: opts.json,
     });
   });
