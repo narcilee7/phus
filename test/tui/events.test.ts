@@ -1,0 +1,77 @@
+// test/tui/events.test.ts
+// Verify the Pi Agent event → AppAction mapping.
+
+import { describe, expect, it } from "vitest";
+import { eventToAction } from "../../src/tui/events.js";
+
+describe("eventToAction", () => {
+  it("maps message_update + text_delta → append_delta", () => {
+    const a = eventToAction({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", delta: "hi" },
+    });
+    expect(a).toEqual({ type: "append_delta", delta: "hi" });
+  });
+
+  it("ignores message_update with thinking_delta", () => {
+    const a = eventToAction({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", delta: "hmm" },
+    });
+    expect(a).toBeNull();
+  });
+
+  it("ignores message_update with no assistantMessageEvent", () => {
+    expect(eventToAction({ type: "message_update" })).toBeNull();
+  });
+
+  it("maps tool_execution_start → upsert_tool_call", () => {
+    const a = eventToAction({
+      type: "tool_execution_start",
+      toolName: "bash",
+      toolCallId: "tc-1",
+      args: { cmd: "ls" },
+    });
+    expect(a).toEqual({
+      type: "upsert_tool_call",
+      toolCallId: "tc-1",
+      toolName: "bash",
+      args: { cmd: "ls" },
+    });
+  });
+
+  it("maps tool_execution_end → complete_tool_call", () => {
+    const a = eventToAction({
+      type: "tool_execution_end",
+      toolCallId: "tc-1",
+      result: { stdout: "..." },
+      isError: false,
+    });
+    expect(a).toEqual({
+      type: "complete_tool_call",
+      toolCallId: "tc-1",
+      result: { stdout: "..." },
+      isError: false,
+    });
+  });
+
+  it("maps agent_end → finalize_streaming", () => {
+    expect(eventToAction({ type: "agent_end" })).toEqual({ type: "finalize_streaming" });
+  });
+
+  it("maps turn_end with errorMessage → add_system 'error: …'", () => {
+    const a = eventToAction({
+      type: "turn_end",
+      message: { errorMessage: "boom" },
+    });
+    expect(a).toEqual({ type: "add_system", text: "error: boom", level: "error" });
+  });
+
+  it("ignores turn_end without errorMessage", () => {
+    expect(eventToAction({ type: "turn_end", message: {} })).toBeNull();
+  });
+
+  it("returns null for unknown event types", () => {
+    expect(eventToAction({ type: "weird_event" })).toBeNull();
+  });
+});
