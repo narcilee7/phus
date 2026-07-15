@@ -1,5 +1,6 @@
 import { Envelope } from "@/types/channel/index.js";
 import { Turn } from "@/types/tape/turn.js";
+import type { SessionId, ToolCallId, TurnId } from "@/types/brand.js";
 
 /**
  * Discriminant for `TapeEntry`. String-literal union so that runtime
@@ -21,7 +22,7 @@ export type TapeTurnEntry = {
 
 export type TapeAnchorEntry = {
   kind: "anchor";
-  sessionId: string;
+  sessionId: SessionId;
   name: string;
   state: Record<string, unknown>;
   args: unknown;
@@ -30,8 +31,8 @@ export type TapeAnchorEntry = {
 
 export type TapeToolCallEntry = {
   kind: "tool_call";
-  sessionId: string;
-  toolCallId: string;
+  sessionId: SessionId;
+  toolCallId: ToolCallId;
   name: string;
   args: unknown;
   ts: number;
@@ -39,8 +40,8 @@ export type TapeToolCallEntry = {
 
 export type TapeToolResultEntry = {
   kind: "tool_result";
-  sessionId: string;
-  toolCallId: string;
+  sessionId: SessionId;
+  toolCallId: ToolCallId;
   result: unknown;
   isError: boolean;
   ts: number;
@@ -48,7 +49,7 @@ export type TapeToolResultEntry = {
 
 export type TapeErrorEntry = {
   kind: "error";
-  sessionId: string;
+  sessionId: SessionId;
   stage: string;
   error: string;
   ts: number;
@@ -57,10 +58,10 @@ export type TapeErrorEntry = {
 
 export type TapeCheckpointEntry = {
   kind: "checkpoint";
-  sessionId: string;
+  sessionId: SessionId;
   messages: unknown[];
   ts: number;
-  turnId?: string;
+  turnId?: TurnId;
 };
 
 export type TapeEntry =

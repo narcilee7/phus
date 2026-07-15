@@ -3,6 +3,7 @@
  */
 
 import { Envelope, Outbound } from "@/types/channel/index.js";
+import type { SessionId, TurnId } from "@/types/brand.js";
 
 /**
  * Phus-side view of a tool invocation recorded against a turn.
@@ -20,9 +21,9 @@ export interface TapeToolCall {
 
 /** A complete run recorded in Tape. */
 export interface Turn {
-  id: string;
+  id: TurnId;
   ts: number;
-  sessionId: string;
+  sessionId: SessionId;
   inbound: Envelope;
   prompt: string;
   modelOutput: string;

@@ -22,6 +22,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
+import { asSessionId } from "@/types/brand.js";
 
 interface ChatItem {
   id: string;
@@ -513,7 +514,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
 
       case "compact": {
         const { compactSession } = await import("@/core/compaction.js");
-        const r = await compactSession(agent._internal.tape, sessionId, {
+        const r = await compactSession(agent._internal.tape, asSessionId(sessionId), {
           keepRecent: parseInt(arg, 10) || 10,
         });
         setItems((prev) => [

@@ -15,6 +15,7 @@ import {
   type TapeLike,
   type SkillRegistryLike,
 } from "@/types/hooks/index.js";
+import { asSessionId } from "@/types/brand.js";
 
 export type { HookContext, HookMode, HookName, RegisterOptions };
 
@@ -126,11 +127,13 @@ export function makeCtx(
   partial: Partial<HookContext> & {
     tape?: Tape | TapeLike;
     skills?: SkillRegistry | SkillRegistryLike;
+    /** String is accepted at I/O boundaries and cast on the fly. */
+    sessionId?: string;
   },
 ): HookContext {
   return {
     envelope: partial.envelope,
-    sessionId: partial.sessionId ?? "",
+    sessionId: partial.sessionId ? asSessionId(partial.sessionId) : undefined,
     state: partial.state ?? {},
     tape: partial.tape,
     skills: partial.skills,

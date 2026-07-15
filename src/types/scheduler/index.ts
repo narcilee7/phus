@@ -3,9 +3,10 @@
  */
 
 import { HookName } from "@/types/hooks/index.js";
+import type { ScheduleName } from "@/types/brand.js";
 
 export interface Schedule {
-  name: string;
+  name: ScheduleName;
   /** Cron expression (5-field standard cron, e.g. every-5-minutes). */
   cron: string;
   /** Hook to fire when this schedule triggers. */

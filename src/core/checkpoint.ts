@@ -12,12 +12,14 @@
 
 import type { Tape } from "@/core/tape.js";
 import { logger } from "@/core/logger.js";
+import type { SessionId, TurnId } from "@/types/brand.js";
+import { asOptionalSessionId, asOptionalTurnId } from "@/types/brand.js";
 
 export interface CheckpointEntry {
   kind: "checkpoint";
-  sessionId: string;
+  sessionId: SessionId;
   /** Optional: the turn this checkpoint is part of. */
-  turnId?: string;
+  turnId?: TurnId;
   /** Pi's transcript — full AgentMessage[]. May be large. */
   messages: unknown[];
   ts: number;
@@ -29,9 +31,9 @@ let checkpointCounter = 0;
 
 export function saveCheckpoint(
   tape: Tape,
-  sessionId: string,
+  sessionId: SessionId,
   messages: unknown[],
-  turnId?: string,
+  turnId?: TurnId,
 ): void {
   const entry: CheckpointEntry = {
     kind: "checkpoint",
@@ -52,27 +54,43 @@ export function saveCheckpoint(
 }
 
 /** Load the most recent checkpoint for a session, or undefined. */
-export function loadLatestCheckpoint(tape: Tape, sessionId: string): CheckpointEntry | undefined {
+export function loadLatestCheckpoint(
+  tape: Tape,
+  sessionId: SessionId,
+): CheckpointEntry | undefined {
   let latest: CheckpointEntry | undefined;
   for (const entry of tape.replay(sessionId)) {
-    if (entry.kind === "checkpoint") latest = entry; // last in ts order = latest
+    if (entry.kind === "checkpoint") latest = entry as CheckpointEntry; // last in ts order = latest
   }
   return latest;
 }
 
 /** List all checkpoints for a session, newest first. */
-export function listCheckpoints(tape: Tape, sessionId: string): CheckpointEntry[] {
+export function listCheckpoints(
+  tape: Tape,
+  sessionId: SessionId,
+): CheckpointEntry[] {
   const all: CheckpointEntry[] = [];
   for (const entry of tape.replay(sessionId)) {
-    if (entry.kind === "checkpoint") all.push(entry);
+    if (entry.kind === "checkpoint") all.push(entry as CheckpointEntry);
   }
   return all.sort((a, b) => b.ts - a.ts);
 }
 
 /** Prune old checkpoints, keeping only the last N per session. Delegates to
  *  `Tape#pruneCheckpoints` to avoid opening a second SQLite connection. */
-export function pruneCheckpoints(tape: Tape, sessionId: string, keep: number = 5): number {
+export function pruneCheckpoints(
+  tape: Tape,
+  sessionId: SessionId,
+  keep: number = 5,
+): number {
   const deleted = tape.pruneCheckpoints(sessionId, keep);
   logger.debug("checkpoint.pruned", { sessionId, deleted, kept: keep });
   return deleted;
 }
+
+// Helpers for callers that receive IDs as raw strings (Commander, CLI,
+// plugin config). Centralized here so the rest of the codebase never
+// imports `as*` directly.
+export const castSessionId = asOptionalSessionId;
+export const castTurnId = asOptionalTurnId;

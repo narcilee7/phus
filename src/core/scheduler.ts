@@ -18,6 +18,7 @@ import { logger } from "@/core/logger.js";
 import { HookRegistry, makeCtx } from "@/core/hook.js";
 import { Schedule, SchedulerOptions } from "@/types/scheduler/index.js";
 import { HookContext } from "@/types/hooks/index.js";
+import { asSessionId } from "@/types/brand.js";
 
 export class Scheduler {
   private schedules = new Map<string, Schedule>();
@@ -145,7 +146,7 @@ export class Scheduler {
       firedAt,
     });
     const ctx: HookContext = makeCtx({
-      sessionId: `schedule:${s.name}`,
+      sessionId: asSessionId(`schedule:${s.name}`),
       state: {},
       // `tape` and `skills` are intentionally absent — scheduled hooks
       // run outside a turn; any hook that needs them must resolve them

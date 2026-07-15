@@ -2,6 +2,8 @@
  * channel message's definition
  */
 
+import type { SessionId } from "@/types/brand.js";
+
 export type OutboundType = "text" | "image" | "reaction";
 
 export type EnvelopType = "text" | "image" | "reaction" | "command";
@@ -30,7 +32,8 @@ export interface Envelope {
   replyTo?: string;
   /** Optional raw image payload (base64) for image type. */
   image?: { data: string; mimeType: string };
-  /** Session id (set by resolveSession hook, used downstream). */
-  sessionId?: string;
+  /** Session id (set by resolve_session hook, used downstream).
+   *  Optional because envelopes arrive before session resolution. */
+  sessionId?: SessionId;
   ts: number;
 }

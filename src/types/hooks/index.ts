@@ -11,6 +11,7 @@
 import type { Envelope } from "@/types/channel/index.js";
 import type { TapeEntry, TapeAnchorRef } from "@/types/tape/index.js";
 import type { Skill } from "@/types/skill.js";
+import type { SessionId } from "@/types/brand.js";
 
 // Re-export so consumers can `import { TapeAnchorRef } from ".../types/hooks"`
 // without having to know it lives in types/tape.
@@ -66,8 +67,9 @@ export interface SkillRegistryLike {
 
 /** Context passed to every hook implementation. */
 export interface HookContext {
-  /** May be empty for hooks fired outside a turn (e.g. by the scheduler). */
-  sessionId: string;
+  /** Optional because hooks fired outside a turn (e.g. by the
+   *  scheduler) may not have a session in scope. */
+  sessionId?: SessionId;
   state: Record<string, unknown>;
   /** Optional: not all hook chains have a tape in scope (e.g. scheduler fires). */
   tape?: TapeLike;

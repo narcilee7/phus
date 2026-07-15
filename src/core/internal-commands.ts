@@ -10,6 +10,7 @@
 // Commands are registered globally. Plugins can add via ctx.registerInternalCommand.
 
 import { logger } from "@/core/logger.js";
+import { asScheduleName } from "@/types/brand.js";
 
 export interface InternalCommandContext {
   args: Record<string, string>;
@@ -384,7 +385,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
       const sched = getScheduler();
       if (!sched) return "(scheduler not initialized — only runs in gateway mode)";
       try {
-        sched.register({ name, cron, hookName: hookName as any, payload: args.payload ? JSON.parse(String(args.payload)) : undefined });
+        sched.register({ name: asScheduleName(name), cron, hookName: hookName as any, payload: args.payload ? JSON.parse(String(args.payload)) : undefined });
         return `✓ schedule "${name}" added (${cron})`;
       } catch (err: any) {
         return `failed: ${err.message}`;

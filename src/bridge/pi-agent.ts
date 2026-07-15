@@ -22,6 +22,8 @@ import { getModel, type Model } from "@mariozechner/pi-ai";
 import type { Envelope, Outbound } from "@/types/channel/index.js";
 import type { Turn } from "@/types/tape/index.js";
 import type { MetaTool } from "@/types/tool.js";
+import type { SessionId } from "@/types/brand.js";
+import { asSessionId, asToolCallId, asTurnId } from "@/types/brand.js";
 import { HookRegistry, makeCtx, type HookContext } from "@/core/hook.js";
 import { Tape } from "@/core/tape.js";
 import { SkillRegistry } from "@/core/skills/skill.js";
@@ -76,7 +78,7 @@ export class PhusAgent {
   private tape: Tape;
   private skills: SkillRegistry;
   private policy: PolicyRule[];
-  private currentSessionId: string | undefined;
+  private currentSessionId: SessionId | undefined;
   private extraChannels: ChannelAdapter[] = [];
   private autoCompactCfg: AutoCompactConfig = DEFAULT_AUTO_COMPACT;
   private autoCompactEnabled = true;
@@ -177,7 +179,7 @@ export class PhusAgent {
       void this.hooks.execute(
         "after_llm_call",
         makeCtx({
-          sessionId: this.currentSessionId ?? "",
+          sessionId: this.currentSessionId,
           state: {},
           tape: this.tape,
           skills: this.skills,
@@ -206,17 +208,18 @@ export class PhusAgent {
   /** Run one inbound envelope through the Bub hook chain. */
   async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
     const startedAt = Date.now();
-    let sessionId = "";  // hoisted so catch can read it
+    let sessionId: SessionId | undefined;  // hoisted so catch can read it
 
     try {
 
       // 1. resolve_session (first_result)
-      const baseCtx = makeCtx({ envelope, sessionId: "", state: {}, tape: this.tape, skills: this.skills });
-      sessionId = (await this.hooks.execute<string>(
+      const baseCtx = makeCtx({ envelope, state: {}, tape: this.tape, skills: this.skills });
+      const resolvedRaw = await this.hooks.execute<string>(
         "resolve_session",
         baseCtx,
         "first_result",
-      )) ?? `cli:${envelope.from}`;
+      );
+      sessionId = asSessionId(resolvedRaw ?? `cli:${envelope.from}`);
 
       this.currentSessionId = sessionId;
       this.piAgent.sessionId = sessionId;
@@ -347,9 +350,9 @@ export class PhusAgent {
 
       // 9. Record turn to Tape
       const turn: Turn = {
-        id: crypto.randomUUID(),
+        id: asTurnId(crypto.randomUUID()),
         ts: startedAt,
-        sessionId,
+        sessionId: sessionId as SessionId,
         inbound: envelope,
         prompt: envelope.content,
         modelOutput,
@@ -373,7 +376,7 @@ export class PhusAgent {
         "on_error",
         makeCtx({
           envelope,
-          sessionId: sessionId ?? "",
+          sessionId,
           state: {},
           tape: this.tape,
           skills: this.skills,
@@ -411,7 +414,7 @@ export class PhusAgent {
     let systemPrompt: string;
     const spResult = await this.hooks.execute<string>(
       "system_prompt",
-      makeCtx({ sessionId: this.currentSessionId ?? "", state: {}, tape: this.tape, skills: this.skills }),
+      makeCtx({ sessionId: this.currentSessionId, state: {}, tape: this.tape, skills: this.skills }),
       "first_result",
     );
     systemPrompt = spResult ?? SYSTEM_PROMPT_HEADER;
@@ -419,7 +422,7 @@ export class PhusAgent {
     // 2. build_tape_context (first_result) — dynamic context block (skills + tape)
     const ctxResult = await this.hooks.execute<string>(
       "build_tape_context",
-      makeCtx({ sessionId: this.currentSessionId ?? "", state: {}, tape: this.tape, skills: this.skills }),
+      makeCtx({ sessionId: this.currentSessionId, state: {}, tape: this.tape, skills: this.skills }),
       "first_result",
     );
     let dynamicContext: string;
@@ -496,7 +499,7 @@ export class PhusAgent {
     this.tape.append({
       kind: "tool_call",
       sessionId: this.currentSessionId,
-      toolCallId: ctx.toolCall.id,
+      toolCallId: asToolCallId(ctx.toolCall.id),
       name: ctx.toolCall.name,
       args: ctx.args,
       ts: Date.now(),
@@ -515,7 +518,7 @@ export class PhusAgent {
     this.tape.append({
       kind: "tool_result",
       sessionId: this.currentSessionId,
-      toolCallId: ctx.toolCall.id,
+      toolCallId: asToolCallId(ctx.toolCall.id),
       result: ctx.result,
       isError: ctx.isError,
       ts: Date.now(),
@@ -526,7 +529,7 @@ export class PhusAgent {
         this.tape,
         this.currentSessionId,
         this.piAgent.state.messages,
-        ctx.toolCall.id,
+        asTurnId(ctx.toolCall.id),
       );
     } catch (err: any) {
       logger.warn("checkpoint.save_failed", { error: err.message });

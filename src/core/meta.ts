@@ -6,6 +6,7 @@ import { Type } from "@mariozechner/pi-ai";
 import type { SkillRegistry } from "@/core/skills/skill.js";
 import type { Tape } from "@/core/tape.js";
 import { MetaTool } from "@/types/tool.js";
+import { asSessionId } from "@/types/brand.js";
 
 export function createMetaTools(skills: SkillRegistry, tape: Tape): MetaTool[] {
   return [
@@ -109,7 +110,7 @@ export function createMetaTools(skills: SkillRegistry, tape: Tape): MetaTool[] {
       execute: async (args) => {
         // Lazy import to avoid circular deps at module load.
         const { compactSession } = await import("@/core/compaction.js");
-        const sessionId = String(args.sessionId ?? "");
+        const sessionId = asSessionId(String(args.sessionId ?? "default"));
         const keepRecent = args.keepRecent ? Number(args.keepRecent) : 10;
         // Use deterministic summarization when invoked from inside the agent
         // (recursive LLM call would be costly and confusing).

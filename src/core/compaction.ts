@@ -10,6 +10,8 @@ import type { Tape } from "@/core/tape.js";
 import type { TapeEntry, Turn } from "@/types/tape/index.js";
 import type { MetaTool } from "@/types/tool.js";
 import { logger } from "@/core/logger.js";
+import { asSessionId } from "@/types/brand.js";
+import type { SessionId } from "@/types/brand.js";
 
 export interface CompactionResult {
   sessionId: string;
@@ -26,7 +28,7 @@ export interface CompactionResult {
  */
 export async function compactSession(
   tape: Tape,
-  sessionId: string,
+  sessionId: SessionId,
   options: {
     /** Keep this many most-recent turns intact. Default 10. */
     keepRecent?: number;
@@ -68,7 +70,7 @@ export async function compactSession(
   const anchorName = `compact-${Date.now()}`;
   tape.append({
     kind: "anchor",
-    sessionId,
+    sessionId: asSessionId(sessionId),
     name: anchorName,
     state: {
       kind: "compaction",
@@ -125,7 +127,7 @@ export function createCompactTool(
       keepRecent: Type.Optional(Type.Number({ description: "How many recent turns to keep. Default 10." })),
     }),
     execute: async (args) => {
-      const sessionId = args.sessionId ? String(args.sessionId) : "";
+      const sessionId = asSessionId(args.sessionId ? String(args.sessionId) : "default");
       const keepRecent = args.keepRecent ? Number(args.keepRecent) : 10;
       const summarize = await getSummarizer();
       const result = await compactSession(tape, sessionId, { keepRecent, summarizeWith: summarize });

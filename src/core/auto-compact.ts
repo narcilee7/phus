@@ -6,6 +6,8 @@
 import type { Tape } from "@/core/tape.js";
 import { compactSession } from "@/core/compaction.js";
 import { logger } from "@/core/logger.js";
+import type { SessionId } from "@/types/brand.js";
+import { asSessionId } from "@/types/brand.js";
 
 export interface AutoCompactConfig {
   /** Max number of messages before triggering. Default: 100. */
@@ -72,7 +74,7 @@ export function shouldCompact(
  */
 export async function maybeCompact(
   tape: Tape,
-  sessionId: string,
+  sessionId: SessionId,
   messages: unknown[],
   contextWindow: number | undefined,
   cfg: AutoCompactConfig = DEFAULT_AUTO_COMPACT,

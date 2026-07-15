@@ -23,6 +23,7 @@ import { ExitCode, CliExit } from "@/core/exit-codes.js";
 import { makeCtx, type HookContext } from "@/core/hook.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { drainPendingCliCommands } from "@/core/plugin/cli-queue.js";
+import { asSessionId } from "@/types/brand.js";
 
 const program = new Command();
 
@@ -240,7 +241,7 @@ program
     const { compactSession } = await import("@/core/compaction.js");
     const { Tape } = await import("@/core/tape.js");
     const tape = new Tape(process.env.PHUS_TAPE_DB ?? "./tape.sqlite");
-    const result = await compactSession(tape, sessionId, {
+    const result = await compactSession(tape, asSessionId(sessionId), {
       keepRecent: parseInt(opts.keepRecent, 10),
     });
     tape.close();
@@ -335,7 +336,8 @@ async function registerPluginCliCommands(program: Command): Promise<void> {
   //    actually start a turn — the agent is created lazily.
   const tempAgent = new PhusAgent();
   const ctx: HookContext = makeCtx({
-    sessionId: "",
+    // No session — `register_cli_commands` runs at module load,
+    // not during a turn. The hook may ignore sessionId if it doesn't care.
     state: {},
     tape: tempAgent._internal.tape,
     skills: tempAgent._internal.skills,
@@ -381,7 +383,8 @@ async function collectChannels(
 
   // Plugins' provide_channels hook (broadcast) — appended after CLI flags
   const ctx: HookContext = makeCtx({
-    sessionId: "",
+    // No session — the `provide_channels` hook runs at gateway
+    // startup before any user message arrives.
     state: {},
     tape: agent._internal.tape,
     skills: agent._internal.skills,

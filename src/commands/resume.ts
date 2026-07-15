@@ -7,13 +7,15 @@ import { CLIChannel } from "@/channels/cli.js";
 import { ExitCode, CliExit } from "@/core/exit-codes.js";
 import { makeTextEnvelope } from "@/channels/base.js";
 import { logger } from "@/core/logger.js";
+import { asSessionId } from "@/types/brand.js";
 
 export async function resumeSession(sessionId: string, prompt: string): Promise<void> {
+  const branded = asSessionId(sessionId);
   const agent = new PhusAgent();
-  const cp = loadLatestCheckpoint(agent._internal.tape, sessionId);
+  const cp = loadLatestCheckpoint(agent._internal.tape, branded);
   if (!cp) {
     logger.error(`no checkpoint found for session "${sessionId}"`);
-    const all = listCheckpoints(agent._internal.tape, sessionId);
+    const all = listCheckpoints(agent._internal.tape, branded);
     if (all.length === 0) {
       logger.error(`(tape has no checkpoints for this session)`);
     }
