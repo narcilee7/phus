@@ -14,6 +14,8 @@ import { traceSession } from "./commands/trace.js";
 import { logger } from "./core/logger.js";
 import { tailLogs } from "./commands/logs.js";
 import { healthCheck } from "./commands/health.js";
+import { resumeSession } from "./commands/resume.js";
+import { ExitCode, CliExit } from "./core/exit-codes.js";
 import { makeCtx, type HookContext } from "./core/hook.js";
 import type { ChannelAdapter } from "./channels/base.js";
 
@@ -240,6 +242,21 @@ program
 // A.2: register_cli_commands hook — let plugins add `phus xxx` subcommands
 // Runs once, after built-in commands are registered but before parseAsync.
 await registerPluginCliCommands(program);
+
+program
+  .command("resume <sessionId> [prompt]")
+  .description("Resume a session from its latest checkpoint (B.2.3)")
+  .action(async (sessionId: string, prompt?: string) => {
+    try {
+      await resumeSession(sessionId, prompt ?? "");
+    } catch (err) {
+      if (err instanceof CliExit) {
+        console.error(`[phus] ${err.message}`);
+        process.exit(err.code);
+      }
+      throw err;
+    }
+  });
 
 program.parseAsync(process.argv).catch((err) => {
   console.error("[phus] fatal:", err);

@@ -75,7 +75,8 @@ export type TapeEntry =
   | { kind: "anchor"; sessionId: string; name: string; state: State; ts: number }
   | { kind: "tool_call"; sessionId: string; toolCallId: string; name: string; args: unknown; ts: number }
   | { kind: "tool_result"; sessionId: string; toolCallId: string; result: unknown; isError: boolean; ts: number }
-  | { kind: "error"; sessionId: string; stage: string; envelope?: Envelope; error: string; ts: number };
+  | { kind: "error"; sessionId: string; stage: string; envelope?: Envelope; error: string; ts: number }
+  | { kind: "checkpoint"; sessionId: string; turnId?: string; messages: unknown[]; ts: number };
 
 /** Meta Tool definition (Phus-internal tools that let the AI modify itself). */
 export interface MetaTool {

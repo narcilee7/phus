@@ -8,6 +8,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { withRetry, DEFAULT_RETRY } from "../core/retry.js";
+import { logger } from "../core/logger.js";
 
 const execFileP = promisify(execFile);
 
