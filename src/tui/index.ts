@@ -5,7 +5,7 @@ import React from "react";
 import { render } from "ink";
 import { App } from "@/tui/App.js";
 import { PhusAgent } from "@/bridge/pi-agent.js";
-import { logger } from "@/core/logger.js";
+import { logger } from "@/core/runtime/logger.js";
 
 export async function startTui(): Promise<void> {
   const handle = await PhusAgent.create();

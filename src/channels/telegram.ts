@@ -4,7 +4,7 @@
 
 import type { ChannelAdapter } from "@/channels/base.js";
 import type { Outbound } from "@/types/channel/index.js";
-import { logger } from "@/core/logger.js";
+import { logger } from "@/core/runtime/logger.js";
 
 export class TelegramChannel implements ChannelAdapter {
   readonly name = "telegram";

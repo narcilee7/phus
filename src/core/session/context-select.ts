@@ -6,7 +6,7 @@
 //
 // Falls back to last-N when query is empty or no turns match.
 
-import type { Tape } from "@/core/tape.js";
+import type { Tape } from "@/core/session/tape.js";
 import type { TapeEntry, Turn } from "@/types/tape/index.js";
 
 export interface SelectOptions {

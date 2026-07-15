@@ -3,9 +3,9 @@
 //
 // Wired into `before_llm_call` hook so it fires before every LLM call.
 
-import type { Tape } from "@/core/tape.js";
-import { compactSession } from "@/core/compaction.js";
-import { logger } from "@/core/logger.js";
+import type { Tape } from "@/core/session/tape.js";
+import { compactSession } from "@/core/session/compaction.js";
+import { logger } from "@/core/runtime/logger.js";
 import type { SessionId } from "@/types/brand.js";
 import { asSessionId } from "@/types/brand.js";
 

@@ -2,7 +2,7 @@
 // Periodic health checks. Lifecycle (start/stop) lives here; the
 // per-endpoint ping is a pure `pingHealth()` exported for tests.
 
-import { logger } from "@/core/logger.js";
+import { logger } from "@/core/runtime/logger.js";
 import type { EndpointState, MeshPolicy } from "./types.js";
 
 /** Perform one HTTP HEAD against `url` with a hard timeout.

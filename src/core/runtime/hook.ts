@@ -3,9 +3,9 @@
 //   - chain:       pipe ctx through each implementation in priority order
 //   - broadcast:   invoke every implementation in parallel, return all results
 //
-import type { Tape } from "@/core/tape.js";
-import type { SkillRegistry } from "@/core/skills/skill.js";
-import { logger } from "@/core/logger.js";
+import type { Tape } from "@/core/session/tape.js";
+import type { SkillRegistry } from "@/core/runtime/skills/skill.js";
+import { logger } from "@/core/runtime/logger.js";
 import {
   type HookContext,
   type HookImpl,

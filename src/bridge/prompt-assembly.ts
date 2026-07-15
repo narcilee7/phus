@@ -5,8 +5,8 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { SkillRegistryLike, TapeLike } from "@/types/hooks/index.js";
 import type { SessionId } from "@/types/brand.js";
-import { makeCtx } from "@/core/hook.js";
-import type { HookRegistry } from "@/core/hook.js";
+import { makeCtx } from "@/core/runtime/hook.js";
+import type { HookRegistry } from "@/core/runtime/hook.js";
 
 export const SYSTEM_PROMPT_HEADER = `You are Phus (⛰️ 西西弗斯), a self-evolving agent.
 
@@ -72,12 +72,12 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
         : Array.isArray(query)
           ? query.filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ")
           : "";
-      const { selectRelevantTurns } = await import("@/core/context-select.js");
+      const { selectRelevantTurns } = await import("@/core/session/context-select.js");
       // `selectRelevantTurns` requires the concrete `Tape` class.
       // `TapeLike` already declares `.replay()` so the cast is sound
       // — the import keeps the interface narrow in the type layer.
       const relevant = selectRelevantTurns(
-        deps.tape as unknown as import("@/core/tape.js").Tape,
+        deps.tape as unknown as import("@/core/session/tape.js").Tape,
         sid,
         queryText,
       );

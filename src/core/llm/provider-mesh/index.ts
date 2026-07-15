@@ -5,7 +5,7 @@
 // commands builtins) do not need to change.
 
 import { EventEmitter } from "node:events";
-import { logger } from "@/core/logger.js";
+import { logger } from "@/core/runtime/logger.js";
 import type { CircuitChangeEvent } from "./circuit.js";
 import { isAvailable, recordFailure, recordSuccess } from "./circuit.js";
 import { createHealthTimer, type HealthTimer } from "./health.js";

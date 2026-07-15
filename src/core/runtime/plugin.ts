@@ -12,12 +12,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createJiti } from "jiti";
 import * as yaml from "yaml";
-import { logger } from "@/core/logger.js";
-import type { HookRegistry } from "@/core/hook.js";
+import { logger } from "@/core/runtime/logger.js";
+import type { HookRegistry } from "@/core/runtime/hook.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { LoadedPlugin, Plugin, PluginContext, PluginLoaderOptions } from "@/types/plugins/index.js";
 import { Skill } from "@/types/skill.js";
-import { enqueuePendingCliCommand } from "@/core/plugin/cli-queue.js";
+import { enqueuePendingCliCommand } from "@/core/runtime/plugin-cli-queue.js";
 
 export function loadPlugins(
   hooks: HookRegistry,
@@ -57,7 +57,7 @@ export function loadPlugins(
         registerChannel: (c) => channels.push(c),
         registerInternalCommand: (cmd) => {
           // Lazy import to avoid circular dep
-          import("@/core/internal-commands/index.js").then((m) => m.register(cmd));
+          import("@/core/runtime/internal-commands/index.js").then((m) => m.register(cmd));
         },
         registerCliCommand: (fn) => {
           // Lazy: collect into a queue; phus.ts drains it at startup

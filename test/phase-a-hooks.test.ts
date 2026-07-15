@@ -5,9 +5,9 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { HookRegistry, makeCtx } from "../src/core/hook.js";
-import { Tape } from "../src/core/tape.js";
-import { SkillRegistry } from "../src/core/skills/skill.js";
+import { HookRegistry, makeCtx } from "../src/core/runtime/hook.js";
+import { Tape } from "../src/core/session/tape.js";
+import { SkillRegistry } from "../src/core/runtime/skills/skill.js";
 import type { ChannelAdapter } from "../src/channels/base.js";
 
 describe("Phase A.1 provide_channels hook", () => {

@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "../src/core/tape.js";
+import { Tape } from "../src/core/session/tape.js";
 
 describe("Tape (SQLite)", () => {
   let dir: string;

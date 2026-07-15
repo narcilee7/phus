@@ -5,7 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { logger } from "@/core/logger.js";
+import { logger } from "@/core/runtime/logger.js";
 
 type StartupMode = "custom" | "fallback" | "default";
 

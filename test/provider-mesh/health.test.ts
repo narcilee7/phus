@@ -4,8 +4,8 @@ import {
   pingHealth,
   createHealthTimer,
   runHealthChecks,
-} from "../../src/core/provider-mesh/health.js";
-import type { EndpointState, MeshPolicy } from "../../src/core/provider-mesh/types.js";
+} from "../../src/core/llm/provider-mesh/health.js";
+import type { EndpointState, MeshPolicy } from "../../src/core/llm/provider-mesh/types.js";
 
 vi.mock("@/core/logger.js", () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },

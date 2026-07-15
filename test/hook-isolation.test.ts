@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { HookRegistry, makeCtx } from "../src/core/hook.js";
-import { Tape } from "../src/core/tape.js";
-import { SkillRegistry } from "../src/core/skills/skill.js";
+import { HookRegistry, makeCtx } from "../src/core/runtime/hook.js";
+import { Tape } from "../src/core/session/tape.js";
+import { SkillRegistry } from "../src/core/runtime/skills/skill.js";
 
 function tmpCtx() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-iso-"));

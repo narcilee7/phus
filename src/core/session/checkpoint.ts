@@ -10,8 +10,8 @@
 //   - `phus resume <sessionId>` — load latest checkpoint, restore messages, continue
 //   - `phus run --resume <turnId>` — explicit resume in one-shot mode
 
-import type { Tape } from "@/core/tape.js";
-import { logger } from "@/core/logger.js";
+import type { Tape } from "@/core/session/tape.js";
+import { logger } from "@/core/runtime/logger.js";
 import type { SessionId, TurnId } from "@/types/brand.js";
 import { asOptionalSessionId, asOptionalTurnId } from "@/types/brand.js";
 

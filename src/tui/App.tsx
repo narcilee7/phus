@@ -114,7 +114,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     const trimmed = cmd.trim();
     // Bub-style ,foo commands (also accepted in TUI)
     if (trimmed.startsWith(",")) {
-      const { execute, initInternalCommands } = await import("@/core/internal-commands/index.js");
+      const { execute, initInternalCommands } = await import("@/core/runtime/internal-commands/index.js");
       initInternalCommands({
         agent,
         home: () => process.env.PHUS_HOME ?? "./.phus",
@@ -257,7 +257,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
 
       case "profiles": {
         const { formatProfiles, resolveProfile, modelFromProfile, loadProviderConfig } =
-          await import("@/core/profile.js");
+          await import("@/core/llm/profile.js");
         const activeName = process.env.PHUS_PROFILE ?? "(default)";
         if (!arg) {
           setItems((prev) => [

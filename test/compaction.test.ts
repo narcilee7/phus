@@ -3,8 +3,8 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "../src/core/tape.js";
-import { compactSession } from "../src/core/compaction.js";
+import { Tape } from "../src/core/session/tape.js";
+import { compactSession } from "../src/core/session/compaction.js";
 
 function makeTurn(i: number, sessionId = "test") {
   return {

@@ -12,18 +12,18 @@ import yaml from "yaml";
 import path from "node:path";
 import { CLIChannel, runOnce } from "@/channels/cli.js";
 import { PhusAgent } from "@/bridge/pi-agent.js";
-import { bootstrap } from "@/core/startup.js";
+import { bootstrap } from "@/core/runtime/startup.js";
 import { traceSession } from "@/commands/trace.js";
-import { logger } from "@/core/logger.js";
+import { logger } from "@/core/runtime/logger.js";
 import { tailLogs } from "@/commands/logs.js";
 import { healthCheck } from "@/commands/health.js";
 import { resumeSession } from "@/commands/resume.js";
 import { collectTasks, renderTasks } from "@/commands/tasks.js";
-import { ExitCode, CliExit } from "@/core/exit-codes.js";
-import { makeCtx, type HookContext } from "@/core/hook.js";
+import { ExitCode, CliExit } from "@/core/runtime/exit-codes.js";
+import { makeCtx, type HookContext } from "@/core/runtime/hook.js";
 import type { ChannelAdapter } from "@/channels/base.js";
-import { drainPendingCliCommands } from "@/core/plugin/cli-queue.js";
-import { initInternalCommands } from "@/core/internal-commands/index.js";
+import { drainPendingCliCommands } from "@/core/runtime/plugin-cli-queue.js";
+import { initInternalCommands } from "@/core/runtime/internal-commands/index.js";
 import { asSessionId } from "@/types/brand.js";
 
 const program = new Command();
@@ -85,7 +85,7 @@ program
     }
 
     // B.3: start the scheduler (loads schedules from phus.config.yaml)
-    const { Scheduler } = await import("@/core/scheduler.js");
+    const { Scheduler } = await import("@/core/runtime/scheduler.js");
     const scheduler = new Scheduler(handle.internals.hooks);
     // Wire the scheduler + mesh into the internal-commands registry so
     // ,schedule.* and ,mesh reach the live instances without going
@@ -192,7 +192,7 @@ program
   .command("profiles")
   .description("List configured provider profiles")
   .action(async () => {
-    const { formatProfiles } = await import("@/core/profile.js");
+    const { formatProfiles } = await import("@/core/llm/profile.js");
     console.log(formatProfiles());
     console.log(`\nactive: ${process.env.PHUS_PROFILE ?? "(default)"}`);
     console.log(`set:    PHUS_PROFILE=<name>  or  phus run --profile <name> "..."`);
@@ -202,8 +202,8 @@ program
   .command("plugins-list")
   .description("List discovered plugins from $PHUS_HOME/plugins and phus.config.yaml")
   .action(async () => {
-    const { loadPlugins } = await import("@/core/plugin.js");
-    const { HookRegistry } = await import("@/core/hook.js");
+    const { loadPlugins } = await import("@/core/runtime/plugin.js");
+    const { HookRegistry } = await import("@/core/runtime/hook.js");
     const hooks = new HookRegistry();
     const channels: import("@/channels/base.js").ChannelAdapter[] = [];
     const loaded = loadPlugins(hooks, channels);
@@ -260,8 +260,8 @@ program
   .description("Compact a session's tape: summarize old turns into an anchor")
   .option("-k, --keep-recent <n>", "How many recent turns to keep", "10")
   .action(async (sessionId: string, opts: { keepRecent: string }) => {
-    const { compactSession } = await import("@/core/compaction.js");
-    const { Tape } = await import("@/core/tape.js");
+    const { compactSession } = await import("@/core/session/compaction.js");
+    const { Tape } = await import("@/core/session/tape.js");
     const tape = new Tape(process.env.PHUS_TAPE_DB ?? "./tape.sqlite");
     const result = await compactSession(tape, asSessionId(sessionId), {
       keepRecent: parseInt(opts.keepRecent, 10),
@@ -343,7 +343,7 @@ async function registerPluginCliCommands(program: Command): Promise<void> {
   // 1. Drain queue (set by PluginContext.registerCliCommand during plugin load).
   //    `drainPendingCliCommands` empties the queue itself; failures bubble,
   //    so we catch and log here with the plugin context.
-  const beforeCount = (await import("@/core/plugin/cli-queue.js"))._pendingCliCommandCount();
+  const beforeCount = (await import("@/core/runtime/plugin-cli-queue.js"))._pendingCliCommandCount();
   try {
     drainPendingCliCommands(program);
   } catch (err) {

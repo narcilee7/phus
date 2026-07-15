@@ -14,8 +14,8 @@
 //     write to tape, etc.
 
 import { CronExpressionParser } from "cron-parser";
-import { logger } from "@/core/logger.js";
-import { HookRegistry, makeCtx } from "@/core/hook.js";
+import { logger } from "@/core/runtime/logger.js";
+import { HookRegistry, makeCtx } from "@/core/runtime/hook.js";
 import { Schedule, SchedulerOptions } from "@/types/scheduler/index.js";
 import { HookContext } from "@/types/hooks/index.js";
 import { asSessionId } from "@/types/brand.js";
@@ -178,4 +178,21 @@ export function nextFires(cron: string, count: number, start: Date = new Date())
     out.push(interval.next().toDate());
   }
   return out;
+}
+
+// ─── Module-level singleton ─────────────────────────────────────
+//
+// Kept as a fallback accessor for one-shot diagnostic commands that
+// run outside the gateway bootstrap (e.g. `phus tasks`). Phase 6:
+// the gateway also pushes the scheduler into InternalCommandServices
+// so ,schedule.* reaches the live instance through DI.
+
+let _defaultScheduler: Scheduler | undefined;
+
+export function setScheduler(s: Scheduler): void {
+  _defaultScheduler = s;
+}
+
+export function getScheduler(): Scheduler | undefined {
+  return _defaultScheduler;
 }

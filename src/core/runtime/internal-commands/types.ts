@@ -46,8 +46,8 @@ export interface ParsedCommand {
 export interface InternalCommandServices {
   agent: PhusAgentFacade;
   home: () => string;
-  mesh?: import("@/core/provider-mesh/contract.js").MeshLike;
-  scheduler?: import("@/core/scheduler.js").Scheduler | undefined;
+  mesh?: import("@/core/llm/provider-mesh/contract.js").MeshLike;
+  scheduler?: import("@/core/runtime/scheduler.js").Scheduler | undefined;
   extraChannels?: () => ChannelAdapter[];
 }
 

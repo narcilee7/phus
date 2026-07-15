@@ -6,7 +6,7 @@ import {
   drainPendingCliCommands,
   _resetPendingCliCommands,
   _pendingCliCommandCount,
-} from "../src/core/plugin/cli-queue.js";
+} from "../src/core/runtime/plugin-cli-queue.js";
 
 describe("plugin-cli-queue", () => {
   beforeEach(() => {

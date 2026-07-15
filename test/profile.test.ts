@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { loadProviderConfig, resolveProfile, modelFromProfile, formatProfiles } from "../src/core/profile.js";
+import { loadProviderConfig, resolveProfile, modelFromProfile, formatProfiles } from "../src/core/llm/profile.js";
 
 describe("profile loader", () => {
   let dir: string;

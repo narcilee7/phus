@@ -6,9 +6,9 @@ import {
   routeWeighted,
   routeCostFirst,
   routeLatencyFirst,
-} from "../../src/core/provider-mesh/routing.js";
-import { avg } from "../../src/core/provider-mesh/stats.js";
-import type { EndpointState } from "../../src/core/provider-mesh/types.js";
+} from "../../src/core/llm/provider-mesh/routing.js";
+import { avg } from "../../src/core/llm/provider-mesh/stats.js";
+import type { EndpointState } from "../../src/core/llm/provider-mesh/types.js";
 
 function makeState(overrides: Partial<EndpointState>): EndpointState {
   return {

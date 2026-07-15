@@ -1,7 +1,7 @@
 // test/provider-mesh/circuit.test.ts
 import { describe, expect, it, vi } from "vitest";
-import { isAvailable, recordSuccess, recordFailure, type CircuitChangeEvent } from "../../src/core/provider-mesh/circuit.js";
-import type { EndpointState, MeshPolicy } from "../../src/core/provider-mesh/types.js";
+import { isAvailable, recordSuccess, recordFailure, type CircuitChangeEvent } from "../../src/core/llm/provider-mesh/circuit.js";
+import type { EndpointState, MeshPolicy } from "../../src/core/llm/provider-mesh/types.js";
 
 function makeState(over: Partial<EndpointState> = {}): EndpointState {
   return {

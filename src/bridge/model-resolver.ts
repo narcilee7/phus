@@ -2,7 +2,7 @@
 // Resolve the Pi Model and API key for a provider profile.
 
 import { getModel, type Model } from "@mariozechner/pi-ai";
-import { resolveProfile, modelFromProfile, apiKeyForProfile, type ProviderProfile } from "@/core/profile.js";
+import { resolveProfile, modelFromProfile, apiKeyForProfile, type ProviderProfile } from "@/core/llm/profile.js";
 
 /** Build a Pi-compatible `Model` from the active profile, also setting
  *  any `PHUS_<PROVIDER>_API_KEY` env var so Pi's transport picks it up. */

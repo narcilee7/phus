@@ -3,21 +3,21 @@
 // Used by CLI / TUI / commands that want a turnkey agent without
 // manually wiring every dependency.
 
-import { HookRegistry } from "@/core/hook.js";
-import { Tape } from "@/core/tape.js";
-import { SkillRegistry } from "@/core/skills/skill.js";
-import { defaultPolicy } from "@/core/policy.js";
-import { resolveProfile, type ProviderProfile } from "@/core/profile.js";
+import { HookRegistry } from "@/core/runtime/hook.js";
+import { Tape } from "@/core/session/tape.js";
+import { SkillRegistry } from "@/core/runtime/skills/skill.js";
+import { defaultPolicy } from "@/core/llm/policy.js";
+import { resolveProfile, type ProviderProfile } from "@/core/llm/profile.js";
 import {
   ProviderMesh,
   type EndpointSpec,
   type MeshPolicy,
-} from "@/core/provider-mesh/index.js";
-import type { MeshLike } from "@/core/provider-mesh/contract.js";
-import { PiSteeringInbox } from "@/core/steering.js";
+} from "@/core/llm/provider-mesh/index.js";
+import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
+import { PiSteeringInbox } from "@/core/runtime/steering.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
-import { buildMesh } from "@/core/provider-mesh/index.js";
-import { logger } from "@/core/logger.js";
+import { buildMesh } from "@/core/llm/provider-mesh/index.js";
+import { logger } from "@/core/runtime/logger.js";
 import { resolveModel } from "@/bridge/model-resolver.js";
 import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
 

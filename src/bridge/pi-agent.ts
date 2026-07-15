@@ -21,25 +21,25 @@ import type { Turn } from "@/types/tape/index.js";
 import type { MetaTool } from "@/types/tool.js";
 import type { SessionId } from "@/types/brand.js";
 import { asSessionId, asToolCallId, asTurnId } from "@/types/brand.js";
-import { HookRegistry, makeCtx, type HookContext } from "@/core/hook.js";
-import { Tape } from "@/core/tape.js";
-import { SkillRegistry } from "@/core/skills/skill.js";
-import { createMetaTools } from "@/core/meta.js";
+import { HookRegistry, makeCtx, type HookContext } from "@/core/runtime/hook.js";
+import { Tape } from "@/core/session/tape.js";
+import { SkillRegistry } from "@/core/runtime/skills/skill.js";
+import { createMetaTools } from "@/core/llm/meta/index.js";
 import { createExternalTools } from "@/bridge/tools.js";
-import { defaultPolicy, evaluate, type PolicyRule } from "@/core/policy.js";
+import { defaultPolicy, evaluate, type PolicyRule } from "@/core/llm/policy.js";
 import {
   resolveProfile,
   modelFromProfile,
   apiKeyForProfile,
   type ProviderProfile,
-} from "@/core/profile.js";
+} from "@/core/llm/profile.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
-import { PiSteeringInbox } from "@/core/steering.js";
-import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/auto-compact.js";
-import { saveCheckpoint, loadLatestCheckpoint } from "@/core/checkpoint.js";
-import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/provider-mesh/index.js";
-import type { MeshLike } from "@/core/provider-mesh/contract.js";
-import { logger } from "@/core/logger.js";
+import { PiSteeringInbox } from "@/core/runtime/steering.js";
+import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
+import { saveCheckpoint, loadLatestCheckpoint } from "@/core/session/checkpoint.js";
+import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/llm/provider-mesh/index.js";
+import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
+import { logger } from "@/core/runtime/logger.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { toAgentTool } from "@/bridge/agent-tool-adapter.js";
 import { extractText } from "@/bridge/text.js";
@@ -604,7 +604,7 @@ export class PhusAgent implements PhusAgentFacade {
 
   async compactCurrentSession(): Promise<string> {
     if (!this.currentSessionId) throw new Error("no current session to compact");
-    const { compactSession } = await import("@/core/compaction.js");
+    const { compactSession } = await import("@/core/session/compaction.js");
     const result = await compactSession(this.tape, this.currentSessionId, { keepRecent: 10 });
     return `compacted: summarized=${result.summarized}, kept=${result.keptRecent}`;
   }
@@ -664,7 +664,7 @@ export class PhusAgent implements PhusAgentFacade {
     pluginStatus: Array<{ name: string; ok: boolean; path: string }>;
   }> {
     this.skills.discover();
-    const { loadPlugins } = await import("@/core/plugin.js");
+    const { loadPlugins } = await import("@/core/runtime/plugin.js");
     const loaded = loadPlugins(this.hooks, channels, { registerRuntime: () => {} });
     return {
       skills: this.skills.getAll().length,

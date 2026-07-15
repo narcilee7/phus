@@ -8,7 +8,7 @@
 //     going through a full Channel (e.g., webhook → inbox → agent)
 
 import type { Envelope } from "@/types/channel/index.js";
-import { logger } from "@/core/logger.js";
+import { logger } from "@/core/runtime/logger.js";
 import { SteeringEvent, SteeringInbox } from "@/types/steering/index.js";
 
 /**

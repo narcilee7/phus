@@ -2,7 +2,7 @@
 // Per-instance command registry. Pure data structure; no module-level
 // state, no globals. Phase 4 will construct one of these per agent.
 
-import { logger } from "@/core/logger.js";
+import { logger } from "@/core/runtime/logger.js";
 import type {
   CommandSurface,
   InternalCommand,

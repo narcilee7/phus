@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { HookRegistry } from "../src/core/hook.js";
+import { HookRegistry } from "../src/core/runtime/hook.js";
 
 describe("plugin loader", () => {
   let dir: string;
@@ -31,7 +31,7 @@ export default {
 };`,
     );
 
-    const { loadPlugins } = await import("../src/core/plugin.js");
+    const { loadPlugins } = await import("../src/core/runtime/plugin.js");
     const hooks = new HookRegistry();
     const channels: any[] = [];
     const loaded = loadPlugins(hooks, channels);
@@ -57,7 +57,7 @@ export default {
       `export default { name: "cfg-plugin", register() {} };`,
     );
 
-    const { loadPlugins } = await import("../src/core/plugin.js");
+    const { loadPlugins } = await import("../src/core/runtime/plugin.js");
     const hooks = new HookRegistry();
     const loaded = loadPlugins(hooks, []);
     expect(loaded.some((p) => p.name === "cfg-plugin")).toBe(true);
@@ -68,7 +68,7 @@ export default {
     fs.mkdirSync(pluginsDir, { recursive: true });
     fs.writeFileSync(path.join(pluginsDir, "bad.ts"), `this is not valid TS !!!`);
 
-    const { loadPlugins } = await import("../src/core/plugin.js");
+    const { loadPlugins } = await import("../src/core/runtime/plugin.js");
     const loaded = loadPlugins(new HookRegistry(), []);
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.status).toBe("error");
@@ -76,7 +76,7 @@ export default {
   });
 
   it("returns empty list when no plugins exist", async () => {
-    const { loadPlugins } = await import("../src/core/plugin.js");
+    const { loadPlugins } = await import("../src/core/runtime/plugin.js");
     const loaded = loadPlugins(new HookRegistry(), []);
     expect(loaded).toHaveLength(0);
   });
