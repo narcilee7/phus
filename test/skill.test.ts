@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { SkillRegistry, splitFrontmatter } from "../src/core/skill.js";
+import { SkillRegistry, splitFrontmatter } from "../src/infra/skills/registry.js";
 
 describe("SkillRegistry", () => {
   let dir: string;

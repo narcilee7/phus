@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "../src/core/tape.js";
+import { Tape } from "../src/core/session/tape.js";
 
 describe("Tape (SQLite)", () => {
   let dir: string;
@@ -64,6 +64,7 @@ describe("Tape (SQLite)", () => {
     tape.append({ kind: "anchor", sessionId: "s", name: "last", state: { n: 2 }, ts: 200 });
     const a = tape.loadAnchor("s");
     expect(a?.name).toBe("last");
-    expect((a?.state as any).n).toBe(2);
+    if (!a) throw new Error("expected anchor");
+    expect((a.state as { n: number }).n).toBe(2);
   });
 });

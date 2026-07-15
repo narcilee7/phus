@@ -3,8 +3,8 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "../src/core/tape.js";
-import { selectRelevantTurns, DEFAULT_SELECT } from "../src/core/context-select.js";
+import { Tape } from "../src/core/session/tape.js";
+import { selectRelevantTurns, DEFAULT_SELECT } from "../src/core/session/context-select.js";
 
 function makeTurn(i: number, user: string, asst: string, sessionId = "s") {
   return {

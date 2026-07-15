@@ -1,0 +1,169 @@
+// test/tui/state.test.ts
+// Pure-function tests for `appReducer` and `truncate`.
+
+import { describe, expect, it } from "vitest";
+import { appReducer, initialState, truncate, type AppAction } from "../../src/tui/state.js";
+
+function action(a: AppAction) {
+  return appReducer(initialState, a);
+}
+
+describe("initialState", () => {
+  it("starts empty", () => {
+    expect(initialState.items).toEqual([]);
+    expect(initialState.busy).toBe(false);
+    expect(initialState.showHint).toBe(true);
+    expect(initialState.lastOp).toBe("idle");
+  });
+});
+
+describe("append_delta", () => {
+  it("ignores empty delta", () => {
+    const state = appReducer(initialState, { type: "append_delta", delta: "" });
+    expect(state.items).toEqual([]);
+  });
+
+  it("starts a new streaming assistant when no prior assistant exists", () => {
+    const state = action({ type: "append_delta", delta: "Hello" });
+    expect(state.items).toHaveLength(1);
+    const item = state.items[0]!;
+    expect(item.kind).toBe("assistant");
+    expect(item.text).toBe("Hello");
+    expect(item.isStreaming).toBe(true);
+  });
+
+  it("appends to an existing streaming assistant", () => {
+    const s1 = action({ type: "append_delta", delta: "foo" });
+    const s2 = appReducer(s1, { type: "append_delta", delta: "bar" });
+    expect(s2.items).toHaveLength(1);
+    expect(s2.items[0]!.text).toBe("foobar");
+    expect(s2.items[0]!.isStreaming).toBe(true);
+  });
+
+  it("does not append when the last item is not an assistant", () => {
+    const s1 = action({ type: "add_system", text: "warning", level: "warn" });
+    const s2 = appReducer(s1, { type: "append_delta", delta: "more" });
+    // New streaming assistant appended after the system item
+    expect(s2.items).toHaveLength(2);
+    expect(s2.items[0]!.kind).toBe("system");
+    expect(s2.items[1]!.kind).toBe("assistant");
+  });
+});
+
+describe("upsert_tool_call", () => {
+  it("inserts a new tool_call item", () => {
+    const state = action({
+      type: "upsert_tool_call",
+      toolCallId: "tc-1",
+      toolName: "bash",
+      args: { cmd: "ls" },
+    });
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0]!.kind).toBe("tool_call");
+    expect(state.items[0]!.toolCallId).toBe("tc-1");
+    expect(state.items[0]!.toolName).toBe("bash");
+  });
+
+  it("updates an existing tool_call by toolCallId", () => {
+    const s1 = action({ type: "upsert_tool_call", toolCallId: "tc-1", toolName: "bash", args: {} });
+    const s2 = appReducer(s1, {
+      type: "upsert_tool_call",
+      toolCallId: "tc-1",
+      toolName: "bash",
+      args: { extra: "data" },
+    });
+    // Same id merged, items length unchanged
+    expect(s2.items).toHaveLength(1);
+    expect((s2.items[0]!.args as any).extra).toBe("data");
+  });
+});
+
+describe("complete_tool_call", () => {
+  it("appends a tool_result after the matching tool_call", () => {
+    const s1 = action({ type: "upsert_tool_call", toolCallId: "tc-1", toolName: "bash", args: {} });
+    const s2 = appReducer(s1, { type: "complete_tool_call", toolCallId: "tc-1", result: "ok", isError: false });
+    expect(s2.items).toHaveLength(2);
+    expect(s2.items[1]!.kind).toBe("tool_result");
+    expect((s2.items[1]!.result as any)).toBe("ok");
+    expect(s2.items[1]!.isError).toBe(false);
+  });
+
+  it("no-ops when no matching tool_call exists", () => {
+    const s1 = action({ type: "add_user", text: "hi" });
+    const s2 = appReducer(s1, { type: "complete_tool_call", toolCallId: "missing", result: null, isError: false });
+    expect(s2.items).toEqual(s1.items);
+  });
+
+  it("marks the original call as errored on failure", () => {
+    const s1 = action({ type: "upsert_tool_call", toolCallId: "tc-1", toolName: "bash", args: {} });
+    const s2 = appReducer(s1, { type: "complete_tool_call", toolCallId: "tc-1", result: "boom", isError: true });
+    expect(s2.items[0]!.isError).toBe(true);
+    expect(s2.items[1]!.isError).toBe(true);
+  });
+});
+
+describe("finalize_streaming", () => {
+  it("clears the isStreaming flag on the last assistant", () => {
+    const s1 = action({ type: "append_delta", delta: "hello" });
+    const s2 = appReducer(s1, { type: "finalize_streaming" });
+    expect(s2.items[0]!.isStreaming).toBe(false);
+  });
+
+  it("is a no-op when no streaming assistant exists", () => {
+    const s1 = action({ type: "add_user", text: "hi" });
+    const s2 = appReducer(s1, { type: "finalize_streaming" });
+    expect(s2.items).toEqual(s1.items);
+  });
+});
+
+describe("add_user / add_system / clear_items", () => {
+  it("add_user appends a user item", () => {
+    const s1 = action({ type: "add_user", text: "hello" });
+    expect(s1.items[0]!.kind).toBe("user");
+    expect(s1.items[0]!.text).toBe("hello");
+  });
+
+  it("add_system appends a system item with the given level", () => {
+    const s1 = action({ type: "add_system", text: "danger", level: "error" });
+    expect(s1.items[0]!.level).toBe("error");
+    expect(s1.items[0]!.kind).toBe("system");
+  });
+
+  it("clear_items empties the array", () => {
+    const s1 = appReducer(initialState, { type: "add_user", text: "a" });
+    const s2 = appReducer(s1, { type: "add_user", text: "b" });
+    expect(s2.items).toHaveLength(2);
+    const s3 = appReducer(s2, { type: "clear_items" });
+    expect(s3.items).toEqual([]);
+  });
+});
+
+describe("set_busy / set_last_op / hide_hint", () => {
+  it("set_busy toggles busy", () => {
+    expect(appReducer(initialState, { type: "set_busy", busy: true }).busy).toBe(true);
+    expect(appReducer({ ...initialState, busy: true }, { type: "set_busy", busy: false }).busy).toBe(false);
+  });
+
+  it("set_last_op updates the label", () => {
+    expect(appReducer(initialState, { type: "set_last_op", op: "tool: bash" }).lastOp).toBe("tool: bash");
+  });
+
+  it("hide_hint flips the flag to false", () => {
+    expect(initialState.showHint).toBe(true);
+    expect(appReducer(initialState, { type: "hide_hint" }).showHint).toBe(false);
+  });
+});
+
+describe("truncate", () => {
+  it("returns short strings unchanged", () => {
+    expect(truncate("hello", 10)).toBe("hello");
+  });
+
+  it("appends ellipsis when over the limit", () => {
+    expect(truncate("abcdefghij", 5)).toBe("abcde…");
+  });
+
+  it("handles exact-length strings", () => {
+    expect(truncate("hello", 5)).toBe("hello");
+  });
+});

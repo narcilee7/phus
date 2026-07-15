@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { HookRegistry } from "../src/core/hook.js";
+import { HookRegistry } from "../src/core/runtime/hook.js";
 
 describe("plugin loader", () => {
   let dir: string;
@@ -26,12 +26,12 @@ describe("plugin loader", () => {
 export default {
   name: "my-plugin",
   register(ctx) {
-    ctx.hooks.register("test_hook", async () => "hello", { mode: "firstresult" });
+    ctx.hooks.register("test_hook", async () => "hello", { mode: "first_result" });
   },
 };`,
     );
 
-    const { loadPlugins } = await import("../src/core/plugin.js");
+    const { loadPlugins } = await import("../src/infra/plugins/loader.js");
     const hooks = new HookRegistry();
     const channels: any[] = [];
     const loaded = loadPlugins(hooks, channels);
@@ -40,7 +40,7 @@ export default {
     expect(loaded[0]?.status).toBe("ok");
 
     const ctx = { sessionId: "s", state: {}, tape: {} as any, skills: {} as any, extras: {} };
-    const r = await hooks.execute("test_hook", ctx, "firstresult");
+    const r = await hooks.execute("test_hook", ctx, "first_result");
     expect(r).toBe("hello");
   });
 
@@ -57,7 +57,7 @@ export default {
       `export default { name: "cfg-plugin", register() {} };`,
     );
 
-    const { loadPlugins } = await import("../src/core/plugin.js");
+    const { loadPlugins } = await import("../src/infra/plugins/loader.js");
     const hooks = new HookRegistry();
     const loaded = loadPlugins(hooks, []);
     expect(loaded.some((p) => p.name === "cfg-plugin")).toBe(true);
@@ -68,7 +68,7 @@ export default {
     fs.mkdirSync(pluginsDir, { recursive: true });
     fs.writeFileSync(path.join(pluginsDir, "bad.ts"), `this is not valid TS !!!`);
 
-    const { loadPlugins } = await import("../src/core/plugin.js");
+    const { loadPlugins } = await import("../src/infra/plugins/loader.js");
     const loaded = loadPlugins(new HookRegistry(), []);
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.status).toBe("error");
@@ -76,7 +76,7 @@ export default {
   });
 
   it("returns empty list when no plugins exist", async () => {
-    const { loadPlugins } = await import("../src/core/plugin.js");
+    const { loadPlugins } = await import("../src/infra/plugins/loader.js");
     const loaded = loadPlugins(new HookRegistry(), []);
     expect(loaded).toHaveLength(0);
   });

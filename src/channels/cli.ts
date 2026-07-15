@@ -4,9 +4,9 @@
 //   - interactive (chat command): line-buffered stdin REPL
 
 import * as readline from "node:readline";
-import { makeTextEnvelope } from "./base.js";
-import type { ChannelAdapter } from "./base.js";
-import type { PhusAgent } from "../bridge/pi-agent.js";
+import { makeTextEnvelope } from "@/channels/base.js";
+import type { ChannelAdapter } from "@/channels/base.js";
+import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 export class CLIChannel implements ChannelAdapter {
   readonly name = "cli";
@@ -28,8 +28,11 @@ export class CLIChannel implements ChannelAdapter {
       }
       // Bub-style internal commands (comma prefix)
       if (text.startsWith(",")) {
-        const { execute, initInternalCommands } = await import("../core/internal-commands.js");
-        initInternalCommands(() => agent, () => process.env.PHUS_HOME ?? "./.phus");
+        const { execute, initInternalCommands } = await import("@/core/runtime/internal-commands/index.js");
+        initInternalCommands({
+          agent,
+          home: () => process.env.PHUS_HOME ?? "./.phus",
+        });
         const result = await execute(text, "cli");
         if (result !== null && result !== "not-a-command") {
           console.log(result);
@@ -65,7 +68,7 @@ export class CLIChannel implements ChannelAdapter {
     });
   }
 
-  async send(outbounds: import("../core/types.js").Outbound[]): Promise<void> {
+  async send(outbounds: import("@/types/channel/index.js").Outbound[]): Promise<void> {
     for (const msg of outbounds) {
       if (msg.type === "text") {
         console.log(`\n⛰️  ${msg.content}\n`);
@@ -81,8 +84,10 @@ export class CLIChannel implements ChannelAdapter {
 /** Run a single prompt through the agent and exit. */
 export async function runOnce(prompt: string): Promise<void> {
   // Lazy import so `chat` mode doesn't pull in unused code paths.
-  const { PhusAgent } = await import("../bridge/pi-agent.js");
-  const agent = new PhusAgent();
+  const { PhusAgent } = await import("@/bridge/pi-agent.js");
+  const handle = await PhusAgent.create();
+  const agent = handle.agent;
+  const internals = handle.internals;
   const channel = new CLIChannel();
   const envelope = makeTextEnvelope({
     from: "user",
@@ -91,16 +96,16 @@ export async function runOnce(prompt: string): Promise<void> {
     metadata: { chatId: "default" },
   });
   await agent.turn(envelope, channel);
-  const assistantTexts = agent._internal.piAgent.state.messages
-    .filter((m) => m.role === "assistant")
-    .map((m) => ({
+  const assistantTexts = internals.piAgent.state.messages
+    .filter((m: any) => m.role === "assistant")
+    .map((m: any) => ({
       to: "default",
       content: extractText(m),
       type: "text" as const,
       channel: "cli",
     }));
 
-  if (assistantTexts.length === 0 || assistantTexts.every((m) => !m.content.trim())) {
+  if (assistantTexts.every((m: any) => !m.content.trim())) {
     process.stderr.write(
       "\n⚠️  Agent returned no text. Common causes:\n" +
         "   • Wrong PHUS_MODEL_ID (gateway doesn't recognize the model name)\n" +
@@ -109,7 +114,8 @@ export async function runOnce(prompt: string): Promise<void> {
     );
   }
 
-  await channel.send(assistantTexts);
+  await channel.send(assistantTexts as any);
+  await handle.dispose();
 }
 
 function extractText(msg: any): string {

@@ -274,7 +274,7 @@ export class PiSteeringInbox implements SteeringInbox {
 
 // Hook signature
 type provide_steering_inbox = (ctx: HookContext) => Promise<SteeringInbox | undefined>;
-// Registered as firstresult — first implementation wins
+// Registered as first_result — first implementation wins
 ```
 
 ### Integration with Pi Agent
@@ -284,7 +284,7 @@ In `PhusAgent.before_llm_call` (or in a new step in `turn()`):
 ```typescript
 // After resolve_session, before tool loop:
 const inbox = await this.hooks.execute<SteeringInbox>(
-  "provide_steering_inbox", ctx, "firstresult",
+  "provide_steering_inbox", ctx, "first_result",
 );
 if (inbox) {
   const pending = await inbox.drainMessages();

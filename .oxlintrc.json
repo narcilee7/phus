@@ -1,0 +1,70 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "perf": "off",
+    "style": "off",
+    "restriction": "off",
+    "suspicious": "warn",
+    "pedantic": "off",
+    "nursery": "off"
+  },
+  "rules": {
+    "no-unused-vars": "off",
+    "no-console": "warn",
+    "no-process-exit": "off",
+    "no-empty": "off",
+    "no-prototype-builtins": "error",
+    "no-await-in-loop": "warn",
+    "prefer-const": "warn",
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "curly": ["error", "multi-line"]
+  },
+  "settings": {
+    "jsx-a11y": {
+      "polymorphicPropName": "as"
+    }
+  },
+  "env": {
+    "browser": false,
+    "node": true,
+    "es2024": true
+  },
+  "globals": {
+    "process": "readonly",
+    "Buffer": "readonly",
+    "console": "readonly",
+    "globalThis": "readonly",
+    "setTimeout": "readonly",
+    "clearTimeout": "readonly",
+    "setInterval": "readonly",
+    "clearInterval": "readonly",
+    "queueMicrotask": "readonly",
+    "URL": "readonly",
+    "URLSearchParams": "readonly",
+    "fetch": "readonly"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "*.config.ts",
+    "*.config.js"
+  ],
+  "overrides": [
+    {
+      "files": ["test/**/*.ts", "**/*.test.ts"],
+      "rules": {
+        "no-console": "off",
+        "@typescript-eslint/no-explicit-any": "off",
+        "no-unused-vars": "off"
+      }
+    },
+    {
+      "files": ["scripts/**", "deploy/**"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ]
+}

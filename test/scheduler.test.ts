@@ -1,12 +1,12 @@
 // test/scheduler.test.ts
 import { describe, expect, it, beforeEach } from "vitest";
-import { Scheduler, nextFires, type Schedule } from "../src/core/scheduler.js";
-import { HookRegistry, makeCtx } from "../src/core/hook.js";
+import { Scheduler, nextFires, type Schedule } from "../src/core/runtime/scheduler.js";
+import { HookRegistry, makeCtx } from "../src/core/runtime/hook.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "../src/core/tape.js";
-import { SkillRegistry } from "../src/core/skill.js";
+import { Tape } from "../src/core/session/tape.js";
+import { SkillRegistry } from "../src/infra/skills/registry.js";
 
 function makeHooks(): { hooks: HookRegistry; tape: Tape; skills: SkillRegistry; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-sched-"));

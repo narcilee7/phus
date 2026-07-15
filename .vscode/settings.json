@@ -1,0 +1,51 @@
+{
+  // Use the project's TypeScript (7.0.2) instead of VS Code's bundled version.
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // Let oxc language server own TS/JS editing features.
+  // oxlint is wired via `pnpm lint` (see .oxlintrc.json); oxc-vscode feeds
+  // the same config into the editor for real-time squiggles.
+  "oxc.tsserver": true,
+  "oxc.lint.run": "onSave",
+  "oxc.lint.reporter": "default",
+  "oxc.lint.disable": false,
+  "oxc.format.enable": false,
+
+  // Run oxlint --fix on save (the extension drives this through the same
+  // .oxlintrc.json the CLI uses, so there is one source of truth).
+  "editor.codeActionsOnSave": {
+    "source.fixAll.oxc": "explicit"
+  },
+
+  // Files we never want to open / format.
+  "files.exclude": {
+    "dist": true,
+    "coverage": true,
+    ".tsdown": true,
+    "**/*.tsbuildinfo": true
+  },
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // Language-specific defaults.
+  "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": false
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": false
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": false
+  },
+
+  // Vitest integration if the extension is installed.
+  "vitest.enable": true,
+
+  // ESLint would conflict with oxlint; turn it off so oxc-vscode owns TS.
+  "eslint.enable": false
+}

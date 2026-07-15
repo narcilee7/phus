@@ -1,0 +1,62 @@
+{
+  // Tasks shown under Terminal → Run Task. Bound to pnpm scripts so
+  // "Run Task" feels identical to running the script by hand.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "lint",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["lint"],
+      "problemMatcher": ["$eslint-stylish"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "group": "build"
+    },
+    {
+      "label": "lint:fix",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["lint:fix"],
+      "problemMatcher": ["$eslint-stylish"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "group": "build"
+    },
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["test"],
+      "problemMatcher": ["$vitest"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "group": "test"
+    },
+    {
+      "label": "test:watch",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["test:watch"],
+      "problemMatcher": ["$vitest-watch"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "isBackground": true,
+      "group": "test"
+    },
+    {
+      "label": "typecheck",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["typecheck"],
+      "problemMatcher": ["$tsc"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "group": "build"
+    },
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["build"],
+      "problemMatcher": ["$tsc"],
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "group": "build"
+    }
+  ]
+}

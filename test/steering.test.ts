@@ -1,7 +1,7 @@
 // test/steering.test.ts
 import { describe, expect, it, beforeEach } from "vitest";
-import { PiSteeringInbox, getDefaultInbox, resetDefaultInbox } from "../src/core/steering.js";
-import type { Envelope } from "../src/core/types.js";
+import { PiSteeringInbox } from "../src/core/runtime/steering.js";
+import type { Envelope } from "../src/types/channel/index.js";
 
 function env(content: string, from = "system"): Envelope {
   return {
@@ -54,21 +54,5 @@ describe("PiSteeringInbox", () => {
     const peeked = inbox.peek();
     peeked.pop();
     expect(inbox.messageCount()).toBe(1);
-  });
-});
-
-describe("getDefaultInbox", () => {
-  it("returns a singleton", () => {
-    resetDefaultInbox();
-    const a = getDefaultInbox();
-    const b = getDefaultInbox();
-    expect(a).toBe(b);
-  });
-
-  it("reset creates new instance", () => {
-    const a = getDefaultInbox();
-    resetDefaultInbox();
-    const b = getDefaultInbox();
-    expect(a).not.toBe(b);
   });
 });
