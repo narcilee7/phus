@@ -6,7 +6,7 @@
 // order, then drains the plugin CLI command queue before parsing.
 
 import { Command } from "commander";
-import { drainPendingCliCommands } from "@/core/runtime/plugin-cli-queue.js";
+import { drainPendingCliCommands } from "@/infra/plugins/cli-queue.js";
 
 import { registerDefaultCommand } from "./commands/default.js";
 import { registerChatCommand } from "./commands/chat.js";
@@ -65,11 +65,11 @@ export function buildProgram(): Command {
  *  are added after built-ins so users see phus-native help first. */
 export async function registerPluginCliCommands(program: Command): Promise<void> {
   // 1. Drain queue (set by PluginContext.registerCliCommand during plugin load)
-  const beforeCount = (await import("@/core/runtime/plugin-cli-queue.js"))._pendingCliCommandCount();
+  const beforeCount = (await import("@/infra/plugins/cli-queue.js"))._pendingCliCommandCount();
   try {
     drainPendingCliCommands(program);
   } catch (err) {
-    const { logger } = await import("@/core/runtime/logger.js");
+    const { logger } = await import("@/infra/logging.js");
     logger.error("plugin.cli_command_failed", {
       count: beforeCount,
       error: (err as Error).message,

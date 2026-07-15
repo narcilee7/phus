@@ -4,7 +4,7 @@
 
 import * as fs from "node:fs";
 import * as readline from "node:readline";
-import type { LogEvent, LogLevel } from "@/core/runtime/logger.js";
+import type { LogEvent, LogLevel } from "@/infra/logging.js";
 
 export interface LogsOptions {
   follow?: boolean;

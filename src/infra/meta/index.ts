@@ -7,7 +7,7 @@ import type { MetaTool } from "@/types/tool.js";
 import type { Tape } from "@/core/session/tape.js";
 import { defineSkillMetaTools } from "./skill-tools.js";
 import { defineSystemMetaTools } from "./system-tools.js";
-import type { SkillRegistry } from "@/core/runtime/skills/skill.js";
+import type { SkillRegistry } from "@/infra/skills/registry.js";
 
 export function createMetaTools(skills: SkillRegistry, tape: Tape): MetaTool[] {
   const skillTools = defineSkillMetaTools({

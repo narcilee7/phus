@@ -271,7 +271,7 @@ async function cmdProfiles(
   dispatch: (a: AppAction) => void,
 ): Promise<void> {
   const { formatProfiles, resolveProfile, modelFromProfile, loadProviderConfig } =
-    await import("@/core/llm/profile.js");
+    await import("@/infra/profile.js");
   const activeName = process.env.PHUS_PROFILE ?? "(default)";
   if (!arg) {
     dispatch({

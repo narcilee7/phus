@@ -5,7 +5,7 @@
 
 import type { Tape } from "@/core/session/tape.js";
 import { compactSession } from "@/core/session/compaction.js";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 import type { SessionId } from "@/types/brand.js";
 import { asSessionId } from "@/types/brand.js";
 

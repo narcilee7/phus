@@ -11,7 +11,7 @@
 //   - User errors (bad input, missing file).
 
 import { sleep } from "@/utils/promise.js";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 
 // ─── Types ───────────────────────────────────────────────────────
 

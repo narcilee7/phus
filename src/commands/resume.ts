@@ -6,7 +6,7 @@ import { loadLatestCheckpoint, listCheckpoints } from "@/core/session/checkpoint
 import { CLIChannel } from "@/channels/cli.js";
 import { ExitCode, CliExit } from "@/core/runtime/exit-codes.js";
 import { makeTextEnvelope } from "@/channels/base.js";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 import { asSessionId } from "@/types/brand.js";
 
 export async function resumeSession(sessionId: string, prompt: string): Promise<void> {

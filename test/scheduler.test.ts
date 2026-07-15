@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { Tape } from "../src/core/session/tape.js";
-import { SkillRegistry } from "../src/core/runtime/skills/skill.js";
+import { SkillRegistry } from "../src/infra/skills/registry.js";
 
 function makeHooks(): { hooks: HookRegistry; tape: Tape; skills: SkillRegistry; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-sched-"));

@@ -6,7 +6,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "yaml";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 import { AuthorDefinition } from "@/types/enumTypes/index.js";
 import { Skill } from "@/types/skill.js";
 

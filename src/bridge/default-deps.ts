@@ -5,9 +5,9 @@
 
 import { HookRegistry } from "@/core/runtime/hook.js";
 import { Tape } from "@/core/session/tape.js";
-import { SkillRegistry } from "@/core/runtime/skills/skill.js";
-import { defaultPolicy } from "@/core/llm/policy.js";
-import { resolveProfile, type ProviderProfile } from "@/core/llm/profile.js";
+import { SkillRegistry } from "@/infra/skills/registry.js";
+import { defaultPolicy } from "@/infra/safety.js";
+import { resolveProfile, type ProviderProfile } from "@/infra/profile.js";
 import {
   ProviderMesh,
   type EndpointSpec,
@@ -17,7 +17,7 @@ import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
 import { PiSteeringInbox } from "@/core/runtime/steering.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
 import { buildMesh } from "@/core/llm/provider-mesh/index.js";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 import { resolveModel } from "@/bridge/model-resolver.js";
 import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
 

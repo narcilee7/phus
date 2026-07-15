@@ -23,7 +23,7 @@ describe("logger", () => {
   });
 
   it("writes structured JSON lines to PHUS_LOG_FILE", async () => {
-    const { logger } = await import("../src/core/runtime/logger.js");
+    const { logger } = await import("../src/infra/logging.js");
     logger.info("test.event", { foo: "bar", n: 42 });
 
     await new Promise((r) => setTimeout(r, 100));
@@ -40,7 +40,7 @@ describe("logger", () => {
 
   it("respects PHUS_LOG_LEVEL threshold", async () => {
     process.env.PHUS_LOG_LEVEL = "warn";
-    const { logger } = await import("../src/core/runtime/logger.js");
+    const { logger } = await import("../src/infra/logging.js");
     logger.debug("test.debug");
     logger.warn("test.warn");
     await new Promise((r) => setTimeout(r, 100));

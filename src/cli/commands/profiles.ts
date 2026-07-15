@@ -8,7 +8,7 @@ export function registerProfilesCommand(program: Command): void {
     .command("profiles")
     .description("List configured provider profiles")
     .action(async () => {
-      const { formatProfiles } = await import("@/core/llm/profile.js");
+      const { formatProfiles } = await import("@/infra/profile.js");
       console.log(formatProfiles());
       console.log(`\nactive: ${process.env.PHUS_PROFILE ?? "(default)"}`);
       console.log(`set:    PHUS_PROFILE=<name>  or  phus run --profile <name> "..."`);

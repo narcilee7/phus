@@ -23,23 +23,23 @@ import type { SessionId } from "@/types/brand.js";
 import { asSessionId, asToolCallId, asTurnId } from "@/types/brand.js";
 import { HookRegistry, makeCtx, type HookContext } from "@/core/runtime/hook.js";
 import { Tape } from "@/core/session/tape.js";
-import { SkillRegistry } from "@/core/runtime/skills/skill.js";
-import { createMetaTools } from "@/core/llm/meta/index.js";
+import { SkillRegistry } from "@/infra/skills/registry.js";
+import { createMetaTools } from "@/infra/meta/index.js";
 import { createExternalTools } from "@/bridge/tools.js";
-import { defaultPolicy, evaluate, type PolicyRule } from "@/core/llm/policy.js";
+import { defaultPolicy, evaluate, type PolicyRule } from "@/infra/safety.js";
 import {
   resolveProfile,
   modelFromProfile,
   apiKeyForProfile,
   type ProviderProfile,
-} from "@/core/llm/profile.js";
+} from "@/infra/profile.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
 import { PiSteeringInbox } from "@/core/runtime/steering.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint } from "@/core/session/checkpoint.js";
 import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/llm/provider-mesh/index.js";
 import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { toAgentTool } from "@/bridge/agent-tool-adapter.js";
 import { extractText } from "@/bridge/text.js";
@@ -664,7 +664,7 @@ export class PhusAgent implements PhusAgentFacade {
     pluginStatus: Array<{ name: string; ok: boolean; path: string }>;
   }> {
     this.skills.discover();
-    const { loadPlugins } = await import("@/core/runtime/plugin.js");
+    const { loadPlugins } = await import("@/infra/plugins/loader.js");
     const loaded = loadPlugins(this.hooks, channels, { registerRuntime: () => {} });
     return {
       skills: this.skills.getAll().length,

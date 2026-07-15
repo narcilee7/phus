@@ -4,8 +4,8 @@
 //   - broadcast:   invoke every implementation in parallel, return all results
 //
 import type { Tape } from "@/core/session/tape.js";
-import type { SkillRegistry } from "@/core/runtime/skills/skill.js";
-import { logger } from "@/core/runtime/logger.js";
+import type { SkillRegistry } from "@/infra/skills/registry.js";
+import { logger } from "@/infra/logging.js";
 import {
   type HookContext,
   type HookImpl,

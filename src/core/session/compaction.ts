@@ -9,7 +9,7 @@ import { Type } from "@mariozechner/pi-ai";
 import type { Tape } from "@/core/session/tape.js";
 import type { TapeEntry, Turn } from "@/types/tape/index.js";
 import type { MetaTool } from "@/types/tool.js";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 import { asSessionId } from "@/types/brand.js";
 import type { SessionId } from "@/types/brand.js";
 

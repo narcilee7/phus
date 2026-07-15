@@ -12,7 +12,7 @@
 //   register / unregister / list / get       — operate on default registry
 //   registerBuiltins(services)              — populate a registry
 
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 import {
   InternalCommandRegistry,
   type RegistryOptions,

@@ -8,7 +8,7 @@ export function registerPluginsListCommand(program: Command): void {
     .command("plugins-list")
     .description("List discovered plugins from $PHUS_HOME/plugins and phus.config.yaml")
     .action(async () => {
-      const { loadPlugins } = await import("@/core/runtime/plugin.js");
+      const { loadPlugins } = await import("@/infra/plugins/loader.js");
       const { HookRegistry } = await import("@/core/runtime/hook.js");
       const hooks = new HookRegistry();
       const channels: import("@/channels/base.js").ChannelAdapter[] = [];

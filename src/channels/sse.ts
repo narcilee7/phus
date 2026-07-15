@@ -3,7 +3,7 @@
 
 import type { ChannelAdapter } from "@/channels/base.js";
 import type { Outbound } from "@/types/channel/index.js";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 
 export class SSEChannel implements ChannelAdapter {
   readonly name = "sse";

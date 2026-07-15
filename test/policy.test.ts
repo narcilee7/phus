@@ -6,7 +6,7 @@ import {
   evaluate,
   fileWriteAllowlist,
   bashBlocklist,
-} from "../src/core/llm/policy.js";
+} from "../src/infra/safety.js";
 
 const cwd = "/workspace/phus";
 

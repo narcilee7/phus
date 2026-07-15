@@ -14,7 +14,7 @@
 //     write to tape, etc.
 
 import { CronExpressionParser } from "cron-parser";
-import { logger } from "@/core/runtime/logger.js";
+import { logger } from "@/infra/logging.js";
 import { HookRegistry, makeCtx } from "@/core/runtime/hook.js";
 import { Schedule, SchedulerOptions } from "@/types/scheduler/index.js";
 import { HookContext } from "@/types/hooks/index.js";
