@@ -51,12 +51,46 @@ describe("parse", () => {
 });
 
 describe("default-registry shim (initInternalCommands + module-level register/execute)", () => {
+  /** Minimal PhusAgentFacade stub — every diagnostic method returns a
+   *  sensible default. Tests that need real data override individual fields. */
+  function makeAgentStub(over: Partial<Record<string, any>> = {}) {
+    return {
+      getDiagnostics: () => ({
+        sessionId: undefined,
+        currentSessionOverride: undefined,
+        modelLabel: "anthropic/test",
+        thinkingLevel: "medium",
+        messageCount: 0,
+        tapeStats: { totalEntries: 0, sessions: {} },
+        skillCount: 0,
+      }),
+      getHookReport: () => ({}),
+      getAllSkills: () => [],
+      getSkill: () => undefined,
+      getPolicy: () => [],
+      getTapeStats: () => ({ totalEntries: 0, sessions: {} }),
+      replayTape: function* () {},
+      getTapeSummary: () => "",
+      reloadSkillsAndPlugins: async () => ({ skills: 0, plugins: 0, pluginStatus: [] }),
+      getSkillCount: () => 0,
+      getSkillsPrompt: () => "",
+      getTapeTotalEntries: () => 0,
+      getSessionCount: () => 0,
+      getMessageCount: () => 0,
+      ...over,
+    } as any;
+  }
+
+  function initWithAgent(agent: any = makeAgentStub()) {
+    initInternalCommands({ agent, home: () => "./.phus" });
+  }
+
   beforeEach(() => {
     _resetInternalCommands();
   });
 
   it("registers and lists commands via the default registry", () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     register({ name: "test1", description: "test", handler: async () => "ok" });
     expect(list().find((c) => c.name === "test1")).toBeDefined();
     unregister("test1");
@@ -64,14 +98,14 @@ describe("default-registry shim (initInternalCommands + module-level register/ex
   });
 
   it("throws on duplicate without replace", () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     register({ name: "dupe", description: "", handler: async () => "ok" });
     expect(() => register({ name: "dupe", description: "", handler: async () => "ok" })).toThrow();
     unregister("dupe");
   });
 
   it("replaces with replace=true", () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     register({ name: "rep", description: "old", handler: async () => "old" });
     register({ name: "rep", description: "new", handler: async () => "new" }, { replace: true });
     expect(list().find((c) => c.name === "rep")?.description).toBe("new");
@@ -79,27 +113,27 @@ describe("default-registry shim (initInternalCommands + module-level register/ex
   });
 
   it("returns 'not-a-command' for non-command lines", async () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     expect(await execute("hello")).toBe("not-a-command");
     expect(await execute("/slash")).toBe("not-a-command");
   });
 
   it("returns error string for unknown commands", async () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     const result = await execute(",nosuchcommand");
     expect(typeof result).toBe("string");
     expect(result as string).toContain("unknown command");
   });
 
   it("calls the registered handler", async () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     register({ name: "echo", description: "echo arg", handler: async ({ args }) => `got: ${args.msg ?? ""}` });
     expect(await execute(",echo msg=hi")).toBe("got: hi");
     unregister("echo");
   });
 
   it("catches handler errors and returns an error string", async () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     register({ name: "boom", description: "always fails", handler: async () => { throw new Error("nope"); } });
     const result = await execute(",boom");
     expect(typeof result).toBe("string");
@@ -108,7 +142,7 @@ describe("default-registry shim (initInternalCommands + module-level register/ex
   });
 
   it("renderHelp lists every registered command", () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     register({ name: "testhelp", description: "test desc", handler: async () => "" });
     const out = renderHelp();
     expect(out).toContain(",testhelp");
@@ -117,7 +151,7 @@ describe("default-registry shim (initInternalCommands + module-level register/ex
   });
 
   it("the 25 built-in command names are registered after initInternalCommands", () => {
-    initInternalCommands(() => ({ _internal: {} }) as any, () => "./.phus");
+    initWithAgent();
     const expected = [
       "help", "skills", "skill", "skill-review", "skill-review.approve", "skill-review.reject",
       "tape", "trace", "sessions", "use", "compact",

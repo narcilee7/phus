@@ -1,6 +1,9 @@
 // src/core/internal-commands/types.ts
 // Public types for the internal-command subsystem.
 
+import type { PhusAgentFacade } from "@/bridge/pi-agent.js";
+import type { ChannelAdapter } from "@/channels/base.js";
+
 /** Where the command was invoked. */
 export type CommandSurface = "cli" | "tui";
 
@@ -30,19 +33,22 @@ export interface ParsedCommand {
 
 /**
  * Services injected into the registry. The built-in command handlers
- * read through `getAgent()` for now; in Phase 4 this becomes a narrow
- * `AgentFacade` that replaces the `_internal` reach-through with
- * explicit capabilities (`services.tape`, `services.skills`, ...).
+ * read through `agent` (the PhusAgentFacade), which exposes every
+ * diagnostic they need without reaching through `_internal`.
+ *
+ *  - `agent` covers tape / skills / policy / model / session / plugins
+ *  - `home` is the Phus home directory (for skills/drafts lookup)
+ *  - `mesh` is optional: only present in gateway mode where a mesh is running
+ *  - `scheduler` is optional: only present in gateway mode
+ *  - `extraChannels` is the channel list passed to `agent.reloadSkillsAndPlugins`
+ *    (typically `[]` for CLI, populated for the TUI)
  */
 export interface InternalCommandServices {
-  /** Returns the agent whose internals the builtins read. */
-  getAgent: () => unknown;
-  /** Phus home directory (for skills, drafts, ...). */
-  getHome: () => string;
-  /** Provider mesh (or undefined if no mesh has been built yet). */
+  agent: PhusAgentFacade;
+  home: () => string;
   mesh?: import("@/core/provider-mesh/contract.js").MeshLike;
-  /** Scheduler (or undefined if not running in gateway mode). */
   scheduler?: import("@/core/scheduler.js").Scheduler | undefined;
+  extraChannels?: () => ChannelAdapter[];
 }
 
 /** Narrow view of the scheduler surface used by the `,schedule.*`

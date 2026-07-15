@@ -29,7 +29,10 @@ export class CLIChannel implements ChannelAdapter {
       // Bub-style internal commands (comma prefix)
       if (text.startsWith(",")) {
         const { execute, initInternalCommands } = await import("@/core/internal-commands/index.js");
-        initInternalCommands(() => agent, () => process.env.PHUS_HOME ?? "./.phus");
+        initInternalCommands({
+          agent,
+          home: () => process.env.PHUS_HOME ?? "./.phus",
+        });
         const result = await execute(text, "cli");
         if (result !== null && result !== "not-a-command") {
           console.log(result);
@@ -93,7 +96,7 @@ export async function runOnce(prompt: string): Promise<void> {
     metadata: { chatId: "default" },
   });
   await agent.turn(envelope, channel);
-  const assistantTexts = internals._internal.piAgent.state.messages
+  const assistantTexts = internals.piAgent.state.messages
     .filter((m: any) => m.role === "assistant")
     .map((m: any) => ({
       to: "default",

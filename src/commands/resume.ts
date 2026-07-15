@@ -12,10 +12,10 @@ import { asSessionId } from "@/types/brand.js";
 export async function resumeSession(sessionId: string, prompt: string): Promise<void> {
   const branded = asSessionId(sessionId);
   const handle = await PhusAgent.create(); const agent = handle.agent;
-  const cp = loadLatestCheckpoint(handle.internals._internal.tape, branded);
+  const cp = loadLatestCheckpoint(handle.internals.tape, branded);
   if (!cp) {
     logger.error(`no checkpoint found for session "${sessionId}"`);
-    const all = listCheckpoints(handle.internals._internal.tape, branded);
+    const all = listCheckpoints(handle.internals.tape, branded);
     if (all.length === 0) {
       logger.error(`(tape has no checkpoints for this session)`);
     }
@@ -24,7 +24,7 @@ export async function resumeSession(sessionId: string, prompt: string): Promise<
 
   logger.info(`[phus] resuming session ${sessionId} from checkpoint (${cp.ts}, ${Array.isArray(cp.messages) ? cp.messages.length : 0} messages)`);
   // Restore Pi's transcript
-  handle.internals._internal.piAgent.state.messages = cp.messages as any;
+  handle.internals.piAgent.state.messages = cp.messages as any;
 
   // If user provided a follow-up prompt, send it; otherwise just continue
   const channel = new CLIChannel();

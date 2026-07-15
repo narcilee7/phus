@@ -29,7 +29,7 @@ export async function createPhusAgent(deps: PhusAgentDeps): Promise<PhusAgentHan
   // Load plugins before the agent accepts the first turn so skills
   // registered by plugins are discoverable immediately.
   const { loadPlugins } = await import("@/core/plugin.js");
-  loadPlugins(internals._internal.hooks, internals._internal.channels, {
+  loadPlugins(internals.hooks, internals.extraChannels, {
     registerRuntime: () => {
       // Runtime skill registration is intentionally not yet supported.
     },
@@ -39,8 +39,8 @@ export async function createPhusAgent(deps: PhusAgentDeps): Promise<PhusAgentHan
   const dispose = async (): Promise<void> => {
     if (disposed) return;
     disposed = true;
-    try { internals._internal.mesh.stopHealthChecks(); } catch { /* ignore */ }
-    try { internals._internal.tape.close?.(); } catch (err: any) {
+    try { internals.mesh.stopHealthChecks(); } catch { /* ignore */ }
+    try { internals.tape.close?.(); } catch (err: any) {
       logger.warn("lifecycle.tape_close_failed", { error: err.message });
     }
     logger.info("phus_agent.disposed");

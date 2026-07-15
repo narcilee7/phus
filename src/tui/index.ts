@@ -13,7 +13,7 @@ export async function startTui(): Promise<void> {
   // internals during the migration to facade. Pass the internals.
   const agent = handle.internals;
   const sessionId = "tui:user";
-  const model = agent._internal.piAgent.state.model;
+  const model = agent.getCurrentModel();
   const modelLabel = `${model.provider}/${model.id}`;
 
   const { waitUntilExit } = render(

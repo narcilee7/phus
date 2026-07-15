@@ -3,9 +3,6 @@
 
 import type { InternalCommand, InternalCommandServices } from "../types.js";
 
-/** ,help renders help for the registry it's bound to, so it lives in
- *  index.ts (which knows the registry). Skills.ts handles the rest. */
-
 export function defineSkillCommands(
   services: InternalCommandServices,
 ): InternalCommand[] {
@@ -14,11 +11,10 @@ export function defineSkillCommands(
       name: "skills",
       description: "list discovered skills",
       handler: async () => {
-        const agent = services.getAgent() as any;
-        const list = agent._internal.skills.getAll();
+        const list = services.agent.getAllSkills();
         if (list.length === 0) return "(no skills loaded)";
         return list
-          .map((s: any) =>
+          .map((s) =>
             `  ${s.name} (v${s.metadata.version ?? "?"}, by ${s.metadata.author ?? "?"})  ${s.description}`,
           )
           .join("\n");
@@ -31,7 +27,7 @@ export function defineSkillCommands(
       handler: async ({ args }) => {
         const name = args.name;
         if (!name) return "usage: ,skill name=<name>";
-        const skill = (services.getAgent() as any)._internal.skills.get(name);
+        const skill = services.agent.getSkill(name);
         if (!skill) return `skill not found: ${name}`;
         return `${skill.name} (v${skill.metadata.version ?? "?"})\n${skill.description}\n\n${skill.body}`;
       },
@@ -44,7 +40,7 @@ export function defineSkillCommands(
         const drafts = new DraftsStore();
         const list = await drafts.list();
         if (list.length === 0) return "(no drafts)";
-        return list.map((d: any) => `  ${d.name.padEnd(28)} ${d.description}`).join("\n");
+        return list.map((d) => `  ${d.name.padEnd(28)} ${d.description}`).join("\n");
       },
     },
     {

@@ -88,8 +88,13 @@ export interface AgentDiagnostics {
  * commands depend on this interface — they should NOT reach through
  * `_internal` to access hooks / tape / skills. That access pattern
  * made the previous monolith impossible to refactor.
+ *
+ * Coverage is intentionally wide: every diagnostic the CLI and TUI
+ * need is here. The interface IS the public API; the concrete
+ * `PhusAgent` class adds lifecycle (constructor, dispose).
  */
 export interface PhusAgentFacade {
+  // ─── Turn lifecycle ───────────────────────────────────────────
   /** Run one inbound envelope through the Bub hook chain. */
   turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn>;
   /** Abort the current turn. */
@@ -101,22 +106,53 @@ export interface PhusAgentFacade {
   /** Queue a follow-up message (runs after current turn finishes). */
   followUp(message: AgentMessage): void;
 
-  // Session control
+  // ─── Session control ───────────────────────────────────────────
   getCurrentSessionId(): SessionId | undefined;
   setNextSessionId(id: SessionId): void;
   reloadSkills(): Promise<void>;
   clearConversation(): Promise<void>;
   compactCurrentSession(): Promise<string>;
   restoreCheckpoint(id: SessionId): Promise<void>;
-  getDiagnostics(): AgentDiagnostics;
 
-  // TUI / live-status — narrow views of the underlying Pi Agent state.
+  // ─── Diagnostics (used by `phus hooks/skills/tape/policy/context`) ─
+  /** Aggregate snapshot — what `phus context` prints. */
+  getDiagnostics(): AgentDiagnostics;
+  /** Hook report — what `phus hooks` prints. */
+  getHookReport(): Record<string, Array<{ priority: number; mode: "first_result" | "chain" | "broadcast" }>>;
+  /** All skills (name + metadata + description). */
+  getAllSkills(): readonly import("@/types/skill.js").Skill[];
+  /** Look up one skill by name. */
+  getSkill(name: string): import("@/types/skill.js").Skill | undefined;
+  /** Active safety policy rules. */
+  getPolicy(): readonly PolicyRule[];
+  /** Tape statistics. */
+  getTapeStats(): { totalEntries: number; sessions: Record<string, number> };
+  /** Replay all entries for a session (Tape-style generator). */
+  replayTape(sessionId?: string): Generator<import("@/types/tape/index.js").TapeEntry>;
+  /** Render a recent-turn summary (used by `,context`). */
+  getTapeSummary(sessionId: SessionId | undefined, limit: number): string;
+
+  // ─── Plugin loading (used by `,reload` / `,plugins`) ───────────
+  /**
+   * Re-discover skills + plugins from disk. Returns a summary line
+   * suitable for `,reload`'s output.
+   */
+  reloadSkillsAndPlugins(channels: ChannelAdapter[]): Promise<{
+    skills: number;
+    plugins: number;
+    pluginStatus: Array<{ name: string; ok: boolean; path: string }>;
+  }>;
+
+  // ─── Live status (TUI / header bar) ───────────────────────────
   /** Subscribe to Pi Agent events (returns an unsubscribe fn). */
   subscribeToAgentEvents(handler: (event: AgentEvent) => void): () => void;
   /** Get the active model label `{provider}/{id}`. */
   getModelLabel(): string;
-  /** Set the active model. Resolves the profile and updates Pi state. */
-  setModel(provider: string, modelId: string): Promise<void>;
+  /** Get the active model's provider and id. */
+  getCurrentModel(): { provider: string; id: string };
+  /** Set the active model by id. The provider is inferred from the
+   *  current profile or `provider` argument. */
+  setModel(modelId: string, provider?: string): Promise<void>;
   /** Get current thinking level. */
   getThinkingLevel(): string;
   /** Set current thinking level. */
@@ -131,6 +167,21 @@ export interface PhusAgentFacade {
   getSessionCount(): number;
   /** Message count in the live Pi conversation. */
   getMessageCount(): number;
+  /** Number of user/assistant messages in the conversation. */
+  getTurnCount(): number;
+  /** Abort the current turn (alias for `abort()` for naming parity). */
+  interrupt(): void;
+  /** Get the underlying mesh (for diagnostic / advanced commands). */
+  getMesh(): MeshLike;
+  /**
+   * Re-load plugins from disk into the live HookRegistry, plus the
+   * supplied channels. Returns a summary suitable for `,reload`.
+   */
+  loadPluginsForReload(channels: ChannelAdapter[]): Promise<{
+    skills: number;
+    plugins: number;
+    pluginStatus: Array<{ name: string; ok: boolean; path: string }>;
+  }>;
 }
 
 /**
@@ -140,17 +191,21 @@ export interface PhusAgentFacade {
  * and get a paired `dispose()` for clean shutdown.
  */
 export class PhusAgent implements PhusAgentFacade {
-  private piAgent: Agent;
-  private tape: Tape;
-  private skills: SkillRegistry;
-  private policy: readonly PolicyRule[];
-  private profile: ProviderProfile;
-  private mesh: MeshLike;
-  private hooks: HookRegistry;
-  private steeringInbox: SteeringInbox;
+  /** Underlying Pi Agent. Internal wiring only — public consumers
+   *  should use the facade methods above. */
+  readonly piAgent: Agent;
+  readonly tape: Tape;
+  readonly skills: SkillRegistry;
+  readonly policy: readonly PolicyRule[];
+  readonly profile: ProviderProfile;
+  readonly mesh: MeshLike;
+  /** Underlying HookRegistry. Internal wiring only — for the
+   *  scheduler + plugin loader + tempHandle contexts. */
+  readonly hooks: HookRegistry;
+  readonly steeringInbox: SteeringInbox;
   private currentSessionId: SessionId | undefined;
   private sessionOverride: SessionId | undefined;
-  private extraChannels: ChannelAdapter[];
+  readonly extraChannels: ChannelAdapter[];
   private autoCompactCfg: AutoCompactConfig;
   private autoCompactEnabled: boolean;
 
@@ -575,6 +630,53 @@ export class PhusAgent implements PhusAgentFacade {
     };
   }
 
+  getHookReport() {
+    return this.hooks.report();
+  }
+
+  getAllSkills() {
+    return this.skills.getAll();
+  }
+
+  getSkill(name: string) {
+    return this.skills.get(name);
+  }
+
+  getPolicy(): readonly PolicyRule[] {
+    return this.policy;
+  }
+
+  getTapeStats() {
+    return this.tape.stats();
+  }
+
+  *replayTape(sessionId?: string): Generator<import("@/types/tape/index.js").TapeEntry> {
+    yield* this.tape.replay(sessionId);
+  }
+
+  getTapeSummary(sessionId: SessionId | undefined, limit: number): string {
+    return this.tape.summary((sessionId as string) ?? "default", limit);
+  }
+
+  async reloadSkillsAndPlugins(channels: ChannelAdapter[]): Promise<{
+    skills: number;
+    plugins: number;
+    pluginStatus: Array<{ name: string; ok: boolean; path: string }>;
+  }> {
+    this.skills.discover();
+    const { loadPlugins } = await import("@/core/plugin.js");
+    const loaded = loadPlugins(this.hooks, channels, { registerRuntime: () => {} });
+    return {
+      skills: this.skills.getAll().length,
+      plugins: loaded.length,
+      pluginStatus: loaded.map((p: any) => ({
+        name: p.name,
+        ok: p.status === "ok",
+        path: p.path,
+      })),
+    };
+  }
+
   // ─── TUI/live-status facade ────────────────────────────────────
 
   subscribeToAgentEvents(handler: (event: AgentEvent) => void): () => void {
@@ -585,12 +687,20 @@ export class PhusAgent implements PhusAgentFacade {
     return `${this.piAgent.state.model.provider}/${this.piAgent.state.model.id}`;
   }
 
-  async setModel(provider: string, modelId: string): Promise<void> {
+  getCurrentModel(): { provider: string; id: string } {
+    return {
+      provider: this.piAgent.state.model.provider,
+      id: this.piAgent.state.model.id,
+    };
+  }
+
+  async setModel(modelId: string, provider?: string): Promise<void> {
     const { getModel } = await import("@mariozechner/pi-ai");
-    const m = getModel(provider as any, modelId as any);
+    const p = provider ?? this.profile.model.split("/", 1)[0]!;
+    const m = getModel(p as any, modelId as any);
     this.piAgent.state.model = m as any;
     // Refresh API key env var so the new model's transport picks it up.
-    resolveApiKey(provider);
+    resolveApiKey(p);
   }
 
   getThinkingLevel(): string {
@@ -621,28 +731,33 @@ export class PhusAgent implements PhusAgentFacade {
     return this.piAgent.state.messages.length;
   }
 
-  /**
-   * Internal handles. Kept as a transitional getter for legacy
-   * callers (CLI / internal-commands / TUI). New code MUST use
-   * the `PhusAgentFacade` methods above.
-   *
-   * @deprecated will be removed after the TUI and CLI migrate to facade methods.
-   */
-  get _internal() {
-    return {
-      hooks: this.hooks,
-      tape: this.tape,
-      skills: this.skills,
-      piAgent: this.piAgent,
-      policy: this.policy,
-      channels: this.extraChannels,
-      mesh: this.mesh,
-      profile: this.profile,
-      steeringInbox: this.steeringInbox,
-      autoCompactCfg: this.autoCompactCfg,
-      autoCompactEnabled: this.autoCompactEnabled,
-    };
+  getTurnCount(): number {
+    return this.piAgent.state.messages.filter(
+      (m) => m.role === "user" || m.role === "assistant",
+    ).length;
   }
+
+  interrupt(): void {
+    this.piAgent.abort();
+    logger.info("turn.interrupted");
+  }
+
+  getMesh(): MeshLike {
+    return this.mesh;
+  }
+
+  async loadPluginsForReload(channels: ChannelAdapter[]): Promise<{
+    skills: number;
+    plugins: number;
+    pluginStatus: Array<{ name: string; ok: boolean; path: string }>;
+  }> {
+    return this.reloadSkillsAndPlugins(channels);
+  }
+
+  // ─── Internal-wiring fields (formerly via `_internal` getter) ───
+  // These are `public readonly` so composition-root code (gateway
+  // bootstrap, scheduler init, plugin loader, makeCtx callers) can
+  // reach them without going through a deprecated getter.
 
   /** Async convenience factory: builds default deps and returns
    *  a `PhusAgentHandle` containing the agent plus a `dispose()`

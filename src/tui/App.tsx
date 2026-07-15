@@ -115,11 +115,11 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     // Bub-style ,foo commands (also accepted in TUI)
     if (trimmed.startsWith(",")) {
       const { execute, initInternalCommands } = await import("@/core/internal-commands/index.js");
-      initInternalCommands(
-        () => agent,
-        () => process.env.PHUS_HOME ?? "./.phus",
-        { mesh: agent._internal.mesh },
-      );
+      initInternalCommands({
+        agent,
+        home: () => process.env.PHUS_HOME ?? "./.phus",
+        mesh: agent.getMesh(),
+      });
       const result = await execute(trimmed, "tui");
       if (result === "__QUIT_TUI__") return "quit";
       if (result === "__CLEAR_TUI__") {
@@ -206,7 +206,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "model": {
-        const current = agent._internal.piAgent.state.model;
+        const current = agent.getCurrentModel();
         if (!arg) {
           setItems((prev) => [
             ...prev,
@@ -222,7 +222,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         try {
           const { getModel } = await import("@mariozechner/pi-ai");
           const next = getModel(provider as any, modelId as any);
-          agent._internal.piAgent.state.model = next;
+          agent.setModel(next.id, next.provider);
           setItems((prev) => [
             ...prev,
             makeSystem(`✓ model switched to ${next.provider}/${next.id}`, "info"),
@@ -236,7 +236,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       case "reasoning": {
         const valid = ["off", "minimal", "low", "medium", "high"];
         if (!arg) {
-          const cur = agent._internal.piAgent.state.thinkingLevel;
+          const cur = agent.getThinkingLevel();
           setItems((prev) => [
             ...prev,
             makeSystem(`current: ${cur}\nset: /reasoning <${valid.join("|")}>`, "info"),
@@ -250,7 +250,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
           ]);
           return;
         }
-        agent._internal.piAgent.state.thinkingLevel = arg as any;
+        agent.setThinkingLevel(arg);
         setItems((prev) => [...prev, makeSystem(`✓ thinking level = ${arg}`, "info")]);
         return;
       }
@@ -275,7 +275,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
           process.env.PHUS_PROFILE = arg;
           // Switch the live agent too
           const next = modelFromProfile(resolveProfile(arg, cfg));
-          agent._internal.piAgent.state.model = next;
+          agent.setModel(next.id, next.provider);
           setItems((prev) => [
             ...prev,
             makeSystem(`✓ switched to profile: ${arg} (${next.provider}/${next.id})`, "info"),
@@ -288,14 +288,11 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
 
       case "reload": {
         try {
-          agent._internal.skills.discover();
-          const { loadPlugins } = await import("@/core/plugin.js");
-          const channels: any[] = [];
-          const loaded = loadPlugins(agent._internal.hooks, channels);
+          const result = await agent.loadPluginsForReload([]);
           setItems((prev) => [
             ...prev,
             makeSystem(
-              `✓ reloaded: ${agent._internal.skills.getAll().length} skills, ${loaded.length} plugins`,
+              `✓ reloaded: ${result.skills} skills, ${result.plugins} plugins`,
               "info",
             ),
           ]);
@@ -306,7 +303,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "sessions": {
-        const s = agent._internal.tape.stats();
+        const s = agent.getTapeStats();
         const list = Object.entries(s.sessions)
           .sort((a, b) => b[1] - a[1])
           .map(([sid, n]) => `  ${sid}  (${n} entries)${sid === sessionId ? "  ← current" : ""}`)
@@ -334,16 +331,16 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "context": {
-        const m = agent._internal.piAgent.state.model;
-        const skills = agent._internal.skills.toPromptContext();
-        const tapeSum = agent._internal.tape.summary(sessionId, 5);
+        const m = agent.getCurrentModel();
+        const skills = agent.getSkillsPrompt();
+        const tapeSum = agent.getTapeSummary(agent.getCurrentSessionId(), 5);
         setItems((prev) => [
           ...prev,
           makeSystem(
             [
               `model: ${m.provider}/${m.id}`,
-              `thinking: ${agent._internal.piAgent.state.thinkingLevel}`,
-              `messages: ${agent._internal.piAgent.state.messages.length}`,
+              `thinking: ${agent.getThinkingLevel()}`,
+              `messages: ${agent.getMessageCount()}`,
               "",
               "── skills ──",
               skills || "(none)",
@@ -358,7 +355,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "forget": {
-        agent._internal.piAgent.state.messages = [];
+        await agent.clearConversation();
         setItems((prev) => [
           ...prev,
           makeSystem("✓ conversation cleared (tape intact)", "info"),
@@ -371,7 +368,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
           setItems((prev) => [...prev, makeSystem("usage: /skill-read <name>", "warn")]);
           return;
         }
-        const skill = agent._internal.skills.get(arg);
+        const skill = agent.getSkill(arg);
         if (!skill) {
           setItems((prev) => [...prev, makeSystem(`skill not found: ${arg}`, "warn")]);
           return;
@@ -448,7 +445,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "interrupt":
-        agent._internal.piAgent.abort();
+        agent.interrupt();
         setItems((prev) => [...prev, makeSystem("✓ current turn aborted", "warn")]);
         return;
 
@@ -464,7 +461,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "new": {
-        agent._internal.piAgent.state.messages = [];
+        await agent.clearConversation();
         setItems([]);
         setItems((prev) => [
           ...prev,
@@ -478,7 +475,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         return;
 
       case "skills": {
-        const list = agent._internal.skills.getAll();
+        const list = agent.getAllSkills();
         if (list.length === 0) {
           setItems((prev) => [...prev, makeSystem("no skills loaded — ask the agent to write one with skill_write", "info")]);
         } else {
@@ -494,7 +491,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "tape": {
-        const s = agent._internal.tape.stats();
+        const s = agent.getTapeStats();
         setItems((prev) => [...prev, makeSystem(JSON.stringify(s, null, 2), "info")]);
         return;
       }
@@ -503,7 +500,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         const n = parseInt(arg, 10) || 5;
         const lines: string[] = [];
         let count = 0;
-        const all = Array.from(agent._internal.tape.replay(sessionId));
+        const all = Array.from(agent.replayTape(sessionId));
         for (let i = all.length - 1; i >= 0 && count < n; i--, count++) {
           const e = all[i]!;
           if (e.kind === "turn") {
@@ -516,19 +513,23 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "compact": {
-        const { compactSession } = await import("@/core/compaction.js");
-        const r = await compactSession(agent._internal.tape, asSessionId(sessionId), {
-          keepRecent: parseInt(arg, 10) || 10,
-        });
-        setItems((prev) => [
-          ...prev,
-          makeSystem(`compacted: summarized=${r.summarized}, kept=${r.keptRecent}`, "info"),
-        ]);
+        try {
+          const sid = agent.getCurrentSessionId();
+          if (!sid) {
+            setItems((prev) => [...prev, makeSystem("no active session to compact", "warn")]);
+            return;
+          }
+          agent.setNextSessionId(sid);
+          const out = await agent.compactCurrentSession();
+          setItems((prev) => [...prev, makeSystem(out, "info")]);
+        } catch (err: any) {
+          setItems((prev) => [...prev, makeSystem(`compact failed: ${err.message}`, "error")]);
+        }
         return;
       }
 
       case "policy": {
-        const rules = agent._internal.policy;
+        const rules = agent.getPolicy();
         setItems((prev) => [
           ...prev,
           makeSystem(

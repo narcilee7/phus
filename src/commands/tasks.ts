@@ -22,8 +22,8 @@ export interface TasksOutput {
 export async function collectTasks(): Promise<TasksOutput> {
   const handle = await PhusAgent.create();
   const { internals } = handle;
-  const model = internals._internal.piAgent.state.model;
-  const tape = internals._internal.tape;
+  const model = internals.getCurrentModel();
+  const tape = internals.tape;
 
   const lastCp = loadLatestCheckpoint(
     tape,
@@ -60,8 +60,8 @@ export async function collectTasks(): Promise<TasksOutput> {
   return {
     agent: {
       model: `${model.provider}/${model.id}`,
-      thinking: String(internals._internal.piAgent.state.thinkingLevel ?? ""),
-      messageCount: internals._internal.piAgent.state.messages.length,
+      thinking: String(internals.getThinkingLevel() ?? ""),
+      messageCount: internals.getMessageCount(),
       lastCheckpoint: lastCp
         ? { ts: lastCp.ts, messages: Array.isArray(lastCp.messages) ? lastCp.messages.length : 0 }
         : undefined,

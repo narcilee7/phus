@@ -86,15 +86,17 @@ program
 
     // B.3: start the scheduler (loads schedules from phus.config.yaml)
     const { Scheduler } = await import("@/core/scheduler.js");
-    const scheduler = new Scheduler(handle.internals._internal.hooks);
+    const scheduler = new Scheduler(handle.internals.hooks);
     // Wire the scheduler + mesh into the internal-commands registry so
     // ,schedule.* and ,mesh reach the live instances without going
     // through module-level singletons.
-    initInternalCommands(
-      () => handle.internals,
-      () => process.env.PHUS_HOME ?? "./.phus",
-      { mesh: handle.internals._internal.mesh, scheduler },
-    );
+    initInternalCommands({
+      agent: handle.agent,
+      home: () => process.env.PHUS_HOME ?? "./.phus",
+      mesh: handle.internals.mesh,
+      scheduler,
+      extraChannels: () => channels,
+    });
     for (const sch of loadSchedulesFromConfig()) {
       try { scheduler.register(sch); } catch (err: any) {
         logger.error("schedule.config_register_failed", { name: sch.name, error: err.message });
@@ -133,7 +135,7 @@ program
   .description("List all registered hooks (diagnostic)")
   .action(async () => {
     const handle = await PhusAgent.create();
-    console.log(JSON.stringify(handle.internals._internal.hooks.report(), null, 2));
+    console.log(JSON.stringify(handle.agent.getHookReport(), null, 2));
     await handle.dispose();
   });
 
@@ -142,7 +144,7 @@ program
   .description("List all discovered skills")
   .action(async () => {
     const handle = await PhusAgent.create();
-    for (const skill of handle.internals._internal.skills.getAll()) {
+    for (const skill of handle.agent.getAllSkills()) {
       console.log(`- ${skill.name} (v${skill.metadata.version ?? "?"}, by ${skill.metadata.author ?? "?"})`);
       console.log(`  ${skill.description}`);
       console.log(`  ${skill.location}`);
@@ -155,8 +157,7 @@ program
   .description("Print tape statistics")
   .action(async () => {
     const handle = await PhusAgent.create();
-    const stats = handle.internals._internal.tape.stats();
-    console.log(JSON.stringify(stats, null, 2));
+    console.log(JSON.stringify(handle.agent.getTapeStats(), null, 2));
     await handle.dispose();
   });
 
@@ -166,7 +167,7 @@ program
   .action(async () => {
     const handle = await PhusAgent.create();
     console.log("Active policy rules:");
-    for (const rule of handle.internals._internal.policy) {
+    for (const rule of handle.agent.getPolicy()) {
       console.log(`  - tool: ${rule.toolName}`);
     }
     console.log("\nDefault file_write roots: ./skills, ./.phus, ./tmp, ./out");
@@ -356,20 +357,20 @@ async function registerPluginCliCommands(program: Command): Promise<void> {
   //    Note: we need a PhusAgent just to access the HookRegistry. We don't
   //    actually start a turn — the agent is created lazily.
   const tempHandle = await PhusAgent.create();
-  initInternalCommands(
-    () => tempHandle.internals,
-    () => process.env.PHUS_HOME ?? "./.phus",
-    { mesh: tempHandle.internals._internal.mesh },
-  );
+  initInternalCommands({
+    agent: tempHandle.agent,
+    home: () => process.env.PHUS_HOME ?? "./.phus",
+    mesh: tempHandle.internals.mesh,
+  });
   const ctx: HookContext = makeCtx({
     // No session — `register_cli_commands` runs at module load,
     // not during a turn. The hook may ignore sessionId if it doesn't care.
     state: {},
-    tape: tempHandle.internals._internal.tape,
-    skills: tempHandle.internals._internal.skills,
+    tape: tempHandle.internals.tape,
+    skills: tempHandle.internals.skills,
     extras: { program },
   });
-  await tempHandle.internals._internal.hooks.execute(
+  await tempHandle.internals.hooks.execute(
     "register_cli_commands",
     ctx,
     "broadcast",
@@ -412,10 +413,10 @@ async function collectChannels(
     // No session — the `provide_channels` hook runs at gateway
     // startup before any user message arrives.
     state: {},
-    tape: agent._internal.tape,
-    skills: agent._internal.skills,
+    tape: agent.tape,
+    skills: agent.skills,
   });
-  const pluginContributions = await agent._internal.hooks.execute<ChannelAdapter[][]>(
+  const pluginContributions = await agent.hooks.execute<ChannelAdapter[][]>(
     "provide_channels",
     ctx,
     "broadcast",

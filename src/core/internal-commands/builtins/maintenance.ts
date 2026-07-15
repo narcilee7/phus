@@ -12,29 +12,20 @@ export function defineMaintenanceCommands(
       name: "reload",
       description: "reload skills and plugins from disk",
       handler: async () => {
-        const agent = services.getAgent() as any;
-        agent._internal.skills.discover();
-        const { loadPlugins } = await import("@/core/plugin.js");
-        const channels: any[] = [];
-        const loaded = loadPlugins(agent._internal.hooks, channels, {
-          registerRuntime: () => {},
-        });
-        return `✓ reloaded: ${agent._internal.skills.getAll().length} skills, ${loaded.length} plugins`;
+        const channels = services.extraChannels?.() ?? [];
+        const { skills, plugins } = await services.agent.reloadSkillsAndPlugins(channels);
+        return `✓ reloaded: ${skills} skills, ${plugins} plugins`;
       },
     },
     {
       name: "plugins",
       description: "list loaded plugins",
       handler: async () => {
-        const { loadPlugins } = await import("@/core/plugin.js");
-        const agent = services.getAgent() as any;
-        const channels: any[] = [];
-        const loaded = loadPlugins(agent._internal.hooks, channels, {
-          registerRuntime: () => {},
-        });
-        if (loaded.length === 0) return "(no plugins loaded)";
-        return loaded
-          .map((p: any) => `  ${p.status === "ok" ? "✓" : "✗"} ${p.name}  ${p.path}`)
+        const channels = services.extraChannels?.() ?? [];
+        const { pluginStatus } = await services.agent.reloadSkillsAndPlugins(channels);
+        if (pluginStatus.length === 0) return "(no plugins loaded)";
+        return pluginStatus
+          .map((p) => `  ${p.ok ? "✓" : "✗"} ${p.name}  ${p.path}`)
           .join("\n");
       },
     },
@@ -42,9 +33,9 @@ export function defineMaintenanceCommands(
       name: "policy",
       description: "show active safety policy",
       handler: async () => {
-        const rules = (services.getAgent() as any)._internal.policy;
+        const rules = services.agent.getPolicy();
         return (
-          `policy rules:\n${rules.map((r: any) => `  - ${r.toolName}`).join("\n")}\n\n` +
+          `policy rules:\n${rules.map((r) => `  - ${r.toolName}`).join("\n")}\n\n` +
           `file_write roots: ./skills, ./.phus, ./tmp, ./out\n` +
           `bash blocklist: rm -rf /, fork bombs, curl|sh, dd, chmod -R 777, mkfs`
         );
@@ -54,17 +45,13 @@ export function defineMaintenanceCommands(
       name: "context",
       description: "show system prompt + skills + tape summary that gets injected",
       handler: async () => {
-        const agent = services.getAgent() as any;
-        const m = agent._internal.piAgent.state.model;
-        const skills = agent._internal.skills.toPromptContext();
-        const tapeSum = agent._internal.tape.summary(
-          agent._currentSessionId ?? "default",
-          5,
-        );
+        const d = services.agent.getDiagnostics();
+        const skills = services.agent.getSkillsPrompt();
+        const tapeSum = services.agent.getTapeSummary(d.sessionId, 5);
         return [
-          `model: ${m.provider}/${m.id}`,
-          `thinking: ${agent._internal.piAgent.state.thinkingLevel}`,
-          `messages: ${agent._internal.piAgent.state.messages.length}`,
+          `model: ${d.modelLabel}`,
+          `thinking: ${d.thinkingLevel}`,
+          `messages: ${d.messageCount}`,
           "",
           "── skills ──",
           skills || "(none)",

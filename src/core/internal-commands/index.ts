@@ -91,35 +91,23 @@ function defaultRegistry(): InternalCommandRegistry {
 
 /** Set the default services used by the shim and (re)register the
  *  built-in command set against the new registry. Idempotent —
- *  repeated calls with the same services pointer are a no-op. */
-export function initInternalCommands(
-  getAgent: () => unknown,
-  getHome: () => string,
-  extras?: { mesh?: import("@/core/provider-mesh/contract.js").MeshLike; scheduler?: unknown },
-): void {
-  const next: InternalCommandServices = {
-    getAgent,
-    getHome,
-    mesh: extras?.mesh,
-    scheduler: extras?.scheduler as any,
-  };
-  if (_defaultServices && servicesEqual(_defaultServices, next)) {
-    // Make sure builtins are still registered (a previous test or
-    // runtime call might have cleared them).
+ *  repeated calls with structurally-equal services are a no-op. */
+export function initInternalCommands(services: InternalCommandServices): void {
+  if (_defaultServices && servicesEqual(_defaultServices, services)) {
     if (!_defaultRegistry) defaultRegistry();
     return;
   }
-  _defaultServices = next;
+  _defaultServices = services;
   _defaultRegistry = undefined;
-  // Pre-warm so the shim works the moment initInternalCommands returns.
   defaultRegistry();
 }
 
 function servicesEqual(a: InternalCommandServices, b: InternalCommandServices): boolean {
-  return a.getAgent === b.getAgent
-    && a.getHome === b.getHome
+  return a.agent === b.agent
+    && a.home === b.home
     && a.mesh === b.mesh
-    && a.scheduler === b.scheduler;
+    && a.scheduler === b.scheduler
+    && a.extraChannels === b.extraChannels;
 }
 
 /** Reset both the default services and the default registry. Tests
