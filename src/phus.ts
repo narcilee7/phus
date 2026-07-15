@@ -7,6 +7,9 @@
 //   phus hooks                      - list registered hooks (diagnostic)
 
 import { Command } from "commander";
+import fs from "node:fs";
+import yaml from "yaml";
+import path from "node:path";
 import { CLIChannel, runOnce } from "./channels/cli.js";
 import { PhusAgent } from "./bridge/pi-agent.js";
 import { bootstrap } from "./core/startup.js";
@@ -76,9 +79,22 @@ program
       logger.info("channel.listening", { channel: ch.name });
     }
 
+    // B.3: start the scheduler (loads schedules from phus.config.yaml)
+    const { Scheduler } = await import("./core/scheduler.js");
+    const { setScheduler } = await import("./core/scheduler-runtime.js");
+    const scheduler = new Scheduler(agent._internal.hooks);
+    setScheduler(scheduler);
+    for (const sch of loadSchedulesFromConfig()) {
+      try { scheduler.register(sch); } catch (err: any) {
+        logger.error("schedule.config_register_failed", { name: sch.name, error: err.message });
+      }
+    }
+    scheduler.start();
+
     // Graceful shutdown on SIGTERM/SIGINT (systemd / docker stop).
     const shutdown = async (sig: string) => {
       logger.info("gateway.shutdown", { signal: sig });
+      scheduler.stop();
       for (const ch of channels) await ch.close?.();
       process.exit(0);
     };
@@ -87,6 +103,7 @@ program
 
     logger.info("gateway.started", {
       channels: channels.map((c) => c.name),
+      schedules: scheduler.list().length,
       pid: process.pid,
     });
   });
@@ -257,6 +274,22 @@ program
       throw err;
     }
   });
+
+/**
+ * B.3: Load schedules from phus.config.yaml::schedules[]
+ */
+function loadSchedulesFromConfig(): any[] {
+  try {
+    const home = process.env.PHUS_HOME ?? "./.phus";
+    const cfgPath = path.join(home, "phus.config.yaml");
+    if (!fs.existsSync(cfgPath)) return [];
+    const cfg = yaml.parse(fs.readFileSync(cfgPath, "utf-8")) as { schedules?: any[] };
+    return cfg?.schedules ?? [];
+  } catch (err: any) {
+    logger.error("schedule.config_load_failed", { error: err.message });
+    return [];
+  }
+}
 
 program.parseAsync(process.argv).catch((err) => {
   console.error("[phus] fatal:", err);
