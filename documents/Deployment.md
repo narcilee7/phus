@@ -1,12 +1,129 @@
 # Deployment
 
-Two production paths: **Docker Compose** (recommended for most) or **systemd** (for bare-metal / VPS).
+Three production paths, ordered by robustness:
 
-Both run `phus gateway` in the foreground and rely on the host's process supervisor to restart on failure.
+1. **Docker Compose + runtime provider mesh** (recommended) — fallback across providers, **no proxy process needed**
+2. **Docker Compose standalone** — Phus alone, multi-provider via profiles (no cross-provider fallback)
+3. **systemd** — bare-metal / VPS, single process
+
+Phus now ships its own runtime **provider mesh** (Phase C). You define multiple endpoints per profile in `phus.config.yaml`, and Phus picks the best one at runtime with failover, circuit breaker, and cost/latency awareness. No LiteLLM, no separate process — same resilience, zero ops.
 
 ---
 
-## Docker Compose
+## Docker Compose standalone (recommended — runtime mesh handles resilience)
+
+Single container, runtime provider mesh handles cross-provider failover.
+
+### What the runtime mesh gives you
+
+| Concern | Handled by |
+|---|---|
+| Provider outage | Auto-failover to next endpoint in profile.mesh |
+| Rate limiting (429) | Per-endpoint retry, then failover |
+| Cost tracking | `phus mesh` shows per-endpoint success/cost |
+| Latency tracking | `phus mesh` shows p95 latency per endpoint |
+| Circuit breaker | Endpoint with N consecutive failures gets isolated for cooldown |
+| Adding new provider | Add endpoint to profile.mesh in phus.config.yaml, no code |
+
+### 1. Configure
+
+```bash
+cp .env.example .env
+# Fill in provider keys:
+#   OPENAI_API_KEY=sk-...
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   DEEPSEEK_API_KEY=ark-...   # for Volcano Ark
+```
+
+### 2. Define a mesh profile in `phus.config.yaml`
+
+```yaml
+providers:
+  profiles:
+    smart-mesh:
+      meshStrategy: failover
+      description: "Sonnet → GPT-4o → Volcano Ark"
+      mesh:
+        - name: claude-sonnet
+          provider: anthropic
+          modelId: claude-sonnet-4-20250514
+          priority: 0
+        - name: gpt-4o
+          provider: openai
+          modelId: gpt-4o
+          priority: 1
+        - name: deepseek-v4-pro
+          provider: openai
+          modelId: deepseek-v4-pro-260425
+          baseUrl: https://ark.cn-beijing.volces.com/api/v3
+          apiKeyEnv: DEEPSEEK_API_KEY
+          priority: 2
+```
+
+### 3. Run
+
+```bash
+docker compose up -d
+docker compose logs -f phus
+```
+
+### 4. Use
+
+```bash
+# Phus handles provider resilience transparently
+phus run "summarize this repo"
+phus tasks
+
+# See live mesh status
+phus
+> ,mesh
+
+# Check from outside
+phus mesh   # (TODO: add CLI command — currently via TUI only)
+```
+
+---
+
+## Docker Compose + LiteLLM proxy (alternative)
+
+For organizations that already run LiteLLM, or need its dashboard (cost / user management / rate limiting per key).
+
+### What LiteLLM adds on top of Phus mesh
+
+| Feature | Phus mesh | LiteLLM |
+|---|---|---|
+| Cross-provider failover | ✅ | ✅ |
+| Circuit breaker | ✅ | ✅ |
+| Per-user API keys | ❌ | ✅ |
+| Cost dashboard | ❌ | ✅ (`http://localhost:4000`) |
+| Caching | ❌ | ✅ |
+| Multiple Phus instances sharing auth | ❌ | ✅ |
+
+If you only need resilience, use Phus mesh alone. If you need user/key management + cost dashboard, run LiteLLM too.
+
+The repo ships `deploy/litellm-config.yaml` and `deploy/litellm.Dockerfile` for this case. The `docker-compose.yml` runs both services.
+
+### When to use LiteLLM
+
+- Multiple users / API keys (LiteLLM mints sub-keys)
+- Need cost dashboard without building one
+- Caching responses across users
+- Shared proxy across multiple Phus instances
+
+### When NOT to use LiteLLM
+
+- Single user, single Phus → runtime mesh is enough
+- Self-hosted air-gapped → adds ops surface for no gain
+- Want Phus to own the resilience logic → mesh does this in-process
+
+---
+
+## systemd (bare-metal)
+
+For deploying Phus on a VPS without Docker. Single-process, runtime mesh still applies.
+
+### 1. Install Phus to `/opt/phus`
+
 
 The repo ships a `docker-compose.yml` that runs Phus as a long-lived gateway.
 

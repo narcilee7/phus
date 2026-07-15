@@ -51,6 +51,74 @@ providers:
       apiKeyEnv: VLLM_API_KEY
       description: self-hosted vLLM endpoint
 
+    # LiteLLM proxy — recommended for production (Phase C)
+    # LiteLLM handles fallback chains, cost tracking, rate limits, observability.
+    # Set baseUrl to your LiteLLM instance (default: localhost:4000).
+    # The "model" must match a model_name in LiteLLM's config.
+    litellm:
+      model: openai/gpt-4o
+      baseUrl: http://localhost:4000/v1
+      apiKeyEnv: LITELLM_MASTER_KEY
+      thinkingLevel: medium
+      description: "via LiteLLM proxy (auto-fallback + cost tracking)"
+
+
+# ─── Provider mesh (Phase C — runtime, no proxy) ──────────────────
+# A profile can declare MULTIPLE endpoints. Phus builds a runtime mesh:
+#   - failover (default): try in priority order
+#   - weighted: round-robin by weight
+#   - cost-first: pick cheapest healthy endpoint
+#   - latency-first: pick lowest-p95-latency endpoint
+# Each endpoint has its own circuit breaker + retry.
+#
+# Use this INSTEAD OF LiteLLM — same resilience, zero extra ops.
+providers:
+  profiles:
+    smart-mesh:
+      meshStrategy: failover
+      thinkingLevel: medium
+      description: "Sonnet primary, GPT-4o fallback, Volcano Ark emergency"
+      mesh:
+        - name: claude-sonnet
+          provider: anthropic
+          modelId: claude-sonnet-4-20250514
+          priority: 0
+          costPerMillion: { input: 3, output: 15 }
+          tags: [premium, west]
+        - name: gpt-4o
+          provider: openai
+          modelId: gpt-4o
+          priority: 1
+          costPerMillion: { input: 2.5, output: 10 }
+          tags: [premium, west]
+        - name: deepseek-v4-pro
+          provider: openai
+          modelId: deepseek-v4-pro-260425
+          baseUrl: https://ark.cn-beijing.volces.com/api/v3
+          apiKeyEnv: DEEPSEEK_API_KEY
+          priority: 2
+          costPerMillion: { input: 0.27, output: 1.1 }
+          tags: [cheap, china]
+
+    cheap-mesh:
+      meshStrategy: cost-first
+      description: "always pick cheapest healthy endpoint"
+      mesh:
+        - name: gpt-4o-mini
+          provider: openai
+          modelId: gpt-4o-mini
+          costPerMillion: { input: 0.15, output: 0.6 }
+        - name: claude-haiku
+          provider: anthropic
+          modelId: claude-3-5-haiku-20241022
+          costPerMillion: { input: 0.8, output: 4 }
+        - name: deepseek-v3
+          provider: openai
+          modelId: deepseek-v3-250324
+          baseUrl: https://ark.cn-beijing.volces.com/api/v3
+          apiKeyEnv: DEEPSEEK_API_KEY
+          costPerMillion: { input: 0.27, output: 1.1 }
+
 
 # ─── Plugins ───────────────────────────────────────────────────
 # Loaded in order. Last entry's `config` is passed to the plugin's

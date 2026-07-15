@@ -1,22 +1,51 @@
-# docker-compose.yml — run Phus as a long-lived gateway.
+# docker-compose.yml — run Phus + LiteLLM as a long-lived gateway.
 # Usage:
+#   cp .env.example .env   # fill in API keys
 #   docker compose up -d
 #   docker compose logs -f phus
+#
+# LiteLLM proxy at http://litellm:4000/v1 — Phus points there for resilience.
+# See deploy/litellm-config.yaml for provider / fallback / cost config.
 
 services:
+  litellm:
+    build:
+      context: .
+      dockerfile: deploy/litellm.Dockerfile
+    image: phus-litellm:local
+    container_name: phus-litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"   # LiteLLM admin UI + proxy
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-master}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health/liveliness"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   phus:
     build: .
     image: phus:local
     container_name: phus
     restart: unless-stopped
+    depends_on:
+      litellm:
+        condition: service_healthy
     ports:
       - "8080:8080"   # WebSocket
     volumes:
       - phus-home:/app/.phus
       - phus-logs:/app/logs
     environment:
-      PHUS_MODEL: ${PHUS_MODEL:-openrouter/deepseek/deepseek-chat-v3}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      # Route everything through LiteLLM proxy
+      PHUS_MODEL: ${PHUS_MODEL:-openai/gpt-4o}
+      PHUS_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-master}
       TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
     healthcheck:
       test: ["CMD", "node", "dist/phus.js", "health"]
