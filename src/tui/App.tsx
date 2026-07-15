@@ -111,8 +111,23 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   }, [agent]);
 
   // ─── Slash commands ────────────────────────────────────────────
-  const runSlash = async (cmd: string): Promise<"quit" | void> => {
+  const runSlash = async (cmd: string): Promise<"quit" | "clear" | void> => {
     const trimmed = cmd.trim();
+    // Bub-style ,foo commands (also accepted in TUI)
+    if (trimmed.startsWith(",")) {
+      const { execute, initInternalCommands } = await import("../core/internal-commands.js");
+      initInternalCommands(() => agent, () => process.env.PHUS_HOME ?? "./.phus");
+      const result = await execute(trimmed, "tui");
+      if (result === "__QUIT_TUI__") return "quit";
+      if (result === "__CLEAR_TUI__") {
+        setItems([]);
+        return;
+      }
+      if (result && result !== "not-a-command") {
+        setItems((prev) => [...prev, makeSystem(result, "info")]);
+      }
+      return;
+    }
     if (!trimmed.startsWith("/")) return;
     const [name, ...rest] = trimmed.slice(1).split(/\s+/);
     const arg = rest.join(" ");

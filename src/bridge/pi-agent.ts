@@ -27,6 +27,7 @@ import { createMetaTools } from "../core/meta.js";
 import { createExternalTools } from "./tools.js";
 import { defaultPolicy, evaluate, type PolicyRule } from "../core/policy.js";
 import { resolveProfile, modelFromProfile, apiKeyForProfile, loadProviderConfig } from "../core/profile.js";
+import { getDefaultInbox, type SteeringInbox } from "../core/steering.js";
 import { logger } from "../core/logger.js";
 import type { ChannelAdapter } from "../channels/base.js";
 
@@ -163,6 +164,23 @@ export class PhusAgent {
 
     this.currentSessionId = sessionId;
     this.piAgent.sessionId = sessionId;
+
+    // 1a. Drain steering inbox (firstresult) — inject any queued messages
+    //     as Pi's steer queue so they interrupt the next LLM call naturally.
+    const inbox = await this.hooks.execute<SteeringInbox>(
+      "provide_steering_inbox",
+      makeCtx({ sessionId, state: {}, tape: this.tape, skills: this.skills }),
+      "firstresult",
+    ) ?? getDefaultInbox();
+    const pending = await inbox.drainMessages();
+    for (const env of pending) {
+      this.piAgent.steer({
+        role: "user",
+        content: [{ type: "text", text: env.content }],
+        timestamp: env.ts,
+      });
+      logger.info("steering.injected", { from: env.from, sessionId });
+    }
 
     // 1b. admit_message (firstresult) — admission control per session.
     //     Default admits all; plugins can return { admit: false, reason }.

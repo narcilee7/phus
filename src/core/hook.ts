@@ -25,7 +25,10 @@ export type HookName =
   | "dispatch_outbound"
   | "save_state"
   | "on_error"
-  | "admit_message";
+  | "admit_message"
+  | "provide_channels"
+  | "register_cli_commands"
+  | "provide_steering_inbox";
 
 /** Context passed to every hook implementation. */
 export interface HookContext {
