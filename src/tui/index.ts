@@ -10,12 +10,14 @@ import { logger } from "../core/logger.js";
 export async function startTui(): Promise<void> {
   const agent = new PhusAgent();
   const sessionId = "tui:user";
+  const model = agent._internal.piAgent.state.model;
+  const modelLabel = `${model.provider}/${model.id}`;
 
   const { waitUntilExit } = render(
-    React.createElement(App, { agent, sessionId }),
+    React.createElement(App, { agent, sessionId, modelLabel }),
   );
 
-  logger.info("tui.started", { sessionId });
+  logger.info("tui.started", { sessionId, model: modelLabel });
   await waitUntilExit();
   logger.info("tui.exited", { sessionId });
 }

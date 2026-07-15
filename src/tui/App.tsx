@@ -1,85 +1,550 @@
 // src/tui/App.tsx
-// Interactive TUI built on ink (React for terminal).
-// Three panes: messages (with streaming), skills + tape status, input.
+// Production-grade interactive TUI built on ink.
 //
-// Slash commands:
-//   /skills            — list skills
-//   /tape              — tape stats
-//   /trace <session>   — last 10 entries
-//   /compact           — compact current session
-//   /help              — show commands
-//   /quit              — exit
+// Three-column layout:
+//   ┌─ Header (model, session, turn count, live status) ──────────┐
+//   │                                                              │
+//   │  chat area (scrollable, last 100 items)                      │
+//   │    user:    ❯ hello                                          │
+//   │    tool:    ⏵ bash  {"command":"ls"}                         │
+//   │              → ✓ 42ms · 3 lines                              │
+//   │    asst:    ⛰ Hi there!  (streamed)                          │
+//   │    sys:     ⚠ tool blocked by policy                         │
+//   │                                                              │
+//   ├─ Input ─────────────────────────────────────────────────────┤
+//   │  ❯ type here...                                              │
+//   └──────────────────────────────────────────────────────────────┘
+//
+// Slash commands: /help, /clear, /skills, /tape, /trace, /compact,
+//                 /policy, /health, /quit
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { PhusAgent } from "../bridge/pi-agent.js";
 
-interface ChatMessage {
-  role: "user" | "assistant" | "system";
-  text: string;
+interface ChatItem {
+  id: string;
+  kind: "user" | "assistant" | "tool_call" | "tool_result" | "system";
   ts: number;
+  text?: string;
+  isStreaming?: boolean;
+  toolName?: string;
+  toolCallId?: string;
+  args?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  durationMs?: number;
+  level?: "info" | "warn" | "error";
 }
 
 interface AppProps {
   agent: PhusAgent;
   sessionId: string;
+  modelLabel: string;
 }
 
-export function App({ agent, sessionId }: AppProps) {
+export function App({ agent, sessionId, modelLabel }: AppProps) {
   const { exit } = useApp();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [items, setItems] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [statusLine, setStatusLine] = useState("");
-  const messagesRef = useRef<ChatMessage[]>([]);
-  messagesRef.current = messages;
+  const [showHint, setShowHint] = useState(true);
+  const [stats, setStats] = useState({ entries: 0, skills: 0, turns: 0 });
+  const [lastOp, setLastOp] = useState<string>("idle");
 
-  // Subscribe to Pi Agent events for streaming text.
+  // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
     const unsub = agent._internal.piAgent.subscribe((event: any) => {
-      if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
-        const delta: string = event.assistantMessageEvent.delta ?? "";
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === "assistant" && Date.now() - last.ts < 1500) {
-            return [...prev.slice(0, -1), { ...last, text: last.text + delta }];
+      switch (event.type) {
+        case "message_update": {
+          const ame = event.assistantMessageEvent;
+          if (ame?.type === "text_delta") {
+            const delta: string = ame.delta ?? "";
+            setItems((prev) => appendDelta(prev, delta));
+          } else if (ame?.type === "thinking_delta") {
+            // skip thinking display for now to avoid clutter
           }
-          return [...prev, { role: "assistant", text: delta, ts: Date.now() }];
-        });
+          break;
+        }
+        case "tool_execution_start":
+          setItems((prev) => upsertToolCall(prev, event));
+          setLastOp(`tool: ${event.toolName}`);
+          break;
+        case "tool_execution_end":
+          setItems((prev) => completeToolCall(prev, event));
+          break;
+        case "agent_end":
+          setItems((prev) => finalizeStreaming(prev));
+          setLastOp("idle");
+          break;
+        case "turn_end":
+          if (event.message?.errorMessage) {
+            setItems((prev) => [
+              ...prev,
+              makeSystem(`error: ${event.message.errorMessage}`, "error"),
+            ]);
+          }
+          break;
       }
     });
     return unsub;
   }, [agent]);
 
-  // Periodic status update.
+  // ─── Live status tick ──────────────────────────────────────────
   useEffect(() => {
     const tick = () => {
       try {
-        const stats = agent._internal.tape.stats();
+        const s = agent._internal.tape.stats();
         const skillCount = agent._internal.skills.getAll().length;
-        setStatusLine(`session=${sessionId}  skills=${skillCount}  tape=${stats.totalEntries} entries`);
+        const sessions = agent._internal.piAgent.state.messages
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .length;
+        setStats({ entries: s.totalEntries, skills: skillCount, turns: sessions });
       } catch {
-        // ignore
+        /* ignore */
       }
     };
     tick();
-    const id = setInterval(tick, 2000);
+    const id = setInterval(tick, 1500);
     return () => clearInterval(id);
-  }, [agent, sessionId]);
+  }, [agent]);
 
+  // ─── Slash commands ────────────────────────────────────────────
+  const runSlash = async (cmd: string): Promise<"quit" | void> => {
+    const trimmed = cmd.trim();
+    if (!trimmed.startsWith("/")) return;
+    const [name, ...rest] = trimmed.slice(1).split(/\s+/);
+    const arg = rest.join(" ");
+
+    switch (name) {
+      case "quit":
+      case "exit":
+        return "quit";
+
+      case "help":
+        setItems((prev) => [
+          ...prev,
+          makeSystem(
+            [
+              "── Runtime ──────────────────────────────────────",
+              "  /model [id]         show or switch model (e.g. /model openai/gpt-4o)",
+              "  /model-list         list known models",
+              "  /reasoning [level]  show or set: off | minimal | low | medium | high",
+              "  /profiles           list provider profiles",
+              "  /reload             reload plugins and skills from disk",
+              "",
+              "── Memory ───────────────────────────────────────",
+              "  /tape               tape statistics",
+              "  /trace [N]          last N turns (default 5)",
+              "  /sessions           list sessions in tape",
+              "  /use <sessionId>    switch active session",
+              "  /compact [N]        compact, keep last N (default 10)",
+              "  /context            show system prompt + skills + tape summary",
+              "  /forget             clear conversation history (keeps tape)",
+              "",
+              "── Skills & Plugins ─────────────────────────────",
+              "  /skills             list skills",
+              "  /skill-read <name>  read a skill body",
+              "  /plugins            list loaded plugins",
+              "",
+              "── Direct execution ─────────────────────────────",
+              "  /bash <cmd>         run shell without AI roundtrip",
+              "  /read <path>        read a file",
+              "",
+              "── Safety & health ──────────────────────────────",
+              "  /policy             show safety policy",
+              "  /health             run health check",
+              "",
+              "── Control ──────────────────────────────────────",
+              "  /interrupt          abort the current turn",
+              "  /retry              retry last prompt",
+              "  /new                start a fresh session",
+              "  /clear              clear chat area",
+              "  /quit               exit",
+            ].join("\n"),
+            "info",
+          ),
+        ]);
+        return;
+
+      case "model-list": {
+        try {
+          const { getProviders, getModels } = await import("@mariozechner/pi-ai");
+          const lines: string[] = [];
+          for (const p of getProviders()) {
+            const models = getModels(p as any);
+            lines.push(`  ${p}:`);
+            for (const m of models.slice(0, 8)) {
+              lines.push(`    - ${m.id}`);
+            }
+            if (models.length > 8) lines.push(`    ... +${models.length - 8} more`);
+          }
+          setItems((prev) => [...prev, makeSystem(lines.join("\n"), "info")]);
+        } catch (err: any) {
+          setItems((prev) => [...prev, makeSystem(`model-list failed: ${err.message}`, "error")]);
+        }
+        return;
+      }
+
+      case "model": {
+        const current = agent._internal.piAgent.state.model;
+        if (!arg) {
+          setItems((prev) => [
+            ...prev,
+            makeSystem(`current: ${current.provider}/${current.id}\nswitch: /model <provider>/<modelId>`, "info"),
+          ]);
+          return;
+        }
+        const [provider, modelId] = arg.split("/", 2);
+        if (!provider || !modelId) {
+          setItems((prev) => [...prev, makeSystem("usage: /model <provider>/<modelId>", "warn")]);
+          return;
+        }
+        try {
+          const { getModel } = await import("@mariozechner/pi-ai");
+          const next = getModel(provider as any, modelId as any);
+          agent._internal.piAgent.state.model = next;
+          setItems((prev) => [
+            ...prev,
+            makeSystem(`✓ model switched to ${next.provider}/${next.id}`, "info"),
+          ]);
+        } catch (err: any) {
+          setItems((prev) => [...prev, makeSystem(`switch failed: ${err.message}`, "error")]);
+        }
+        return;
+      }
+
+      case "reasoning": {
+        const valid = ["off", "minimal", "low", "medium", "high"];
+        if (!arg) {
+          const cur = agent._internal.piAgent.state.thinkingLevel;
+          setItems((prev) => [
+            ...prev,
+            makeSystem(`current: ${cur}\nset: /reasoning <${valid.join("|")}>`, "info"),
+          ]);
+          return;
+        }
+        if (!valid.includes(arg)) {
+          setItems((prev) => [
+            ...prev,
+            makeSystem(`invalid level. allowed: ${valid.join(", ")}`, "warn"),
+          ]);
+          return;
+        }
+        agent._internal.piAgent.state.thinkingLevel = arg as any;
+        setItems((prev) => [...prev, makeSystem(`✓ thinking level = ${arg}`, "info")]);
+        return;
+      }
+
+      case "profiles": {
+        const { formatProfiles, resolveProfile, modelFromProfile, loadProviderConfig } =
+          await import("../core/profile.js");
+        const activeName = process.env.PHUS_PROFILE ?? "(default)";
+        if (!arg) {
+          setItems((prev) => [
+            ...prev,
+            makeSystem(
+              `── Provider profiles ──\n${formatProfiles()}\n\nactive: ${activeName}\nuse: /profiles <name>  to switch for next turn`,
+              "info",
+            ),
+          ]);
+          return;
+        }
+        try {
+          const cfg = loadProviderConfig();
+          resolveProfile(arg, cfg);
+          process.env.PHUS_PROFILE = arg;
+          // Switch the live agent too
+          const next = modelFromProfile(resolveProfile(arg, cfg));
+          agent._internal.piAgent.state.model = next;
+          setItems((prev) => [
+            ...prev,
+            makeSystem(`✓ switched to profile: ${arg} (${next.provider}/${next.id})`, "info"),
+          ]);
+        } catch (err: any) {
+          setItems((prev) => [...prev, makeSystem(`switch failed: ${err.message}`, "error")]);
+        }
+        return;
+      }
+
+      case "reload": {
+        try {
+          agent._internal.skills.discover();
+          const { loadPlugins } = await import("../core/plugin.js");
+          const channels: any[] = [];
+          const loaded = loadPlugins(agent._internal.hooks, channels);
+          setItems((prev) => [
+            ...prev,
+            makeSystem(
+              `✓ reloaded: ${agent._internal.skills.getAll().length} skills, ${loaded.length} plugins`,
+              "info",
+            ),
+          ]);
+        } catch (err: any) {
+          setItems((prev) => [...prev, makeSystem(`reload failed: ${err.message}`, "error")]);
+        }
+        return;
+      }
+
+      case "sessions": {
+        const s = agent._internal.tape.stats();
+        const list = Object.entries(s.sessions)
+          .sort((a, b) => b[1] - a[1])
+          .map(([sid, n]) => `  ${sid}  (${n} entries)${sid === sessionId ? "  ← current" : ""}`)
+          .join("\n");
+        setItems((prev) => [
+          ...prev,
+          makeSystem(`sessions:\n${list || "(none)"}`, "info"),
+        ]);
+        return;
+      }
+
+      case "use": {
+        if (!arg) {
+          setItems((prev) => [...prev, makeSystem("usage: /use <sessionId>", "warn")]);
+          return;
+        }
+        // Switch sessionId at runtime — the agent's piAgent.sessionId is set per turn
+        // but we expose the override via the items header; actual switch on next turn.
+        (agent as any)._sessionOverride = arg;
+        setItems((prev) => [
+          ...prev,
+          makeSystem(`✓ next turn will use session: ${arg}`, "info"),
+        ]);
+        return;
+      }
+
+      case "context": {
+        const m = agent._internal.piAgent.state.model;
+        const skills = agent._internal.skills.toPromptContext();
+        const tapeSum = agent._internal.tape.summary(sessionId, 5);
+        setItems((prev) => [
+          ...prev,
+          makeSystem(
+            [
+              `model: ${m.provider}/${m.id}`,
+              `thinking: ${agent._internal.piAgent.state.thinkingLevel}`,
+              `messages: ${agent._internal.piAgent.state.messages.length}`,
+              "",
+              "── skills ──",
+              skills || "(none)",
+              "",
+              "── recent tape ──",
+              tapeSum || "(empty)",
+            ].join("\n"),
+            "info",
+          ),
+        ]);
+        return;
+      }
+
+      case "forget": {
+        agent._internal.piAgent.state.messages = [];
+        setItems((prev) => [
+          ...prev,
+          makeSystem("✓ conversation cleared (tape intact)", "info"),
+        ]);
+        return;
+      }
+
+      case "skill-read": {
+        if (!arg) {
+          setItems((prev) => [...prev, makeSystem("usage: /skill-read <name>", "warn")]);
+          return;
+        }
+        const skill = agent._internal.skills.get(arg);
+        if (!skill) {
+          setItems((prev) => [...prev, makeSystem(`skill not found: ${arg}`, "warn")]);
+          return;
+        }
+        setItems((prev) => [
+          ...prev,
+          makeSystem(
+            `${skill.name} (v${skill.metadata.version ?? "?"})\n${skill.description}\n\n${skill.body}`,
+            "info",
+          ),
+        ]);
+        return;
+      }
+
+      case "plugins": {
+        setItems((prev) => [
+          ...prev,
+          makeSystem(
+            "plugin system: see `phus plugins-list` outside TUI\n(runtime plugin reload: /reload)",
+            "info",
+          ),
+        ]);
+        return;
+      }
+
+      case "bash": {
+        if (!arg) {
+          setItems((prev) => [...prev, makeSystem("usage: /bash <command>", "warn")]);
+          return;
+        }
+        setBusy(true);
+        setLastOp("bash…");
+        try {
+          const { execFile } = await import("node:child_process");
+          const { promisify } = await import("node:util");
+          const execFileP = promisify(execFile);
+          const out = await execFileP("sh", ["-c", arg], { timeout: 30_000 });
+          setItems((prev) => [
+            ...prev,
+            makeSystem(`$ ${arg}\n${(out.stdout ?? "") + (out.stderr ?? "")}`.trimEnd(), "info"),
+          ]);
+        } catch (err: any) {
+          setItems((prev) => [...prev, makeSystem(`bash failed: ${err.message}`, "error")]);
+        } finally {
+          setBusy(false);
+          setLastOp("idle");
+        }
+        return;
+      }
+
+      case "read": {
+        if (!arg) {
+          setItems((prev) => [...prev, makeSystem("usage: /read <path>", "warn")]);
+          return;
+        }
+        try {
+          const fs = await import("node:fs/promises");
+          const text = await fs.readFile(arg, "utf-8");
+          setItems((prev) => [
+            ...prev,
+            makeSystem(`── ${arg} (${text.length} chars) ──\n${text}`, "info"),
+          ]);
+        } catch (err: any) {
+          setItems((prev) => [...prev, makeSystem(`read failed: ${err.message}`, "error")]);
+        }
+        return;
+      }
+
+      case "interrupt":
+        agent._internal.piAgent.abort();
+        setItems((prev) => [...prev, makeSystem("✓ current turn aborted", "warn")]);
+        return;
+
+      case "retry": {
+        const lastUser = [...items].reverse().find((it) => it.kind === "user");
+        if (!lastUser?.text) {
+          setItems((prev) => [...prev, makeSystem("nothing to retry", "warn")]);
+          return;
+        }
+        // re-submit by calling submit() programmatically
+        setInput(lastUser.text);
+        return;
+      }
+
+      case "new": {
+        agent._internal.piAgent.state.messages = [];
+        setItems([]);
+        setItems((prev) => [
+          ...prev,
+          makeSystem(`✓ fresh session started (id: ${sessionId})`, "info"),
+        ]);
+        return;
+      }
+
+      case "clear":
+        setItems([]);
+        return;
+
+      case "skills": {
+        const list = agent._internal.skills.getAll();
+        if (list.length === 0) {
+          setItems((prev) => [...prev, makeSystem("no skills loaded — ask the agent to write one with skill_write", "info")]);
+        } else {
+          setItems((prev) => [
+            ...prev,
+            makeSystem(
+              list.map((s) => `  ${s.name} (v${s.metadata.version ?? "?"}, by ${s.metadata.author ?? "?"})  ${s.description}`).join("\n"),
+              "info",
+            ),
+          ]);
+        }
+        return;
+      }
+
+      case "tape": {
+        const s = agent._internal.tape.stats();
+        setItems((prev) => [...prev, makeSystem(JSON.stringify(s, null, 2), "info")]);
+        return;
+      }
+
+      case "trace": {
+        const n = parseInt(arg, 10) || 5;
+        const lines: string[] = [];
+        let count = 0;
+        const all = Array.from(agent._internal.tape.replay(sessionId));
+        for (let i = all.length - 1; i >= 0 && count < n; i--, count++) {
+          const e = all[i]!;
+          if (e.kind === "turn") {
+            const u = (e.turn.inbound.content ?? "").slice(0, 60).replace(/\n/g, " ");
+            lines.push(`  [${new Date(e.turn.ts).toISOString().slice(11, 19)}] ${e.turn.inbound.from}: ${u}`);
+          }
+        }
+        setItems((prev) => [...prev, makeSystem(lines.length ? lines.join("\n") : "(empty)", "info")]);
+        return;
+      }
+
+      case "compact": {
+        const { compactSession } = await import("../core/compaction.js");
+        const r = await compactSession(agent._internal.tape, sessionId, {
+          keepRecent: parseInt(arg, 10) || 10,
+        });
+        setItems((prev) => [
+          ...prev,
+          makeSystem(`compacted: summarized=${r.summarized}, kept=${r.keptRecent}`, "info"),
+        ]);
+        return;
+      }
+
+      case "policy": {
+        const rules = agent._internal.policy;
+        setItems((prev) => [
+          ...prev,
+          makeSystem(
+            `policy rules:\n${rules.map((r) => `  - ${r.toolName}`).join("\n")}\n\nfile_write roots: ./skills, ./.phus, ./tmp, ./out\nbash blocklist: rm -rf /, fork bombs, curl|sh, dd, chmod -R 777, mkfs`,
+            "info",
+          ),
+        ]);
+        return;
+      }
+
+      case "health": {
+        const { healthCheck } = await import("../commands/health.js");
+        const h = healthCheck();
+        setItems((prev) => [
+          ...prev,
+          makeSystem(JSON.stringify(h, null, 2), h.ok ? "info" : "warn"),
+        ]);
+        return;
+      }
+
+      default:
+        setItems((prev) => [...prev, makeSystem(`unknown command: /${name}. Try /help.`, "warn")]);
+    }
+  };
+
+  // ─── Submit (Enter) ────────────────────────────────────────────
   const submit = async (text: string) => {
     if (!text.trim() || busy) return;
     setInput("");
+    setShowHint(false);
 
     if (text.startsWith("/")) {
-      const handled = await handleSlash(text, agent, sessionId, setStatusLine, () => setMessages([]));
-      if (handled === "quit") exit();
+      const result = await runSlash(text);
+      if (result === "quit") exit();
       return;
     }
 
     setBusy(true);
-    setMessages((prev) => [...prev, { role: "user", text, ts: Date.now() }]);
+    setLastOp("thinking…");
+    setItems((prev) => [...prev, { id: crypto.randomUUID(), kind: "user", text, ts: Date.now() }]);
+
     try {
       const envelope = {
         id: crypto.randomUUID(),
@@ -90,98 +555,265 @@ export function App({ agent, sessionId }: AppProps) {
         metadata: { chatId: "tui" },
         ts: Date.now(),
       };
-      await agent.turn(envelope, tuiChannel(setMessages));
+      await agent.turn(envelope, tuiChannel(setItems));
     } catch (err: any) {
-      setMessages((prev) => [...prev, { role: "system", text: `error: ${err.message}`, ts: Date.now() }]);
+      setItems((prev) => [...prev, makeSystem(`error: ${err.message ?? err}`, "error")]);
     } finally {
       setBusy(false);
+      setLastOp("idle");
     }
   };
 
+  // ─── Ctrl+C / Ctrl+L shortcuts ────────────────────────────────
+  useInput((input, key) => {
+    if (key.ctrl && input === "c") {
+      if (busy) {
+        agent.abort();
+        setBusy(false);
+        setLastOp("idle");
+        setItems((prev) => [...prev, makeSystem("✓ aborted by user", "warn")]);
+      } else {
+        exit();
+      }
+    }
+    if (key.ctrl && input === "l") setItems([]);
+  });
+
+  // ─── Render ────────────────────────────────────────────────────
   return (
     <Box flexDirection="column">
-      <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
-        <Text bold color="cyan">⛰️  Phus TUI</Text>
-        <Text dimColor>{statusLine}</Text>
-      </Box>
-      <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} minHeight={20}>
-        {messages.slice(-30).map((m, i) => (
-          <Text key={`${m.ts}-${i}`} color={m.role === "user" ? "green" : m.role === "system" ? "red" : "white"}>
-            {m.role === "user" ? "❯ " : m.role === "system" ? "⚠ " : "⛰  "}
-            {m.text}
-          </Text>
+      <Header model={modelLabel} session={sessionId} stats={stats} lastOp={lastOp} />
+      <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} minHeight={20}>
+        {items.slice(-100).map((it) => (
+          <Item key={it.id} item={it} />
         ))}
-        {busy && <Text dimColor>⛰  thinking…</Text>}
+        {busy && (
+          <Text dimColor>
+            <Text color="cyan">⛰  </Text>
+            <Spinner /> thinking…
+          </Text>
+        )}
       </Box>
-      <Box>
-        <Text color="cyan">{busy ? "  " : "❯ "}</Text>
-        <TextInput value={input} onChange={setInput} onSubmit={submit} placeholder="type a message or /help" />
+      <Box borderStyle="round" borderColor="cyan" paddingX={1}>
+        <Text color="cyan">{busy ? "· " : "❯ "}</Text>
+        <TextInput
+          value={input}
+          onChange={setInput}
+          onSubmit={submit}
+          placeholder={showHint ? "type a message, or /help for commands" : ""}
+        />
+      </Box>
+      <Box paddingX={1}>
+        <Text dimColor>
+          {modelLabel} · {stats.skills} skills · {stats.entries} tape entries · Ctrl+C quit · Ctrl+L clear
+        </Text>
       </Box>
     </Box>
   );
 }
 
-async function handleSlash(
-  cmd: string,
-  agent: PhusAgent,
-  sessionId: string,
-  setStatus: (s: string) => void,
-  clear: () => void,
-): Promise<"quit" | "ok" | undefined> {
-  const [name, ...rest] = cmd.slice(1).split(/\s+/);
-  const arg = rest.join(" ");
-  switch (name) {
-    case "quit":
-    case "exit":
-      return "quit";
-    case "help":
-      setStatus("commands: /skills /tape /trace <s> /compact /clear /help /quit");
-      return "ok";
-    case "clear":
-      clear();
-      return "ok";
-    case "skills": {
-      const list = agent._internal.skills.getAll().map((s) => `${s.name} (v${s.metadata.version ?? "?"})`).join(", ");
-      setStatus(`skills: ${list || "(none)"}`);
-      return "ok";
+// ─── Header ─────────────────────────────────────────────────────
+function Header({
+  model,
+  session,
+  stats,
+  lastOp,
+}: {
+  model: string;
+  session: string;
+  stats: { entries: number; skills: number; turns: number };
+  lastOp: string;
+}) {
+  return (
+    <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
+      <Box>
+        <Text bold color="cyan">⛰  Phus</Text>
+        <Text>  ·  </Text>
+        <Text>{model}</Text>
+      </Box>
+      <Text dimColor>
+        session={session} · {stats.skills} skills · {stats.entries} tape entries · {lastOp}
+      </Text>
+    </Box>
+  );
+}
+
+// ─── Item renderer ──────────────────────────────────────────────
+function Item({ item }: { item: ChatItem }) {
+  switch (item.kind) {
+    case "user":
+      return (
+        <Text>
+          <Text color="green">❯ </Text>
+          <Text color="green">{item.text}</Text>
+        </Text>
+      );
+
+    case "assistant":
+      return (
+        <Text wrap="wrap">
+          <Text color="cyan">⛰  </Text>
+          {item.text}
+          {item.isStreaming && <Text color="cyan">▍</Text>}
+        </Text>
+      );
+
+    case "tool_call": {
+      const args = truncate(JSON.stringify(item.args ?? {}), 60);
+      return (
+        <Text wrap="wrap">
+          <Text color="yellow">⏵ </Text>
+          <Text color="yellow">{item.toolName}</Text>
+          <Text dimColor> {args}</Text>
+          {item.isError === undefined && <Text dimColor>  (running…)</Text>}
+        </Text>
+      );
     }
-    case "tape": {
-      const stats = agent._internal.tape.stats();
-      setStatus(`tape: ${JSON.stringify(stats)}`);
-      return "ok";
-    }
-    case "trace": {
-      const sid = arg || sessionId;
-      const lines: string[] = [];
-      for (const e of agent._internal.tape.replay(sid)) {
-        if (e.kind === "turn") {
-          lines.push(`[${new Date(e.turn.ts).toISOString().slice(11, 19)}] ${e.turn.inbound.from}: ${e.turn.inbound.content.slice(0, 60)}`);
-        }
-      }
-      setStatus(`trace ${sid}: ${lines.slice(-5).join(" | ") || "(empty)"}`);
-      return "ok";
-    }
-    case "compact": {
-      const { compactSession } = await import("../core/compaction.js");
-      const r = await compactSession(agent._internal.tape, sessionId, { keepRecent: 10 });
-      setStatus(`compacted: summarized=${r.summarized} kept=${r.keptRecent}`);
-      return "ok";
-    }
-    default:
-      setStatus(`unknown command: /${name}. Try /help.`);
-      return "ok";
+
+    case "tool_result":
+      return (
+        <Text wrap="wrap">
+          <Text>  </Text>
+          {item.isError ? <Text color="red">✗ error</Text> : <Text color="green">✓ ok</Text>}
+          {item.durationMs !== undefined && <Text dimColor>  {item.durationMs}ms</Text>}
+          <Text dimColor>  {truncate(JSON.stringify(item.result ?? ""), 80)}</Text>
+        </Text>
+      );
+
+    case "system":
+      return (
+        <Text wrap="wrap">
+          <Text color={item.level === "error" ? "red" : item.level === "warn" ? "yellow" : "gray"}>
+            {item.level === "error" ? "⚠ " : "· "}
+            {item.text}
+          </Text>
+        </Text>
+      );
   }
 }
 
-// Minimal ChannelAdapter for TUI: appends assistant text into the chat log.
-function tuiChannel(setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>) {
+// ─── Spinner ────────────────────────────────────────────────────
+function Spinner() {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setFrame((f) => (f + 1) % 4), 120);
+    return () => clearInterval(id);
+  }, []);
+  return <Text color="cyan">{["⠋", "⠙", "⠹", "⠸"][frame]}</Text>;
+}
+
+// ─── Item manipulation helpers ──────────────────────────────────
+function makeSystem(text: string, level: "info" | "warn" | "error" = "info"): ChatItem {
+  return { id: crypto.randomUUID(), kind: "system", text, ts: Date.now(), level };
+}
+
+function appendDelta(prev: ChatItem[], delta: string): ChatItem[] {
+  if (!delta) return prev;
+  const last = prev[prev.length - 1];
+  // Append to streaming assistant if the last item is one
+  if (last && last.kind === "assistant" && last.isStreaming) {
+    return [
+      ...prev.slice(0, -1),
+      { ...last, text: (last.text ?? "") + delta },
+    ];
+  }
+  // Otherwise start a new streaming assistant message
+  return [
+    ...prev,
+    { id: crypto.randomUUID(), kind: "assistant", ts: Date.now(), text: delta, isStreaming: true },
+  ];
+}
+
+function finalizeStreaming(prev: ChatItem[]): ChatItem[] {
+  return prev.map((it) =>
+    it.kind === "assistant" && it.isStreaming ? { ...it, isStreaming: false } : it,
+  );
+}
+
+function upsertToolCall(prev: ChatItem[], event: any): ChatItem[] {
+  const id = event.toolCallId;
+  const existing = prev.find((it) => it.kind === "tool_call" && it.toolCallId === id);
+  const call: ChatItem = {
+    id: crypto.randomUUID(),
+    kind: "tool_call",
+    ts: Date.now(),
+    toolName: event.toolName,
+    toolCallId: id,
+    args: event.args,
+  };
+  if (existing) {
+    return prev.map((it) => (it.id === existing.id ? { ...it, args: event.args } : it));
+  }
+  return [...prev, call];
+}
+
+function completeToolCall(prev: ChatItem[], event: any): ChatItem[] {
+  const callId = event.toolCallId;
+  const callIdx = prev.findIndex((it) => it.kind === "tool_call" && it.toolCallId === callId);
+  if (callIdx === -1) return prev;
+  const call = prev[callIdx]!;
+  const result: ChatItem = {
+    id: crypto.randomUUID(),
+    kind: "tool_result",
+    ts: Date.now(),
+    toolCallId: callId,
+    toolName: call.toolName,
+    result: event.result,
+    isError: !!event.isError,
+  };
+  // Mark original call as completed and append result below it.
+  const updated = [...prev];
+  updated[callIdx] = { ...call, isError: event.isError };
+  updated.splice(callIdx + 1, 0, result);
+  return updated;
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+// ─── Channel adapter for TUI ─────────────────────────────────────
+// The TUI is the source of truth for display: subscribe() handles
+// streaming and tool events, channel.send() is a no-op (the final
+// assistant text is already shown via streaming).
+function tuiChannel(
+  setItems: React.Dispatch<React.SetStateAction<ChatItem[]>>,
+): { name: string; listen: () => void; send: (outbounds: any[]) => Promise<void> } {
   return {
     name: "tui",
-    listen() { /* no-op: TUI pushes directly via submit() */ },
-    async send(outbounds: any[]) {
+    listen() {
+      /* no-op */
+    },
+    async send(outbounds) {
+      // Final consolidated outbound — only append if not already shown.
       for (const o of outbounds) {
         if (o.type === "text" && o.content) {
-          setMessages((prev) => [...prev, { role: "assistant", text: o.content, ts: Date.now() }]);
+          setItems((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.kind === "assistant" && last.text === o.content) {
+              // Already shown via streaming — just mark complete
+              return prev.map((it) =>
+                it === last ? { ...it, isStreaming: false } : it,
+              );
+            }
+            if (last?.kind === "assistant" && last.isStreaming) {
+              // Append the final outbound to the streaming message
+              return prev.map((it) =>
+                it === last
+                  ? { ...it, text: (it.text ?? "") + o.content, isStreaming: false }
+                  : it,
+              );
+            }
+            return [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                kind: "assistant" as const,
+                ts: Date.now(),
+                text: o.content,
+              },
+            ];
+          });
         }
       }
     },

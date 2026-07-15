@@ -39,7 +39,9 @@ program
 program
   .command("run <prompt>")
   .description("Run a single prompt and print the response")
-  .action(async (prompt: string) => {
+  .option("-p, --profile <name>", "Use a specific provider profile (overrides PHUS_PROFILE)")
+  .action(async (prompt: string, opts: { profile?: string }) => {
+    if (opts.profile) process.env.PHUS_PROFILE = opts.profile;
     await runOnce(prompt);
   });
 
@@ -138,6 +140,16 @@ program
     }
     console.log("\nDefault file_write roots: ./skills, ./.phus, ./tmp, ./out");
     console.log("Default bash blocklist: rm -rf /, fork bombs, curl|sh, dd if=, chmod -R 777 /, mkfs");
+  });
+
+program
+  .command("profiles")
+  .description("List configured provider profiles")
+  .action(async () => {
+    const { formatProfiles } = await import("./core/profile.js");
+    console.log(formatProfiles());
+    console.log(`\nactive: ${process.env.PHUS_PROFILE ?? "(default)"}`);
+    console.log(`set:    PHUS_PROFILE=<name>  or  phus run --profile <name> "..."`);
   });
 
 program
