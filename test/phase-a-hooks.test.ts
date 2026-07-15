@@ -7,7 +7,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { HookRegistry, makeCtx } from "../src/core/hook.js";
 import { Tape } from "../src/core/tape.js";
-import { SkillRegistry } from "../src/core/skill.js";
+import { SkillRegistry } from "../src/core/skills/skill.js";
 import type { ChannelAdapter } from "../src/channels/base.js";
 
 describe("Phase A.1 provide_channels hook", () => {

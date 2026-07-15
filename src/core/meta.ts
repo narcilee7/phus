@@ -3,9 +3,9 @@
 // write startup.sh, reflect on past turns, query tape stats.
 
 import { Type } from "@mariozechner/pi-ai";
-import type { MetaTool } from "./types.js";
-import type { SkillRegistry } from "./skill.js";
-import type { Tape } from "./tape.js";
+import type { SkillRegistry } from "@/core/skills/skill.js";
+import type { Tape } from "@/core/tape.js";
+import { MetaTool } from "@/types/tool.js";
 
 export function createMetaTools(skills: SkillRegistry, tape: Tape): MetaTool[] {
   return [
@@ -108,7 +108,7 @@ export function createMetaTools(skills: SkillRegistry, tape: Tape): MetaTool[] {
       }),
       execute: async (args) => {
         // Lazy import to avoid circular deps at module load.
-        const { compactSession } = await import("./compaction.js");
+        const { compactSession } = await import("@/core/compaction.js");
         const sessionId = String(args.sessionId ?? "");
         const keepRecent = args.keepRecent ? Number(args.keepRecent) : 10;
         // Use deterministic summarization when invoked from inside the agent

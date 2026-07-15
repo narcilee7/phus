@@ -1,0 +1,12 @@
+{
+  // Recommendations shown by VS Code when this workspace is opened.
+  // Pinned where a major version matters; rest are bare recommendations.
+  "recommendations": [
+    "oxc.oxc-vscode",
+    "vitest.explorer",
+    "editorconfig.editorconfig",
+    "dbaeumer.vscode-eslint"
+  ],
+  // Optional but helpful when working in monorepos / scripts.
+  "unwantedRecommendations": []
+}

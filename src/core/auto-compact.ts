@@ -3,9 +3,9 @@
 //
 // Wired into `before_llm_call` hook so it fires before every LLM call.
 
-import type { Tape } from "./tape.js";
-import { compactSession } from "./compaction.js";
-import { logger } from "./logger.js";
+import type { Tape } from "@/core/tape.js";
+import { compactSession } from "@/core/compaction.js";
+import { logger } from "@/core/logger.js";
 
 export interface AutoCompactConfig {
   /** Max number of messages before triggering. Default: 100. */

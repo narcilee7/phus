@@ -6,9 +6,10 @@
 
 import type { Agent } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
-import type { Tape } from "./tape.js";
-import type { MetaTool, TapeEntry, Turn } from "./types.js";
-import { logger } from "./logger.js";
+import type { Tape } from "@/core/tape.js";
+import type { TapeEntry, Turn } from "@/types/tape/index.js";
+import type { MetaTool } from "@/types/tool.js";
+import { logger } from "@/core/logger.js";
 
 export interface CompactionResult {
   sessionId: string;
@@ -76,6 +77,7 @@ export async function compactSession(
       summary,
       turnIds: toSummarize.map((t) => t.id),
     },
+    args: { summarizedCount: toSummarize.length, keptRecentCount: recentKept.length },
     ts: Date.now(),
   });
 

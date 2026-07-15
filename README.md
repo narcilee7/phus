@@ -122,7 +122,7 @@ export default {
   name: "greet-everyone",
   register(ctx) {
     ctx.hooks.register("resolve_session", async (c) => `greet:${c.envelope?.from ?? "anon"}`, {
-      mode: "firstresult",
+      mode: "first_result",
       priority: 100,
     });
   },

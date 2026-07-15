@@ -1,59 +1,26 @@
-// src/core/hook.ts
-// Bub-style hook registry with three execution modes:
-//   - firstresult: return the first non-null implementation result
+// hook registry with three execution modes:
+//   - first_result: return the first non-null implementation result
 //   - chain:       pipe ctx through each implementation in priority order
 //   - broadcast:   invoke every implementation in parallel, return all results
 //
-// Based on Bub's hookspecs.py semantics.
+import type { Tape } from "@/core/tape.js";
+import type { SkillRegistry } from "@/core/skills/skill.js";
+import { logger } from "@/core/logger.js";
+import {
+  type HookContext,
+  type HookImpl,
+  type HookMode,
+  type HookName,
+  type RegisterOptions,
+  type TapeLike,
+  type SkillRegistryLike,
+} from "@/types/hooks/index.js";
 
-import type { Envelope, State, Skill } from "./types.js";
-import type { Tape } from "./tape.js";
-import type { SkillRegistry } from "./skill.js";
-import { logger } from "./logger.js";
-
-/** Names of hooks supported by Phus. Mirrors Bub's hookspecs.py. */
-export type HookName =
-  | "resolve_session"
-  | "load_state"
-  | "build_prompt"
-  | "system_prompt"
-  | "build_tape_context"
-  | "before_llm_call"
-  | "after_llm_call"
-  | "before_tool_call"
-  | "after_tool_call"
-  | "render_outbound"
-  | "dispatch_outbound"
-  | "save_state"
-  | "on_error"
-  | "admit_message"
-  | "provide_channels"
-  | "register_cli_commands"
-  | "provide_steering_inbox";
-
-/** Context passed to every hook implementation. */
-export interface HookContext {
-  envelope?: Envelope;
-  sessionId: string;
-  state: State;
-  tape: Tape;
-  skills: SkillRegistry;
-  /** Free-form extras (model output, tool call args, etc) — hook-specific. */
-  extras: Record<string, unknown>;
-}
-
-export type HookMode = "firstresult" | "chain" | "broadcast";
-
-export type HookImpl<T = unknown> = (ctx: HookContext) => Promise<T | undefined | null>;
+export type { HookContext, HookMode, HookName, RegisterOptions };
 
 interface RegisteredHook {
   impl: HookImpl<any>;
   priority: number;
-}
-
-export interface RegisterOptions {
-  mode?: HookMode;
-  priority?: number;
 }
 
 export class HookRegistry {
@@ -86,7 +53,7 @@ export class HookRegistry {
     const chain = this.hooks.get(name) ?? [];
     const effective = mode ?? this.modes.get(name) ?? "chain";
 
-    if (effective === "firstresult") {
+    if (effective === "first_result") {
       for (const { impl } of chain) {
         try {
           const r = await impl(ctx);
@@ -149,9 +116,17 @@ export class HookRegistry {
   }
 }
 
-/** Convenience builder for a base HookContext. */
+/**
+ * Convenience builder for a base HookContext. `tape` and `skills` are
+ * accepted as concrete types but stored as their narrow `TapeLike` /
+ * `SkillRegistryLike` interfaces so a context built for a scheduler-fired
+ * hook may legitimately omit them.
+ */
 export function makeCtx(
-  partial: Partial<HookContext> & { tape: Tape; skills: SkillRegistry },
+  partial: Partial<HookContext> & {
+    tape?: Tape | TapeLike;
+    skills?: SkillRegistry | SkillRegistryLike;
+  },
 ): HookContext {
   return {
     envelope: partial.envelope,

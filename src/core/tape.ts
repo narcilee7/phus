@@ -5,7 +5,7 @@
 import Database from "better-sqlite3";
 import * as path from "node:path";
 import * as fs from "node:fs";
-import type { TapeEntry, Turn, State } from "./types.js";
+import type { TapeEntry, Turn, TapeAnchorRef } from "@/types/tape/index.js";
 
 export class Tape {
   private db: Database.Database;
@@ -106,7 +106,7 @@ export class Tape {
   }
 
   /** Load the latest anchor state for a session, if any. */
-  loadAnchor(sessionId: string): { name: string; state: State; ts: number } | undefined {
+  loadAnchor(sessionId: string): TapeAnchorRef | undefined {
     const row = this.db.prepare(
       `SELECT payload FROM tape WHERE session_id = ? AND kind = 'anchor' ORDER BY ts DESC, id DESC LIMIT 1`,
     ).get(sessionId) as { payload: string } | undefined;
@@ -119,5 +119,32 @@ export class Tape {
   /** Close the underlying database (mostly for tests / clean shutdown). */
   close(): void {
     this.db.close();
+  }
+
+  /**
+   * Delete the oldest checkpoint rows for a session, keeping the most
+   * recent `keep`. Returns the number of rows deleted.
+   *
+   * Lives on Tape (not in checkpoint.ts) so we don't open a second
+   * database connection — `better-sqlite3` is single-process per file.
+   */
+  pruneCheckpoints(sessionId: string, keep = 5): number {
+    const rows = this.db.prepare(
+      `SELECT ts FROM tape WHERE session_id = ? AND kind = 'checkpoint' ORDER BY ts DESC, id DESC`,
+    ).all(sessionId) as Array<{ ts: number }>;
+    if (rows.length <= keep) return 0;
+    const toDelete = rows.slice(keep).map((r) => r.ts);
+    const del = this.db.prepare(
+      "DELETE FROM tape WHERE session_id = ? AND kind = 'checkpoint' AND ts = ?",
+    );
+    let deleted = 0;
+    const tx = this.db.transaction((tsList: number[]) => {
+      for (const ts of tsList) {
+        const r = del.run(sessionId, ts);
+        deleted += r.changes;
+      }
+    });
+    tx(toDelete);
+    return deleted;
   }
 }

@@ -2,21 +2,17 @@
 // Structured JSON logger using pino.
 // All output goes to $PHUS_LOG_FILE (default ./logs/phus.jsonl).
 // Use `phus logs` CLI to query.
+//
+// This is the runtime implementation. The `LogLevel` and `LogEvent`
+// types live in `types/logger/` so consumers don't need to import pino.
 
 import pino from "pino";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { LEVELS, type LogLevel } from "@/types/logger/index.js";
 
-const LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"] as const;
-export type LogLevel = (typeof LEVELS)[number];
-
-export interface LogEvent {
-  ts: number;
-  level: LogLevel;
-  event: string;
-  sessionId?: string;
-  [key: string]: unknown;
-}
+export type { LogLevel } from "@/types/logger/index.js";
+export type { LogEvent } from "@/types/logger/index.js";
 
 function logPath(): string {
   const p = process.env.PHUS_LOG_FILE ?? "./logs/phus.jsonl";
@@ -55,8 +51,8 @@ export function log(level: LogLevel, event: string, fields: Record<string, unkno
 export const logger = {
   fatal: (event: string, fields?: Record<string, unknown>) => log("fatal", event, fields),
   error: (event: string, fields?: Record<string, unknown>) => log("error", event, fields),
-  warn:  (event: string, fields?: Record<string, unknown>) => log("warn", event, fields),
-  info:  (event: string, fields?: Record<string, unknown>) => log("info", event, fields),
+  warn: (event: string, fields?: Record<string, unknown>) => log("warn", event, fields),
+  info: (event: string, fields?: Record<string, unknown>) => log("info", event, fields),
   debug: (event: string, fields?: Record<string, unknown>) => log("debug", event, fields),
   trace: (event: string, fields?: Record<string, unknown>) => log("trace", event, fields),
 };

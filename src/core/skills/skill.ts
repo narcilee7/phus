@@ -6,26 +6,35 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "yaml";
-import type { Skill } from "./types.js";
-import { logger } from "./logger.js";
+import { logger } from "@/core/logger.js";
+import { AuthorDefinition } from "@/types/enumTypes/index.js";
+import { Skill } from "@/types/skill.js";
 
 const SKILL_FILE = "SKILL.md";
+const SKILL_DIRS = process.env.PHUS_SKILLS_DIR || "./skills";
+
+type SkillRootSource = "builtin" | "user" | "project"
+
+type RootItem = {
+  dir: string;
+  source: SkillRootSource;
+}
 
 interface Frontmatter {
   name?: string;
   description?: string;
-  author?: "human" | "ai";
+  author?: AuthorDefinition
   version?: string;
   [key: string]: unknown;
 }
 
 export class SkillRegistry {
   private skills = new Map<string, Skill>();
-  private roots: Array<{ dir: string; source: "builtin" | "user" | "project" }>;
+  private roots: Array<RootItem>;
 
   constructor(
-    skillsDir: string | undefined = process.env.PHUS_SKILLS_DIR ?? "./skills",
-    extraRoots: Array<{ dir: string; source: "builtin" | "user" | "project" }> = [],
+    skillsDir: string | undefined = SKILL_DIRS,
+    extraRoots: Array<RootItem> = [],
   ) {
     fs.mkdirSync(skillsDir, { recursive: true });
     this.roots = [
@@ -49,7 +58,7 @@ export class SkillRegistry {
     }
   }
 
-  private loadOne(skillDir: string, source: Skill["source"]): Skill | undefined {
+  private loadOne(skillDir: string, source: SkillRootSource): Skill | undefined {
     const filePath = path.join(skillDir, SKILL_FILE);
     if (!fs.existsSync(filePath)) return undefined;
 
@@ -61,7 +70,7 @@ export class SkillRegistry {
     }
 
     return {
-      name: String(fm.name),
+      name: fm.name,
       description: String(fm.description),
       body,
       location: path.resolve(skillDir),
@@ -90,7 +99,7 @@ export class SkillRegistry {
     const fm: Frontmatter = {
       name: skill.name,
       description: skill.description,
-      author: "ai",
+      author: "phus",
       version: (skill.metadata?.version as string | undefined) ?? "0.1.0",
       ...skill.metadata,
     };

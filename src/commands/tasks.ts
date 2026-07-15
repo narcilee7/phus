@@ -2,10 +2,10 @@
 // `phus tasks` — show active/long-running/scheduled state.
 // Reuses scheduler + tape data, no separate state to maintain.
 
-import { PhusAgent } from "../bridge/pi-agent.js";
-import { getScheduler } from "../core/scheduler-runtime.js";
-import { listCheckpoints, loadLatestCheckpoint } from "../core/checkpoint.js";
-import { nextFires } from "../core/scheduler.js";
+import { PhusAgent } from "@/bridge/pi-agent.js";
+import { getScheduler } from "@/core/scheduler-runtime.js";
+import { listCheckpoints, loadLatestCheckpoint } from "@/core/checkpoint.js";
+import { nextFires } from "@/core/scheduler.js";
 
 export interface TasksOutput {
   agent: {

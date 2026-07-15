@@ -1,4 +1,4 @@
-// src/core/retry.ts
+// src/core/scheduler/retry/index.ts
 // Retry policy with exponential backoff + jitter.
 //
 // Used for:
@@ -10,43 +10,12 @@
 //   - Meta tools (skill_write etc.) — these are local and should be deterministic.
 //   - User errors (bad input, missing file).
 
-import { logger } from "./logger.js";
+import { sleep } from "@/utils/promise.js";
+import { logger } from "@/core/logger.js";
+import { DEFAULT_RETRY } from "@/core/scheduler/retry/constants.js";
+import { RetryAttemptInfo, RetryConfig } from "@/core/scheduler/retry/types.js";
 
-export interface RetryConfig {
-  /** Max number of attempts (including the first). Default: 5. */
-  maxAttempts: number;
-  /** First backoff delay. Default: 1000 ms. */
-  initialDelayMs: number;
-  /** Cap on backoff. Default: 30000 ms. */
-  maxDelayMs: number;
-  /** Backoff multiplier between attempts. Default: 2. */
-  backoffMultiplier: number;
-  /** Add random jitter to delay (avoids thundering herd). Default: true. */
-  jitter: boolean;
-  /** HTTP statuses that should be retried. Default: [408, 425, 429, 500, 502, 503, 504]. */
-  retryableStatuses: number[];
-  /** HTTP statuses that should NOT be retried. Default: [400, 401, 403, 404, 422]. */
-  nonRetryableStatuses: number[];
-  /** Optional callback before each retry. */
-  onRetry?: (info: RetryAttemptInfo) => void;
-}
-
-export interface RetryAttemptInfo {
-  attempt: number;
-  maxAttempts: number;
-  delayMs: number;
-  error: Error;
-}
-
-export const DEFAULT_RETRY: RetryConfig = {
-  maxAttempts: 5,
-  initialDelayMs: 1000,
-  maxDelayMs: 30000,
-  backoffMultiplier: 2,
-  jitter: true,
-  retryableStatuses: [408, 425, 429, 500, 502, 503, 504],
-  nonRetryableStatuses: [400, 401, 403, 404, 422],
-};
+export { DEFAULT_RETRY } from "@/core/scheduler/retry/constants.js";
 
 /** Custom error that carries an HTTP status code (or a code we can decide is retryable). */
 export class HttpError extends Error {
@@ -157,10 +126,6 @@ export async function withRetry<T>(
   }
   // Unreachable, but TS likes exhaustive returns.
   throw lastErr ?? new Error("retry: exhausted");
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 /** Convenience: wrap a fetch-style call with retry. */

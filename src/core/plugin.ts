@@ -1,5 +1,5 @@
 // src/core/plugin.ts
-// File-based plugin discovery (Bub-inspired, lightweight).
+// File-based plugin discovery
 // Plugins live in:
 //   - $PHUS_HOME/plugins/<name>.ts        (user plugins)
 //   - $PHUS_HOME/plugins/<name>/index.ts  (directory style)
@@ -12,42 +12,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createJiti } from "jiti";
 import * as yaml from "yaml";
-import { logger } from "./logger.js";
-import type { HookRegistry } from "./hook.js";
-import type { Skill } from "./types.js";
-import type { ChannelAdapter } from "../channels/base.js";
-
-export interface PluginContext {
-  hooks: HookRegistry;
-  /** Register a skill without writing to disk. */
-  registerSkill: (skill: Skill) => void;
-  /** Register a custom channel. */
-  registerChannel: (channel: ChannelAdapter) => void;
-  /** Add a `,foo` internal command (Bub-style REPL). */
-  registerInternalCommand: (cmd: import("./internal-commands.js").InternalCommand) => void;
-  /** Add a Commander subcommand (called once at startup). */
-  registerCliCommand: (fn: (program: any) => void) => void;
-  /** Plugin's own config slice from phus.config.yaml. */
-  config: unknown;
-}
-
-export interface Plugin {
-  name: string;
-  /** Called once after the plugin is loaded. */
-  register: (ctx: PluginContext) => void | Promise<void>;
-}
-
-export interface LoadedPlugin {
-  name: string;
-  path: string;
-  status: "ok" | "error";
-  error?: string;
-}
-
-export interface PluginLoaderOptions {
-  home?: string;
-  configFile?: string;
-}
+import { logger } from "@/core/logger.js";
+import type { HookRegistry } from "@/core/hook.js";
+import type { ChannelAdapter } from "@/channels/base.js";
+import { LoadedPlugin, Plugin, PluginContext, PluginLoaderOptions } from "@/types/plugins/index.js";
+import { Skill } from "@/types/skill.js";
+import { enqueuePendingCliCommand } from "@/core/plugin/cli-queue.js";
 
 export function loadPlugins(
   hooks: HookRegistry,
@@ -87,12 +57,11 @@ export function loadPlugins(
         registerChannel: (c) => channels.push(c),
         registerInternalCommand: (cmd) => {
           // Lazy import to avoid circular dep
-          import("./internal-commands.js").then((m) => m.register(cmd));
+          import("@/core/internal-commands.js").then((m) => m.register(cmd));
         },
         registerCliCommand: (fn) => {
           // Lazy: collect into a queue; phus.ts drains it at startup
-          (globalThis as any).__phus_pending_cli_commands ||= [];
-          (globalThis as any).__phus_pending_cli_commands.push(fn);
+          enqueuePendingCliCommand(fn);
         },
         config,
       };

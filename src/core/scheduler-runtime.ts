@@ -2,8 +2,8 @@
 // Runtime singleton for the Scheduler — used by ,schedule commands
 // to talk to the same instance running in gateway mode.
 
-import { Scheduler } from "./scheduler.js";
-import type { HookRegistry } from "./hook.js";
+import { Scheduler } from "@/core/scheduler.js";
+import type { HookRegistry } from "@/core/hook.js";
 
 let instance: Scheduler | undefined;
 

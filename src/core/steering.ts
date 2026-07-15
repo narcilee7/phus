@@ -7,16 +7,9 @@
 //   - Plugins: any external source that wants to push a message without
 //     going through a full Channel (e.g., webhook → inbox → agent)
 
-import type { Envelope } from "./types.js";
-import { logger } from "./logger.js";
-
-export interface SteeringInbox {
-  enqueueMessage(envelope: Envelope, reason?: string): Promise<void>;
-  drainMessages(): Promise<Envelope[]>;
-  messageCount(): number;
-  /** Peek without removing (for inspection). */
-  peek(): Envelope[];
-}
+import type { Envelope } from "@/types/channel/index.js";
+import { logger } from "@/core/logger.js";
+import { SteeringEvent, SteeringInbox } from "@/types/steering/index.js";
 
 /**
  * Default SteeringInbox: simple FIFO queue.
@@ -27,18 +20,19 @@ export class PiSteeringInbox implements SteeringInbox {
 
   async enqueueMessage(envelope: Envelope, reason?: string): Promise<void> {
     this.queue.push(envelope);
-    logger.debug("steering.enqueued", {
-      from: envelope.from,
+    this.recordEnqueued(
+      envelope.from,
+      this.queue.length,
       reason,
-      depth: this.queue.length,
-    });
+    )
   }
 
   async drainMessages(): Promise<Envelope[]> {
     if (this.queue.length === 0) return [];
     const drained = this.queue;
     this.queue = [];
-    logger.debug("steering.drained", { count: drained.length });
+    this.queue.length = 0;
+    this.recordDrained(drained.length);
     return drained;
   }
 
@@ -48,6 +42,18 @@ export class PiSteeringInbox implements SteeringInbox {
 
   peek(): Envelope[] {
     return [...this.queue];
+  }
+
+  private recordEnqueued(from: string, depth: number, reason?: string) {
+    logger.debug(SteeringEvent.ENQUEUED, {
+      from: from,
+      reason,
+      depth: depth,
+    });
+  }
+
+  private recordDrained(count: number) {
+    logger.debug(SteeringEvent.DRAINED, { count });
   }
 }
 

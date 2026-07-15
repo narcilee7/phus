@@ -1,9 +1,9 @@
 // src/channels/sse.ts
 // Placeholder SSE channel — stub so gateway --sse can load.
 
-import type { ChannelAdapter } from "./base.js";
-import type { Outbound } from "../core/types.js";
-import { logger } from "../core/logger.js";
+import type { ChannelAdapter } from "@/channels/base.js";
+import type { Outbound } from "@/types/channel/index.js";
+import { logger } from "@/core/logger.js";
 
 export class SSEChannel implements ChannelAdapter {
   readonly name = "sse";

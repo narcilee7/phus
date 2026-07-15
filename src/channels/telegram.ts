@@ -2,9 +2,9 @@
 // Placeholder Telegram channel — stub so gateway --telegram can load.
 // Real implementation requires `npm install telegraf` (not in base deps).
 
-import type { ChannelAdapter } from "./base.js";
-import type { Outbound } from "../core/types.js";
-import { logger } from "../core/logger.js";
+import type { ChannelAdapter } from "@/channels/base.js";
+import type { Outbound } from "@/types/channel/index.js";
+import { logger } from "@/core/logger.js";
 
 export class TelegramChannel implements ChannelAdapter {
   readonly name = "telegram";

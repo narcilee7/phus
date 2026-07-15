@@ -10,8 +10,8 @@
 //   - `phus resume <sessionId>` — load latest checkpoint, restore messages, continue
 //   - `phus run --resume <turnId>` — explicit resume in one-shot mode
 
-import type { Tape } from "./tape.js";
-import { logger } from "./logger.js";
+import type { Tape } from "@/core/tape.js";
+import { logger } from "@/core/logger.js";
 
 export interface CheckpointEntry {
   kind: "checkpoint";
@@ -69,22 +69,10 @@ export function listCheckpoints(tape: Tape, sessionId: string): CheckpointEntry[
   return all.sort((a, b) => b.ts - a.ts);
 }
 
-/** Prune old checkpoints, keeping only the last N per session. */
+/** Prune old checkpoints, keeping only the last N per session. Delegates to
+ *  `Tape#pruneCheckpoints` to avoid opening a second SQLite connection. */
 export function pruneCheckpoints(tape: Tape, sessionId: string, keep: number = 5): number {
-  const all = listCheckpoints(tape, sessionId);
-  if (all.length <= keep) return 0;
-  const toDelete = all.slice(keep);
-  // Use raw DB to delete (Tape doesn't expose a delete method)
-  const Database = require("better-sqlite3");
-  const dbPath = process.env.PHUS_TAPE_DB ?? "./tape.sqlite";
-  const db = new Database(dbPath);
-  let deleted = 0;
-  const del = db.prepare("DELETE FROM tape WHERE session_id = ? AND ts = ? AND kind = 'checkpoint'");
-  for (const cp of toDelete) {
-    const r = del.run(sessionId, cp.ts);
-    deleted += r.changes;
-  }
-  db.close();
+  const deleted = tape.pruneCheckpoints(sessionId, keep);
   logger.debug("checkpoint.pruned", { sessionId, deleted, kept: keep });
   return deleted;
 }

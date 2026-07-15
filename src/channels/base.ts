@@ -2,8 +2,8 @@
 // ChannelAdapter contract — every channel (CLI / Telegram / WebSocket / SSE)
 // implements this so PhusAgent can talk to them uniformly.
 
-import type { Envelope, Outbound } from "../core/types.js";
-import type { PhusAgent } from "../bridge/pi-agent.js";
+import type { Envelope, Outbound } from "@/types/channel/index.js";
+import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 export interface ChannelAdapter {
   readonly name: string;

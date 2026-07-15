@@ -5,7 +5,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { HookRegistry, makeCtx } from "../src/core/hook.js";
 import { Tape } from "../src/core/tape.js";
-import { SkillRegistry } from "../src/core/skill.js";
+import { SkillRegistry } from "../src/core/skills/skill.js";
 
 function tmpCtx() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-iso-"));
@@ -56,13 +56,13 @@ describe("HookRegistry isolation", () => {
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("isolateErrors=true: firstresult skips throws and continues", async () => {
+  it("isolateErrors=true: first_result skips throws and continues", async () => {
     const { ctx, dir, tape } = tmpCtx();
     try {
       const reg = new HookRegistry({ isolateErrors: true });
-      reg.register("x", async () => { throw new Error("boom"); }, { mode: "firstresult", priority: 1 });
-      reg.register("x", async () => "found", { mode: "firstresult", priority: 0 });
-      const r = await reg.execute("x", ctx, "firstresult");
+      reg.register("x", async () => { throw new Error("boom"); }, { mode: "first_result", priority: 1 });
+      reg.register("x", async () => "found", { mode: "first_result", priority: 0 });
+      const r = await reg.execute("x", ctx, "first_result");
       expect(r).toBe("found");
       tape.close();
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }

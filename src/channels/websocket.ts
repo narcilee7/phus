@@ -2,9 +2,9 @@
 // Placeholder WebSocket channel — stub so gateway --websocket can load.
 // Real implementation requires `npm install ws`.
 
-import type { ChannelAdapter } from "./base.js";
-import type { Outbound } from "../core/types.js";
-import { logger } from "../core/logger.js";
+import type { ChannelAdapter } from "@/channels/base.js";
+import type { Outbound } from "@/types/channel/index.js";
+import { logger } from "@/core/logger.js";
 
 export class WebSocketChannel implements ChannelAdapter {
   readonly name = "websocket";

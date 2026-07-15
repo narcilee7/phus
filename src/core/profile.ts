@@ -16,7 +16,7 @@ import * as path from "node:path";
 import yaml from "yaml";
 import { getModel, getEnvApiKey } from "@mariozechner/pi-ai";
 import type { Model } from "@mariozechner/pi-ai";
-import { logger } from "./logger.js";
+import { logger } from "@/core/logger.js";
 
 export interface ProviderProfile {
   name: string;

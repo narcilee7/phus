@@ -7,7 +7,7 @@
 
 import { EventEmitter } from "node:events";
 import { getModel, type Model } from "@mariozechner/pi-ai";
-import { logger } from "./logger.js";
+import { logger } from "@/core/logger.js";
 
 export interface EndpointSpec {
   name: string;

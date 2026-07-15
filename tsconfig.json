@@ -15,7 +15,10 @@
     "sourceMap": true,
     "allowImportingTsExtensions": false,
     "noUncheckedIndexedAccess": true,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -19,21 +19,24 @@ import {
   type AfterToolCallResult,
 } from "@mariozechner/pi-agent-core";
 import { getModel, type Model } from "@mariozechner/pi-ai";
-import type { Envelope, Outbound, Turn } from "../core/types.js";
-import { HookRegistry, makeCtx, type HookContext } from "../core/hook.js";
-import { Tape } from "../core/tape.js";
-import { SkillRegistry } from "../core/skill.js";
-import { createMetaTools } from "../core/meta.js";
-import { createExternalTools } from "./tools.js";
-import { defaultPolicy, evaluate, type PolicyRule } from "../core/policy.js";
-import { resolveProfile, modelFromProfile, apiKeyForProfile, loadProviderConfig } from "../core/profile.js";
-import { getDefaultInbox, type SteeringInbox } from "../core/steering.js";
-import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "../core/auto-compact.js";
-import { saveCheckpoint, loadLatestCheckpoint } from "../core/checkpoint.js";
-import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "../core/provider-mesh.js";
-import { setMesh as setMeshSingleton, buildMesh } from "../core/provider-mesh-runtime.js";
-import { logger } from "../core/logger.js";
-import type { ChannelAdapter } from "../channels/base.js";
+import type { Envelope, Outbound } from "@/types/channel/index.js";
+import type { Turn } from "@/types/tape/index.js";
+import type { MetaTool } from "@/types/tool.js";
+import { HookRegistry, makeCtx, type HookContext } from "@/core/hook.js";
+import { Tape } from "@/core/tape.js";
+import { SkillRegistry } from "@/core/skills/skill.js";
+import { createMetaTools } from "@/core/meta.js";
+import { createExternalTools } from "@/bridge/tools.js";
+import { defaultPolicy, evaluate, type PolicyRule } from "@/core/policy.js";
+import { resolveProfile, modelFromProfile, apiKeyForProfile, loadProviderConfig } from "@/core/profile.js";
+import { getDefaultInbox, PiSteeringInbox } from "@/core/steering.js";
+import type { SteeringInbox } from "@/types/steering/index.js";
+import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/auto-compact.js";
+import { saveCheckpoint, loadLatestCheckpoint } from "@/core/checkpoint.js";
+import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/provider-mesh.js";
+import { setMesh as setMeshSingleton, buildMesh } from "@/core/provider-mesh-runtime.js";
+import { logger } from "@/core/logger.js";
+import type { ChannelAdapter } from "@/channels/base.js";
 
 function resolveModel(): Model<any> {
   const profile = resolveProfile(process.env.PHUS_PROFILE);
@@ -95,24 +98,24 @@ export class PhusAgent {
     // Single-endpoint profiles still work — they just have one endpoint in the mesh.
     const endpoints: EndpointSpec[] = profile.mesh && profile.mesh.length > 0
       ? profile.mesh.map((m) => ({
-          name: m.name,
-          provider: m.provider,
-          modelId: m.modelId,
-          baseUrl: m.baseUrl,
-          apiKeyEnv: m.apiKeyEnv,
-          priority: m.priority,
-          weight: m.weight,
-          costPerMillion: m.costPerMillion,
-          tags: m.tags,
-        }))
+        name: m.name,
+        provider: m.provider,
+        modelId: m.modelId,
+        baseUrl: m.baseUrl,
+        apiKeyEnv: m.apiKeyEnv,
+        priority: m.priority,
+        weight: m.weight,
+        costPerMillion: m.costPerMillion,
+        tags: m.tags,
+      }))
       : [{
-          name: profile.name,
-          provider: profile.model.split("/", 1)[0]!,
-          modelId: profile.modelId ?? profile.model.split("/", 2)[1]!,
-          baseUrl: profile.baseUrl,
-          apiKeyEnv: profile.apiKeyEnv,
-          priority: 0,
-        }];
+        name: profile.name,
+        provider: profile.model.split("/", 1)[0]!,
+        modelId: profile.modelId ?? profile.model.split("/", 2)[1]!,
+        baseUrl: profile.baseUrl,
+        apiKeyEnv: profile.apiKeyEnv,
+        priority: 0,
+      }];
     const meshPolicy: MeshPolicy = { strategy: profile.meshStrategy ?? "failover" };
     const mesh = buildMesh(endpoints, meshPolicy);
     setMeshSingleton(mesh);
@@ -121,17 +124,17 @@ export class PhusAgent {
     const initialEp = mesh.pickEndpoint();
     const initialModel = initialEp
       ? (() => {
-          // Build a Pi Model from the picked endpoint
-          const ep = initialEp.spec;
-          const baseModel = modelFromProfile({
-            ...profile,
-            name: profile.name,
-            model: `${ep.provider}/${ep.modelId}`,
-          });
-          if (ep.baseUrl) baseModel.baseUrl = ep.baseUrl;
-          if (ep.modelId) baseModel.id = ep.modelId;
-          return baseModel;
-        })()
+        // Build a Pi Model from the picked endpoint
+        const ep = initialEp.spec;
+        const baseModel = modelFromProfile({
+          ...profile,
+          name: profile.name,
+          model: `${ep.provider}/${ep.modelId}`,
+        });
+        if (ep.baseUrl) baseModel.baseUrl = ep.baseUrl;
+        if (ep.modelId) baseModel.id = ep.modelId;
+        return baseModel;
+      })()
       : modelFromProfile(profile);
 
     this.piAgent = new Agent({
@@ -191,7 +194,7 @@ export class PhusAgent {
   }
 
   private async loadPluginsAsync(): Promise<void> {
-    const { loadPlugins } = await import("../core/plugin.js");
+    const { loadPlugins } = await import("@/core/plugin.js");
     loadPlugins(this.hooks, this.extraChannels, {
       registerRuntime: () => {
         // Runtime-registered skills are not yet supported (SkillRegistry reads from disk
@@ -207,63 +210,63 @@ export class PhusAgent {
 
     try {
 
-    // 1. resolve_session (firstresult)
-    const baseCtx = makeCtx({ envelope, sessionId: "", state: {}, tape: this.tape, skills: this.skills });
-    sessionId = (await this.hooks.execute<string>(
-      "resolve_session",
-      baseCtx,
-      "firstresult",
-    )) ?? `cli:${envelope.from}`;
+      // 1. resolve_session (first_result)
+      const baseCtx = makeCtx({ envelope, sessionId: "", state: {}, tape: this.tape, skills: this.skills });
+      sessionId = (await this.hooks.execute<string>(
+        "resolve_session",
+        baseCtx,
+        "first_result",
+      )) ?? `cli:${envelope.from}`;
 
-    this.currentSessionId = sessionId;
-    this.piAgent.sessionId = sessionId;
+      this.currentSessionId = sessionId;
+      this.piAgent.sessionId = sessionId;
 
-    // 1a. Drain steering inbox (firstresult) — inject any queued messages
-    //     as Pi's steer queue so they interrupt the next LLM call naturally.
-    const inbox = await this.hooks.execute<SteeringInbox>(
-      "provide_steering_inbox",
-      makeCtx({ sessionId, state: {}, tape: this.tape, skills: this.skills }),
-      "firstresult",
-    ) ?? getDefaultInbox();
-    const pending = await inbox.drainMessages();
-    for (const env of pending) {
-      this.piAgent.steer({
-        role: "user",
-        content: [{ type: "text", text: env.content }],
-        timestamp: env.ts,
-      });
-      logger.info("steering.injected", { from: env.from, sessionId });
-    }
-
-    // 1b. admit_message (firstresult) — admission control per session.
-    //     Default admits all; plugins can return { admit: false, reason }.
-    const admitDecision = (await this.hooks.execute<{ admit?: boolean; reason?: string }>(
-      "admit_message",
-      makeCtx({ envelope, sessionId, state: {}, tape: this.tape, skills: this.skills }),
-      "firstresult",
-    )) ?? { admit: true };
-    if (!admitDecision.admit) {
-      logger.info("turn.rejected", { sessionId, reason: admitDecision.reason });
-      throw new Error(`Message not admitted: ${admitDecision.reason ?? "(no reason)"}`);
-    }
-
-    // 2. load_state (broadcast → merge)
-    const state = (await this.hooks.execute<HookContext[]>(
-      "load_state",
-      makeCtx({ envelope, sessionId, state: {}, tape: this.tape, skills: this.skills }),
-      "broadcast",
-    )) ?? [];
-    const mergedState: Record<string, unknown> = {};
-    for (const partial of state) {
-      if (partial && typeof partial === "object") {
-        Object.assign(mergedState, (partial as HookContext).state ?? partial);
+      // 1a. Drain steering inbox (first_result) — inject any queued messages
+      //     as Pi's steer queue so they interrupt the next LLM call naturally.
+      const inbox = await this.hooks.execute<SteeringInbox>(
+        "provide_steering_inbox",
+        makeCtx({ sessionId, state: {}, tape: this.tape, skills: this.skills }),
+        "first_result",
+      ) ?? getDefaultInbox();
+      const pending = await inbox.drainMessages();
+      for (const env of pending) {
+        this.piAgent.steer({
+          role: "user",
+          content: [{ type: "text", text: env.content }],
+          timestamp: env.ts,
+        });
+        logger.info("steering.injected", { from: env.from, sessionId });
       }
-    }
 
-    // 3. build_prompt — handled by Pi (via transformContext injecting skills+tape),
-    //    but we run the hook chain so plugins can intercept/transform the user msg.
-    const userMsg: AgentMessage = envelope.image
-      ? {
+      // 1b. admit_message (first_result) — admission control per session.
+      //     Default admits all; plugins can return { admit: false, reason }.
+      const admitDecision = (await this.hooks.execute<{ admit?: boolean; reason?: string }>(
+        "admit_message",
+        makeCtx({ envelope, sessionId, state: {}, tape: this.tape, skills: this.skills }),
+        "first_result",
+      )) ?? { admit: true };
+      if (!admitDecision.admit) {
+        logger.info("turn.rejected", { sessionId, reason: admitDecision.reason });
+        throw new Error(`Message not admitted: ${admitDecision.reason ?? "(no reason)"}`);
+      }
+
+      // 2. load_state (broadcast → merge)
+      const state = (await this.hooks.execute<HookContext[]>(
+        "load_state",
+        makeCtx({ envelope, sessionId, state: {}, tape: this.tape, skills: this.skills }),
+        "broadcast",
+      )) ?? [];
+      const mergedState: Record<string, unknown> = {};
+      for (const partial of state) {
+        if (partial && typeof partial === "object") {
+          Object.assign(mergedState, (partial as HookContext).state ?? partial);
+        }
+      }
+
+      // 3. build_prompt — handled by Pi (via transformContext injecting skills+tape),
+      //    but we run the hook chain so plugins can intercept/transform the user msg.
+      const userMsg: AgentMessage = envelope.image
+        ? {
           role: "user",
           content: [
             { type: "text", text: envelope.content || "(image attached)" },
@@ -271,51 +274,51 @@ export class PhusAgent {
           ],
           timestamp: envelope.ts,
         }
-      : {
+        : {
           role: "user",
           content: [{ type: "text", text: envelope.content }],
           timestamp: envelope.ts,
         };
 
-    await this.hooks.execute(
-      "build_prompt",
-      makeCtx({
-        envelope,
-        sessionId,
-        state: mergedState,
-        tape: this.tape,
-        skills: this.skills,
-        extras: { userMessage: userMsg },
-      }),
-      "firstresult",
-    );
+      await this.hooks.execute(
+        "build_prompt",
+        makeCtx({
+          envelope,
+          sessionId,
+          state: mergedState,
+          tape: this.tape,
+          skills: this.skills,
+          extras: { userMessage: userMsg },
+        }),
+        "first_result",
+      );
 
-    // 4. Pi agent loop runs LLM + tool calls (transformContext injects skills/tape per call)
-    await this.piAgent.prompt(userMsg);
+      // 4. Pi agent loop runs LLM + tool calls (transformContext injects skills/tape per call)
+      await this.piAgent.prompt(userMsg);
 
-    // 5. Extract assistant text from final state
-    const lastAssistant = [...this.piAgent.state.messages]
-      .reverse()
-      .find((m) => m.role === "assistant");
-    const modelOutput = extractText(lastAssistant);
+      // 5. Extract assistant text from final state
+      const lastAssistant = [...this.piAgent.state.messages]
+        .reverse()
+        .find((m) => m.role === "assistant");
+      const modelOutput = extractText(lastAssistant);
 
-    // 6. render_outbound (broadcast → merge)
-    const outbounds = (await this.hooks.execute<Outbound[]>(
-      "render_outbound",
-      makeCtx({
-        envelope,
-        sessionId,
-        state: mergedState,
-        tape: this.tape,
-        skills: this.skills,
-        extras: { modelOutput },
-      }),
-      "broadcast",
-    )) ?? [];
+      // 6. render_outbound (broadcast → merge)
+      const outbounds = (await this.hooks.execute<Outbound[]>(
+        "render_outbound",
+        makeCtx({
+          envelope,
+          sessionId,
+          state: mergedState,
+          tape: this.tape,
+          skills: this.skills,
+          extras: { modelOutput },
+        }),
+        "broadcast",
+      )) ?? [];
 
-    const finalOutbounds: Outbound[] = outbounds.length > 0
-      ? outbounds
-      : [
+      const finalOutbounds: Outbound[] = outbounds.length > 0
+        ? outbounds
+        : [
           {
             to: String((envelope.metadata as any).chatId ?? envelope.from),
             content: modelOutput,
@@ -325,45 +328,45 @@ export class PhusAgent {
           },
         ];
 
-    // 7. dispatch_outbound
-    await channel.send(finalOutbounds);
+      // 7. dispatch_outbound
+      await channel.send(finalOutbounds);
 
-    // 8. save_state (broadcast)
-    await this.hooks.execute(
-      "save_state",
-      makeCtx({
-        envelope,
+      // 8. save_state (broadcast)
+      await this.hooks.execute(
+        "save_state",
+        makeCtx({
+          envelope,
+          sessionId,
+          state: mergedState,
+          tape: this.tape,
+          skills: this.skills,
+          extras: { modelOutput, outbounds: finalOutbounds },
+        }),
+        "broadcast",
+      );
+
+      // 9. Record turn to Tape
+      const turn: Turn = {
+        id: crypto.randomUUID(),
+        ts: startedAt,
         sessionId,
-        state: mergedState,
-        tape: this.tape,
-        skills: this.skills,
-        extras: { modelOutput, outbounds: finalOutbounds },
-      }),
-      "broadcast",
-    );
+        inbound: envelope,
+        prompt: envelope.content,
+        modelOutput,
+        toolCalls: this.collectToolCalls(),
+        outbound: finalOutbounds,
+        durationMs: Date.now() - startedAt,
+      };
+      this.tape.append({ kind: "turn", turn });
 
-    // 9. Record turn to Tape
-    const turn: Turn = {
-      id: crypto.randomUUID(),
-      ts: startedAt,
-      sessionId,
-      inbound: envelope,
-      prompt: envelope.content,
-      modelOutput,
-      toolCalls: this.collectToolCalls(),
-      outbound: finalOutbounds,
-      durationMs: Date.now() - startedAt,
-    };
-    this.tape.append({ kind: "turn", turn });
+      logger.info("turn.completed", {
+        sessionId,
+        durationMs: turn.durationMs,
+        toolCallCount: turn.toolCalls.length,
+        outboundCount: finalOutbounds.length,
+      });
 
-    logger.info("turn.completed", {
-      sessionId,
-      durationMs: turn.durationMs,
-      toolCallCount: turn.toolCalls.length,
-      outboundCount: finalOutbounds.length,
-    });
-
-    return turn;
+      return turn;
     } catch (err: any) {
       // on_error hook (broadcast) — observers can react, log, alert, etc.
       await this.hooks.execute(
@@ -388,7 +391,7 @@ export class PhusAgent {
   }
 
   /** Inject skills + tape summary into the system prompt on every LLM call.
-   *  Uses the Bub hook chain: system_prompt (firstresult) → build_tape_context (firstresult).
+   *  Uses the Bub hook chain: system_prompt (first_result) → build_tape_context (first_result).
    *  Plugins can replace either entirely. Default impls compose the standard header.
    *
    *  Also runs auto-compaction here (B.2.5) before rebuilding context. */
@@ -404,20 +407,20 @@ export class PhusAgent {
         this.autoCompactCfg,
       );
     }
-    // 1. system_prompt (firstresult) — base system prompt
+    // 1. system_prompt (first_result) — base system prompt
     let systemPrompt: string;
     const spResult = await this.hooks.execute<string>(
       "system_prompt",
       makeCtx({ sessionId: this.currentSessionId ?? "", state: {}, tape: this.tape, skills: this.skills }),
-      "firstresult",
+      "first_result",
     );
     systemPrompt = spResult ?? SYSTEM_PROMPT_HEADER;
 
-    // 2. build_tape_context (firstresult) — dynamic context block (skills + tape)
+    // 2. build_tape_context (first_result) — dynamic context block (skills + tape)
     const ctxResult = await this.hooks.execute<string>(
       "build_tape_context",
       makeCtx({ sessionId: this.currentSessionId ?? "", state: {}, tape: this.tape, skills: this.skills }),
-      "firstresult",
+      "first_result",
     );
     let dynamicContext: string;
     if (ctxResult) {
@@ -437,7 +440,7 @@ export class PhusAgent {
           : Array.isArray(query)
             ? query.filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ")
             : "";
-        const { selectRelevantTurns } = await import("../core/context-select.js");
+        const { selectRelevantTurns } = await import("@/core/context-select.js");
         const relevant = selectRelevantTurns(this.tape, this.currentSessionId, queryText);
         tapeSummary = relevant
           .map((t) => {
@@ -560,7 +563,7 @@ export class PhusAgent {
         const chatId = (env.metadata as any).chatId ?? env.from ?? "default";
         return `${channel}:${chatId}`;
       },
-      { mode: "firstresult", priority: 0 },
+      { mode: "first_result", priority: 0 },
     );
 
     this.hooks.register(
@@ -641,7 +644,7 @@ function extractText(msg: AgentMessage | undefined): string {
 }
 
 /** Convert a MetaTool into an AgentTool. */
-function toAgentTool(meta: import("../core/types.js").MetaTool): AgentTool {
+function toAgentTool(meta: MetaTool): AgentTool {
   return {
     name: meta.name,
     label: meta.name,

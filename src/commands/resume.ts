@@ -1,12 +1,12 @@
 // src/commands/resume.ts
 // `phus resume <sessionId>` — load the latest checkpoint and continue the turn.
 
-import { PhusAgent } from "../bridge/pi-agent.js";
-import { loadLatestCheckpoint, listCheckpoints } from "../core/checkpoint.js";
-import { CLIChannel } from "../channels/cli.js";
-import { ExitCode, CliExit } from "../core/exit-codes.js";
-import { makeTextEnvelope } from "../channels/base.js";
-import { logger } from "../core/logger.js";
+import { PhusAgent } from "@/bridge/pi-agent.js";
+import { loadLatestCheckpoint, listCheckpoints } from "@/core/checkpoint.js";
+import { CLIChannel } from "@/channels/cli.js";
+import { ExitCode, CliExit } from "@/core/exit-codes.js";
+import { makeTextEnvelope } from "@/channels/base.js";
+import { logger } from "@/core/logger.js";
 
 export async function resumeSession(sessionId: string, prompt: string): Promise<void> {
   const agent = new PhusAgent();

@@ -194,7 +194,7 @@ Skills registered this way are visible in `phus skills` and injected into the sy
 
 | Mode | Semantics | When to use |
 |---|---|---|
-| `"firstresult"` | Return first non-null/undefined result | `resolve_session`, `build_prompt`, admission decisions |
+| `"first_result"` | Return first non-null/undefined result | `resolve_session`, `build_prompt`, admission decisions |
 | `"chain"` | Pipe ctx through implementations in priority order (highest first) | Observability, transforms (most common) |
 | `"broadcast"` | Invoke all in parallel, collect all results | `load_state`, `save_state`, `render_outbound`, `dispatch_outbound` |
 

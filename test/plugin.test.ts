@@ -26,7 +26,7 @@ describe("plugin loader", () => {
 export default {
   name: "my-plugin",
   register(ctx) {
-    ctx.hooks.register("test_hook", async () => "hello", { mode: "firstresult" });
+    ctx.hooks.register("test_hook", async () => "hello", { mode: "first_result" });
   },
 };`,
     );
@@ -40,7 +40,7 @@ export default {
     expect(loaded[0]?.status).toBe("ok");
 
     const ctx = { sessionId: "s", state: {}, tape: {} as any, skills: {} as any, extras: {} };
-    const r = await hooks.execute("test_hook", ctx, "firstresult");
+    const r = await hooks.execute("test_hook", ctx, "first_result");
     expect(r).toBe("hello");
   });
 

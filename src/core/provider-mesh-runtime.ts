@@ -1,8 +1,8 @@
 // src/core/provider-mesh-runtime.ts
 // Singleton for the runtime ProviderMesh, so `,mesh` command can read its stats.
 
-import { ProviderMesh, type MeshPolicy } from "./provider-mesh.js";
-import { logger } from "./logger.js";
+import { ProviderMesh, type MeshPolicy } from "@/core/provider-mesh.js";
+import { logger } from "@/core/logger.js";
 
 let instance: ProviderMesh | undefined;
 

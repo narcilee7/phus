@@ -21,7 +21,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import TextInput from "ink-text-input";
-import type { PhusAgent } from "../bridge/pi-agent.js";
+import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 interface ChatItem {
   id: string;
@@ -115,7 +115,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     const trimmed = cmd.trim();
     // Bub-style ,foo commands (also accepted in TUI)
     if (trimmed.startsWith(",")) {
-      const { execute, initInternalCommands } = await import("../core/internal-commands.js");
+      const { execute, initInternalCommands } = await import("@/core/internal-commands.js");
       initInternalCommands(() => agent, () => process.env.PHUS_HOME ?? "./.phus");
       const result = await execute(trimmed, "tui");
       if (result === "__QUIT_TUI__") return "quit";
@@ -254,7 +254,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
 
       case "profiles": {
         const { formatProfiles, resolveProfile, modelFromProfile, loadProviderConfig } =
-          await import("../core/profile.js");
+          await import("@/core/profile.js");
         const activeName = process.env.PHUS_PROFILE ?? "(default)";
         if (!arg) {
           setItems((prev) => [
@@ -286,7 +286,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       case "reload": {
         try {
           agent._internal.skills.discover();
-          const { loadPlugins } = await import("../core/plugin.js");
+          const { loadPlugins } = await import("@/core/plugin.js");
           const channels: any[] = [];
           const loaded = loadPlugins(agent._internal.hooks, channels);
           setItems((prev) => [
@@ -395,7 +395,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "tasks": {
-        const { collectTasks, renderTasks } = await import("../commands/tasks.js");
+        const { collectTasks, renderTasks } = await import("@/commands/tasks.js");
         setItems((prev) => [...prev, makeSystem(renderTasks(collectTasks()), "info")]);
         return;
       }
@@ -512,7 +512,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "compact": {
-        const { compactSession } = await import("../core/compaction.js");
+        const { compactSession } = await import("@/core/compaction.js");
         const r = await compactSession(agent._internal.tape, sessionId, {
           keepRecent: parseInt(arg, 10) || 10,
         });
@@ -536,7 +536,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
 
       case "health": {
-        const { healthCheck } = await import("../commands/health.js");
+        const { healthCheck } = await import("@/commands/health.js");
         const h = healthCheck();
         setItems((prev) => [
           ...prev,

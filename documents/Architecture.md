@@ -56,7 +56,7 @@ Phus is for **long-running personal agents that share your environment**. Not de
 - `beforeToolCall` / `afterToolCall` — runs the policy check and writes audit entries
 
 **Core** is where Phus's identity lives:
-- **HookRegistry** — Bub-style hook chain (firstresult / chain / broadcast)
+- **HookRegistry** — Bub-style hook chain (first_result / chain / broadcast)
 - **Tape** — SQLite-backed append-only log, one row per kind (turn / tool_call / tool_result / anchor / error)
 - **SkillRegistry** — Agent Skills standard `SKILL.md` discovery
 - **Policy** — operator-equivalence allowlist (file_write roots, bash blocklist)
@@ -71,13 +71,13 @@ Every inbound message walks the same path (Bub's `process_inbound`):
 Channel → Envelope
        │
        ▼
-  resolve_session     (firstresult hook)
+  resolve_session     (first_result hook)
        │
        ▼
   load_state          (broadcast hook)
        │
        ▼
-  build_prompt        (firstresult hook)
+  build_prompt        (first_result hook)
        │
        ▼
   Pi Agent loop       (LLM + tool calls, transformContext injects skills+tape)
@@ -147,7 +147,7 @@ Phus is not a fresh invention. It composes three open-source projects, each cont
 
 **What we copied:**
 - The **hook chain** (`resolve_session → load_state → build_prompt → run_model → save_state → render_outbound → dispatch_outbound`) — adopted verbatim in `PhusAgent.turn()`.
-- The **three hook modes**: `firstresult` (first non-null wins), `call_many` / `broadcast` (all implementations run, results collected), and Phus's extension `chain` (output becomes next input).
+- The **three hook modes**: `first_result` (first non-null wins), `call_many` / `broadcast` (all implementations run, results collected), and Phus's extension `chain` (output becomes next input).
 - The **Tape context** philosophy — context is rebuilt from append-only records, not carried as mutable session state. Easier to inspect, replay, hand off.
 - The **operator-equivalence stance** — humans and agents share the same runtime boundaries, audit trail, and handoff model. No framework-only shortcuts.
 - The **Agent Skills standard** skill format — one skill = one directory + `SKILL.md` + YAML frontmatter.

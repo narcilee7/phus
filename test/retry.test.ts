@@ -1,6 +1,6 @@
 // test/retry.test.ts
 import { describe, expect, it, vi } from "vitest";
-import { withRetry, shouldRetry, computeDelay, parseRetryAfter, HttpError, DEFAULT_RETRY } from "../src/core/retry.js";
+import { withRetry, shouldRetry, computeDelay, parseRetryAfter, HttpError, DEFAULT_RETRY } from "../src/core/scheduler/retry/index.js";
 
 describe("HttpError", () => {
   it("carries status + retry-after", () => {

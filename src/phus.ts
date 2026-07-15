@@ -10,18 +10,19 @@ import { Command } from "commander";
 import fs from "node:fs";
 import yaml from "yaml";
 import path from "node:path";
-import { CLIChannel, runOnce } from "./channels/cli.js";
-import { PhusAgent } from "./bridge/pi-agent.js";
-import { bootstrap } from "./core/startup.js";
-import { traceSession } from "./commands/trace.js";
-import { logger } from "./core/logger.js";
-import { tailLogs } from "./commands/logs.js";
-import { healthCheck } from "./commands/health.js";
-import { resumeSession } from "./commands/resume.js";
-import { collectTasks, renderTasks } from "./commands/tasks.js";
-import { ExitCode, CliExit } from "./core/exit-codes.js";
-import { makeCtx, type HookContext } from "./core/hook.js";
-import type { ChannelAdapter } from "./channels/base.js";
+import { CLIChannel, runOnce } from "@/channels/cli.js";
+import { PhusAgent } from "@/bridge/pi-agent.js";
+import { bootstrap } from "@/core/startup.js";
+import { traceSession } from "@/commands/trace.js";
+import { logger } from "@/core/logger.js";
+import { tailLogs } from "@/commands/logs.js";
+import { healthCheck } from "@/commands/health.js";
+import { resumeSession } from "@/commands/resume.js";
+import { collectTasks, renderTasks } from "@/commands/tasks.js";
+import { ExitCode, CliExit } from "@/core/exit-codes.js";
+import { makeCtx, type HookContext } from "@/core/hook.js";
+import type { ChannelAdapter } from "@/channels/base.js";
+import { drainPendingCliCommands } from "@/core/plugin/cli-queue.js";
 
 const program = new Command();
 
@@ -32,7 +33,7 @@ program
 
 // Default action: launch the TUI (interactive mode).
 program.action(async () => {
-  const { startTui } = await import("./tui/index.js");
+  const { startTui } = await import("@/tui/index.js");
   await startTui();
 });
 
@@ -40,7 +41,7 @@ program
   .command("chat")
   .description("Alias for `phus tui` — launch the interactive TUI")
   .action(async () => {
-    const { startTui } = await import("./tui/index.js");
+    const { startTui } = await import("@/tui/index.js");
     await startTui();
   });
 
@@ -81,8 +82,8 @@ program
     }
 
     // B.3: start the scheduler (loads schedules from phus.config.yaml)
-    const { Scheduler } = await import("./core/scheduler.js");
-    const { setScheduler } = await import("./core/scheduler-runtime.js");
+    const { Scheduler } = await import("@/core/scheduler.js");
+    const { setScheduler } = await import("@/core/scheduler-runtime.js");
     const scheduler = new Scheduler(agent._internal.hooks);
     setScheduler(scheduler);
     for (const sch of loadSchedulesFromConfig()) {
@@ -168,7 +169,7 @@ program
   .command("profiles")
   .description("List configured provider profiles")
   .action(async () => {
-    const { formatProfiles } = await import("./core/profile.js");
+    const { formatProfiles } = await import("@/core/profile.js");
     console.log(formatProfiles());
     console.log(`\nactive: ${process.env.PHUS_PROFILE ?? "(default)"}`);
     console.log(`set:    PHUS_PROFILE=<name>  or  phus run --profile <name> "..."`);
@@ -178,10 +179,10 @@ program
   .command("plugins-list")
   .description("List discovered plugins from $PHUS_HOME/plugins and phus.config.yaml")
   .action(async () => {
-    const { loadPlugins } = await import("./core/plugin.js");
-    const { HookRegistry } = await import("./core/hook.js");
+    const { loadPlugins } = await import("@/core/plugin.js");
+    const { HookRegistry } = await import("@/core/hook.js");
     const hooks = new HookRegistry();
-    const channels: import("./channels/base.js").ChannelAdapter[] = [];
+    const channels: import("@/channels/base.js").ChannelAdapter[] = [];
     const loaded = loadPlugins(hooks, channels);
     if (loaded.length === 0) {
       console.log("No plugins found.");
@@ -236,8 +237,8 @@ program
   .description("Compact a session's tape: summarize old turns into an anchor")
   .option("-k, --keep-recent <n>", "How many recent turns to keep", "10")
   .action(async (sessionId: string, opts: { keepRecent: string }) => {
-    const { compactSession } = await import("./core/compaction.js");
-    const { Tape } = await import("./core/tape.js");
+    const { compactSession } = await import("@/core/compaction.js");
+    const { Tape } = await import("@/core/tape.js");
     const tape = new Tape(process.env.PHUS_TAPE_DB ?? "./tape.sqlite");
     const result = await compactSession(tape, sessionId, {
       keepRecent: parseInt(opts.keepRecent, 10),
@@ -266,7 +267,7 @@ program
   .command("tui")
   .description("Launch the interactive ink-based TUI")
   .action(async () => {
-    const { startTui } = await import("./tui/index.js");
+    const { startTui } = await import("@/tui/index.js");
     await startTui();
   });
 
@@ -316,14 +317,18 @@ program.parseAsync(process.argv).catch((err) => {
  * earlier (during phus.ts bootstrap) still register commands.
  */
 async function registerPluginCliCommands(program: Command): Promise<void> {
-  // 1. Drain queue (set by PluginContext.registerCliCommand during plugin load)
-  const pending = ((globalThis as any).__phus_pending_cli_commands as Array<(p: any) => void>) ?? [];
-  for (const fn of pending) {
-    try { fn(program); } catch (err) {
-      logger.error("plugin.cli_command_failed", { error: (err as Error).message });
-    }
+  // 1. Drain queue (set by PluginContext.registerCliCommand during plugin load).
+  //    `drainPendingCliCommands` empties the queue itself; failures bubble,
+  //    so we catch and log here with the plugin context.
+  const beforeCount = (await import("@/core/plugin/cli-queue.js"))._pendingCliCommandCount();
+  try {
+    drainPendingCliCommands(program);
+  } catch (err) {
+    logger.error("plugin.cli_command_failed", {
+      count: beforeCount,
+      error: (err as Error).message,
+    });
   }
-  (globalThis as any).__phus_pending_cli_commands = [];
 
   // 2. Run the hook (plugins that prefer the hook over the convenience API)
   //    Note: we need a PhusAgent just to access the HookRegistry. We don't
@@ -357,7 +362,7 @@ async function collectChannels(
 
   // CLI flags first (hardcoded)
   if (opts.telegram) {
-    const { TelegramChannel } = await import("./channels/telegram.js");
+    const { TelegramChannel } = await import("@/channels/telegram.js");
     const token = process.env.TELEGRAM_TOKEN;
     if (!token) {
       console.error("[phus] TELEGRAM_TOKEN not set");
@@ -366,11 +371,11 @@ async function collectChannels(
     channels.push(new TelegramChannel(token));
   }
   if (opts.websocket) {
-    const { WebSocketChannel } = await import("./channels/websocket.js");
+    const { WebSocketChannel } = await import("@/channels/websocket.js");
     channels.push(new WebSocketChannel(parseInt(opts.websocket, 10)));
   }
   if (opts.sse) {
-    const { SSEChannel } = await import("./channels/sse.js");
+    const { SSEChannel } = await import("@/channels/sse.js");
     channels.push(new SSEChannel(parseInt(opts.sse, 10)));
   }
 

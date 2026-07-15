@@ -9,7 +9,7 @@
 //
 // Commands are registered globally. Plugins can add via ctx.registerInternalCommand.
 
-import { logger } from "./logger.js";
+import { logger } from "@/core/logger.js";
 
 export interface InternalCommandContext {
   args: Record<string, string>;
@@ -23,8 +23,9 @@ export interface InternalCommand {
   description: string;
   /** Example usage, e.g. "[n=5]" or "name=<n>". */
   usage?: string;
-  /** Execute the command. Return a string to print, or null for silent success. */
-  handler: (ctx: InternalCommandContext) => Promise<string | null>;
+  /** Execute the command. Return a string to print, null for silent success.
+   *  May be sync or async. */
+  handler: (ctx: InternalCommandContext) => string | null | Promise<string | null>;
 }
 
 const registry = new Map<string, InternalCommand>();
@@ -276,7 +277,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     description: "compact current session, keeping the most recent N turns",
     usage: "[keep=10]",
     handler: async ({ args, surface }) => {
-      const { compactSession } = await import("./compaction.js");
+      const { compactSession } = await import("@/core/compaction.js");
       const keep = parseInt(args.keep ?? "10", 10) || 10;
       const agent = getAgent() as any;
       const sid = agent._sessionOverride ?? agent._currentSessionId ?? "default";
@@ -328,7 +329,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     handler: async () => {
       const agent = getAgent();
       agent._internal.skills.discover();
-      const { loadPlugins } = await import("./plugin.js");
+      const { loadPlugins } = await import("@/core/plugin.js");
       const channels: any[] = [];
       const loaded = loadPlugins(agent._internal.hooks, channels, {
         registerRuntime: () => {},
@@ -342,7 +343,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     name: "plugins",
     description: "list loaded plugins",
     handler: async () => {
-      const { loadPlugins } = await import("./plugin.js");
+      const { loadPlugins } = await import("@/core/plugin.js");
       const hooks = getAgent()._internal.hooks;
       const channels: any[] = [];
       const loaded = loadPlugins(hooks, channels, { registerRuntime: () => {} });
@@ -356,7 +357,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     name: "schedule.list",
     description: "list all registered schedules",
     handler: async () => {
-      const { getScheduler } = await import("./scheduler-runtime.js");
+      const { getScheduler } = await import("@/core/scheduler-runtime.js");
       const sched = getScheduler();
       if (!sched) return "(scheduler not initialized — only runs in gateway mode)";
       const list = sched.list();
@@ -379,7 +380,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
       if (!name || !cron || !hookName) {
         return "usage: ,schedule.add name=<n> cron=\"<expr>\" hookName=<hook>";
       }
-      const { getScheduler } = await import("./scheduler-runtime.js");
+      const { getScheduler } = await import("@/core/scheduler-runtime.js");
       const sched = getScheduler();
       if (!sched) return "(scheduler not initialized — only runs in gateway mode)";
       try {
@@ -399,7 +400,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     handler: async ({ args }) => {
       const name = args.name;
       if (!name) return "usage: ,schedule.remove name=<n>";
-      const { getScheduler } = await import("./scheduler-runtime.js");
+      const { getScheduler } = await import("@/core/scheduler-runtime.js");
       const sched = getScheduler();
       if (!sched) return "(scheduler not initialized)";
       const ok = sched.unregister(name);
@@ -415,7 +416,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     handler: async ({ args }) => {
       const name = args.name;
       if (!name) return "usage: ,schedule.enable name=<n>";
-      const { getScheduler } = await import("./scheduler-runtime.js");
+      const { getScheduler } = await import("@/core/scheduler-runtime.js");
       const sched = getScheduler();
       if (!sched) return "(scheduler not initialized)";
       return sched.setEnabled(name, true) ? `✓ enabled "${name}"` : `not found: ${name}`;
@@ -429,7 +430,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     handler: async ({ args }) => {
       const name = args.name;
       if (!name) return "usage: ,schedule.disable name=<n>";
-      const { getScheduler } = await import("./scheduler-runtime.js");
+      const { getScheduler } = await import("@/core/scheduler-runtime.js");
       const sched = getScheduler();
       if (!sched) return "(scheduler not initialized)";
       return sched.setEnabled(name, false) ? `○ disabled "${name}"` : `not found: ${name}`;
@@ -441,7 +442,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     name: "schedule",
     description: "alias for ,schedule.list",
     handler: async () => {
-      const { execute } = await import("./internal-commands.js");
+      const { execute } = await import("@/core/internal-commands.js");
       const r = await execute(",schedule.list", "tui");
       return r === "not-a-command" ? null : r;
     },
@@ -452,7 +453,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     name: "mesh",
     description: "show runtime provider mesh status (endpoints, circuits, stats)",
     handler: async () => {
-      const { getActiveMesh } = await import("./provider-mesh-runtime.js");
+      const { getActiveMesh } = await import("@/core/provider-mesh-runtime.js");
       const mesh = getActiveMesh();
       if (!mesh) return "(no active mesh — set profile.mesh in phus.config.yaml)";
       const stats = mesh.stats();
@@ -474,7 +475,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     name: "skill-review",
     description: "list skill drafts awaiting human approval (B.4.4)",
     handler: async () => {
-      const { DraftsStore } = await import("./drafts.js");
+      const { DraftsStore } = await import("@/core/drafts.js");
       const drafts = new DraftsStore();
       const list = await drafts.list();
       if (list.length === 0) return "(no drafts)";
@@ -490,7 +491,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     handler: async ({ args }) => {
       const name = args.name;
       if (!name) return "usage: ,skill-review.approve name=<draft-name>";
-      const { DraftsStore } = await import("./drafts.js");
+      const { DraftsStore } = await import("@/core/drafts.js");
       const drafts = new DraftsStore();
       try {
         const path = await drafts.approve(name);
@@ -509,7 +510,7 @@ export function registerBuiltins(getAgent: () => any, getHome: () => string): vo
     handler: async ({ args }) => {
       const name = args.name;
       if (!name) return "usage: ,skill-review.reject name=<draft-name>";
-      const { DraftsStore } = await import("./drafts.js");
+      const { DraftsStore } = await import("@/core/drafts.js");
       const drafts = new DraftsStore();
       const ok = await drafts.reject(name);
       return ok ? `✗ rejected "${name}"` : `not found: ${name}`;

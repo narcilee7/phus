@@ -14,34 +14,10 @@
 //     write to tape, etc.
 
 import { CronExpressionParser } from "cron-parser";
-import { logger } from "./logger.js";
-import { makeCtx, type HookContext, type HookRegistry, type HookName } from "./hook.js";
-
-export interface Schedule {
-  name: string;
-  /** Cron expression (5-field standard cron, e.g. every-5-minutes). */
-  cron: string;
-  /** Hook to fire when this schedule triggers. */
-  hookName: HookName;
-  /** Payload passed to the hook in extras.payload. */
-  payload?: Record<string, unknown>;
-  /** Set to false to register but disable. Default true. */
-  enabled?: boolean;
-  /** Optional human-readable description. */
-  description?: string;
-}
-
-export interface FiredSchedule {
-  schedule: Schedule;
-  firedAt: number;
-}
-
-export interface SchedulerOptions {
-  /** Tick interval in ms. Default: 60_000 (1 minute, since cron has 1-min resolution). */
-  tickIntervalMs?: number;
-  /** Optional callback for testing/observability. */
-  onFire?: (fired: FiredSchedule) => void;
-}
+import { logger } from "@/core/logger.js";
+import { HookRegistry, makeCtx } from "@/core/hook.js";
+import { Schedule, SchedulerOptions } from "@/types/scheduler/index.js";
+import { HookContext } from "@/types/hooks/index.js";
 
 export class Scheduler {
   private schedules = new Map<string, Schedule>();
@@ -55,7 +31,7 @@ export class Scheduler {
   ) {
     this.opts = {
       tickIntervalMs: opts.tickIntervalMs ?? 60_000,
-      onFire: opts.onFire ?? (() => {}),
+      onFire: opts.onFire ?? (() => { }),
     };
   }
 
@@ -171,8 +147,9 @@ export class Scheduler {
     const ctx: HookContext = makeCtx({
       sessionId: `schedule:${s.name}`,
       state: {},
-      tape: undefined as any,  // schedules may not have tape access
-      skills: undefined as any,
+      // `tape` and `skills` are intentionally absent — scheduled hooks
+      // run outside a turn; any hook that needs them must resolve them
+      // itself (e.g. via DI on the HookRegistry owner).
       extras: {
         schedule: s.name,
         cron: s.cron,

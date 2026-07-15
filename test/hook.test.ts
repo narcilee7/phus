@@ -5,7 +5,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { HookRegistry, makeCtx } from "../src/core/hook.js";
 import { Tape } from "../src/core/tape.js";
-import { SkillRegistry } from "../src/core/skill.js";
+import { SkillRegistry } from "../src/core/skills/skill.js";
 
 function tmpCtx() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-hook-"));
@@ -15,20 +15,20 @@ function tmpCtx() {
 }
 
 describe("HookRegistry", () => {
-  it("firstresult returns the first non-null result", async () => {
+  it("first_result returns the first non-null result", async () => {
     const { ctx } = tmpCtx();
     const reg = new HookRegistry();
-    reg.register("x", async () => undefined, { mode: "firstresult", priority: 0 });
-    reg.register("x", async () => "hit", { mode: "firstresult", priority: 1 });
-    const r = await reg.execute("x", ctx, "firstresult");
+    reg.register("x", async () => undefined, { mode: "first_result", priority: 0 });
+    reg.register("x", async () => "hit", { mode: "first_result", priority: 1 });
+    const r = await reg.execute("x", ctx, "first_result");
     expect(r).toBe("hit");
   });
 
-  it("firstresult returns undefined when nothing matches", async () => {
+  it("first_result returns undefined when nothing matches", async () => {
     const { ctx } = tmpCtx();
     const reg = new HookRegistry();
-    reg.register("x", async () => null, { mode: "firstresult", priority: 0 });
-    const r = await reg.execute("x", ctx, "firstresult");
+    reg.register("x", async () => null, { mode: "first_result", priority: 0 });
+    const r = await reg.execute("x", ctx, "first_result");
     expect(r).toBeUndefined();
   });
 
@@ -53,9 +53,9 @@ describe("HookRegistry", () => {
   it("report() reflects registered hooks", async () => {
     const { ctx } = tmpCtx();
     const reg = new HookRegistry();
-    reg.register("resolve_session", async () => "x", { mode: "firstresult" });
+    reg.register("resolve_session", async () => "x", { mode: "first_result" });
     const r = reg.report();
     expect(r.resolve_session).toHaveLength(1);
-    expect(r.resolve_session[0]?.mode).toBe("firstresult");
+    expect(r.resolve_session[0]?.mode).toBe("first_result");
   });
 });

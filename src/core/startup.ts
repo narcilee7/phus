@@ -5,16 +5,19 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { logger } from "./logger.js";
+import { logger } from "@/core/logger.js";
 
-export type StartupMode = "custom" | "fallback" | "default";
+type StartupMode = "custom" | "fallback" | "default";
 
-export function startupHome(): string {
-  return process.env.PHUS_HOME ?? "./.phus";
-}
+const STARTUP_NOT_FOUND = "startup.not_found";
+const STARTUP_FOUND = "startup.found";
+const STARTUP_OUTPUT = "startup.output";
+const STARTUP_FAILED = "startup.failed"
+
+const PHUS_HOME = process.env.PHUS_HOME || "./.phus";
 
 export function startupScriptPath(): string {
-  return path.join(startupHome(), "startup.sh");
+  return path.join(PHUS_HOME, "startup.sh");
 }
 
 /**
@@ -26,20 +29,21 @@ export function startupScriptPath(): string {
 export function bootstrap(timeoutMs = 30_000): StartupMode {
   const script = startupScriptPath();
   if (!fs.existsSync(script)) {
-    logger.info("startup.not_found", { path: script });
+    logger.info(STARTUP_NOT_FOUND, { path: script });
     return "default";
   }
-  logger.info("startup.found", { path: script });
+  logger.info(STARTUP_FOUND, { path: script });
   try {
     const out = execFileSync("sh", [script], {
       encoding: "utf-8",
       timeout: timeoutMs,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    if (out.trim()) logger.info("startup.output", { output: out });
+    if (out.trim()) logger.info(STARTUP_OUTPUT, { output: out });
     return "custom";
   } catch (err: any) {
-    logger.error("startup.failed", { path: script, error: err.message });
+    logger.error(STARTUP_FAILED, { path: script, error: err.message });
     return "fallback";
   }
 }
+
