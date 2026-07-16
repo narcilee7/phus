@@ -91,4 +91,17 @@ describe("MultiLineInput slash behavior", () => {
     expect(frame).toContain("/h");
     expect(frame).toContain("/help");
   });
+
+  it("tab completes the selected suggestion", async () => {
+    const { stdin, lastFrame } = render(<ControlledInput />);
+    await wait();
+    stdin.write("/h");
+    await wait();
+    expect(lastFrame()).toContain("/help");
+    stdin.write("\t"); // tab
+    await wait();
+    const frame = lastFrame()!;
+    expect(frame).toContain("/help");
+    expect(frame).not.toContain("/clear"); // dropdown should close after completion
+  });
 });
