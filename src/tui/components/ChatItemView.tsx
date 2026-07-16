@@ -148,7 +148,9 @@ export function ChatItemView({ item, items, fileSnapshots }: ChatItemViewProps) 
         </Box>
       );
 
-    case "assistant":
+    case "assistant": {
+      const hasContent = (item.text ?? "").trim().length > 0 || (item.reasoning ?? "").length > 0;
+      if (!hasContent && !item.isStreaming) return null;
       return (
         <Box flexDirection="column" marginY={1} width="100%">
           <Box>
@@ -168,6 +170,7 @@ export function ChatItemView({ item, items, fileSnapshots }: ChatItemViewProps) 
           </Box>
         </Box>
       );
+    }
 
     case "tool_call":
       return (
@@ -179,7 +182,8 @@ export function ChatItemView({ item, items, fileSnapshots }: ChatItemViewProps) 
     case "tool_result":
       return <ToolResultView item={item} items={items} fileSnapshots={fileSnapshots} />;
 
-    case "system":
+    case "system": {
+      if (!item.text || item.text.trim().length === 0) return null;
       return (
         <Box marginY={1}>
           <Text wrap="wrap">
@@ -190,5 +194,6 @@ export function ChatItemView({ item, items, fileSnapshots }: ChatItemViewProps) 
           </Text>
         </Box>
       );
+    }
   }
 }

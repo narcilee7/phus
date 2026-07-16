@@ -43,16 +43,10 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     lastCheckpointAt: undefined as number | undefined,
   });
   const fileSnapshots = useRef(new Map<string, { path: string; content: string }>());
+  const itemsRef = useRef(state.items);
+  itemsRef.current = state.items;
   const { stdout } = useStdout();
   const [terminalRows, setTerminalRows] = React.useState(stdout.rows);
-
-  // Hide the terminal's real cursor; MultiLineInput draws its own.
-  React.useEffect(() => {
-    stdout.write("\u001B[?25l");
-    return () => {
-      stdout.write("\u001B[?25h");
-    };
-  }, [stdout]);
 
   const DANGEROUS_TOOLS = React.useMemo(
     () => new Set(["bash", "file_write", "startup_write", "skill_write", "skill_delete"]),
@@ -187,7 +181,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         metadata: { chatId: "tui" },
         ts: Date.now(),
       };
-      await agent.turn(envelope, tuiChannel(dispatch, () => ({ items: state.items })));
+      await agent.turn(envelope, tuiChannel(dispatch, () => ({ items: itemsRef.current })));
     } catch (err: any) {
       dispatch({ type: "add_system", text: `error: ${err.message ?? err}`, level: "error" });
     } finally {
@@ -234,39 +228,15 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
 
   // ─── Render ───────────────────────────────────────────────────
   const sidebarHeight = Math.max(10, terminalRows - 6);
-  // Dynamic layout budget: reserve space for header, status bar, input box,
-  // and any transient overlays so the chat viewport never pushes them off-screen.
-  const headerRows = 4;
-  const statusBarRows = 1;
-  const inputBoxRows = 4;
-  const todoPillRows =
-    state.busy || state.items.some((it) => it.kind === "tool_call" && it.isError === undefined)
-      ? 1
-      : 0;
-  // PermissionBar is a bordered box with vertical margins; 6 rows is the
-  // conservative footprint. CommandPalette has height=14 plus marginY=1.
-  const permissionBarRows =
-    state.permissionQueue[0] && !paletteOpen && !sidebarOpen ? 6 : 0;
-  const paletteRows = paletteOpen ? 16 : 0;
-  const chatHeight = Math.max(
-    8,
-    terminalRows -
-      headerRows -
-      statusBarRows -
-      inputBoxRows -
-      todoPillRows -
-      permissionBarRows -
-      paletteRows,
-  );
   return (
-    <Box flexDirection="column" height={terminalRows}>
+    <Box flexDirection="column" height={terminalRows} overflow="hidden">
       <Header
         model={modelLabel}
         session={sessionId}
         stats={stats}
         lastOp={state.lastOp}
       />
-      <Box flexDirection="row" flexGrow={1}>
+      <Box flexDirection="row" flexGrow={1} overflow="hidden">
         {sidebarOpen && (
           <Box width={34}>
             <FileTree
@@ -282,16 +252,18 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
             />
           </Box>
         )}
-        <Box flexDirection="column" flexGrow={1}>
-          <ChatViewport
-            items={state.items}
-            busy={state.busy}
-            scrollOffset={state.scroll.offset}
-            hasNew={state.scroll.hasNew}
-            lastOp={state.lastOp}
-            fileSnapshots={fileSnapshots.current}
-            height={chatHeight}
-          />
+        <Box flexDirection="column" flexGrow={1} overflow="hidden">
+          <Box flexGrow={1} overflow="hidden">
+            <ChatViewport
+              items={state.items}
+              busy={state.busy}
+              scrollOffset={state.scroll.offset}
+              hasNew={state.scroll.hasNew}
+              lastOp={state.lastOp}
+              fileSnapshots={fileSnapshots.current}
+              height="100%"
+            />
+          </Box>
           <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
           {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
             <PermissionBar
@@ -315,6 +287,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
               onClose={() => setPaletteOpen(false)}
             />
           )}
+          <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} />
           <InputBox
             value={input}
             busy={state.busy}
@@ -328,7 +301,6 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
           />
         </Box>
       </Box>
-      <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} />
     </Box>
   );
 }

@@ -1,0 +1,7 @@
+interface:
+  display_name: "哲学讲解"
+  short_description: "讲清哲学概念、流派与经典论证，适合入门、对比与延伸理解"
+  default_prompt: "Use $philosophy-explainer to explain a philosophy concept, thinker, school, or argument in clear Chinese."
+
+policy:
+  allow_implicit_invocation: true

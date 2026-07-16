@@ -39,6 +39,17 @@ describe("tuiChannel", () => {
     expect(dispatched).toEqual([{ type: "finalize_streaming" }]);
   });
 
+  it("send(text) only finalizes when a finalized assistant already exists", async () => {
+    const dispatched: AppAction[] = [];
+    const items: ChatItem[] = [
+      { id: "1", kind: "assistant", ts: 1, text: "hello", isStreaming: false },
+    ];
+    const ch = tuiChannel((a) => dispatched.push(a), () => ({ items }));
+    await ch.send([{ type: "text", content: "hello", to: "u", channel: "tui" } as any]);
+
+    expect(dispatched).toEqual([{ type: "finalize_streaming" }]);
+  });
+
   it("skips non-text outbounds", async () => {
     const dispatched: AppAction[] = [];
     const ch = tuiChannel((a) => dispatched.push(a));

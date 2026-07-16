@@ -20,10 +20,11 @@ export function tuiChannel(
     async send(outbounds) {
       for (const o of outbounds) {
         if (o.type !== "text") continue;
-        const hasStreamingAssistant =
-          getState?.().items.some((it) => it.kind === "assistant" && it.isStreaming) ?? false;
-        if (hasStreamingAssistant) {
-          // Text was already rendered via streaming deltas; just finalize.
+        const items = getState?.().items ?? [];
+        const hasAssistant = items.some((it) => it.kind === "assistant");
+        if (hasAssistant) {
+          // Streaming deltas (or a previous finalize) already rendered the text;
+          // just make sure the assistant item is no longer marked streaming.
           dispatch({ type: "finalize_streaming" });
         } else if (o.content) {
           // No streaming happened (e.g. short-circuit path): add the final text.
