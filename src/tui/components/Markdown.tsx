@@ -120,8 +120,7 @@ function renderBlock(token: Token, key: string | number): React.ReactNode {
       return (
         <Box key={key} marginY={1}>
           <Text bold color="cyan" wrap="wrap">
-            {"#".repeat(h.depth)} {" "}
-            {renderInline(h.tokens, `${key}-inline`)}
+            {"#".repeat(h.depth)} {renderInline(h.tokens, `${key}-inline`)}
           </Text>
         </Box>
       );

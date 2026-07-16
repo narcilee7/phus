@@ -2,7 +2,7 @@
 // Pure-function tests for `appReducer` and `truncate`.
 
 import { describe, expect, it, vi } from "vitest";
-import { appReducer, initialState, truncate, type AppAction } from "../../src/tui/state.js";
+import { appReducer, initialState, truncate, type AppAction, type AppState } from "../../src/tui/state.js";
 
 function action(a: AppAction) {
   return appReducer(initialState, a);
@@ -223,14 +223,26 @@ describe("permission queue", () => {
     expect(s2.permissionQueue).toHaveLength(0);
   });
 
-  it("resolve_permission with remember adds the tool to allowedTools", () => {
+  it("resolve_permission with remember='always' adds the tool to allowedTools", () => {
     const resolve = vi.fn();
     const s1 = appReducer(initialState, {
       type: "push_permission",
       request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
     });
-    const s2 = appReducer(s1, { type: "resolve_permission", allow: true, remember: true });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: true, remember: "always" });
     expect(s2.allowedTools.has("bash")).toBe(true);
+    expect(s2.sessionAllowedTools.has("bash")).toBe(false);
+  });
+
+  it("resolve_permission with remember='session' adds the tool to sessionAllowedTools", () => {
+    const resolve = vi.fn();
+    const s1 = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
+    });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: true, remember: "session" });
+    expect(s2.allowedTools.has("bash")).toBe(false);
+    expect(s2.sessionAllowedTools.has("bash")).toBe(true);
   });
 
   it("resolve_permission with deny does not add to allowedTools", () => {
@@ -242,6 +254,18 @@ describe("permission queue", () => {
     const s2 = appReducer(s1, { type: "resolve_permission", allow: false });
     expect(resolve).toHaveBeenCalledWith(false);
     expect(s2.allowedTools.has("bash")).toBe(false);
+    expect(s2.sessionAllowedTools.has("bash")).toBe(false);
+  });
+
+  it("clear_session_allowed_tools only clears session memory", () => {
+    const state: AppState = {
+      ...initialState,
+      allowedTools: new Set(["always-tool"]),
+      sessionAllowedTools: new Set(["session-tool"]),
+    };
+    const s = appReducer(state, { type: "clear_session_allowed_tools" });
+    expect(s.allowedTools.has("always-tool")).toBe(true);
+    expect(s.sessionAllowedTools.has("session-tool")).toBe(false);
   });
 });
 
