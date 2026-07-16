@@ -60,7 +60,9 @@ Core      (core/)                       ← Hook / Tape / Skill / Policy / Mesh
 
 **Channels** convert inbound bytes to `Envelope` and outbound `Outbound[]` to transport sends. They never see the LLM, Tape, or Skill registry directly. Built-in: `cli.ts`, `telegram.ts`, `websocket.ts`, `sse.ts`, plus the ink-based TUI in `tui/`.
 
-**Bridge** — `src/bridge/pi-agent.ts` — owns one Pi `Agent`, the `HookRegistry`, and runs the Bub-style turn pipeline:
+**Bridge** — `src/bridge/pi-agent.ts` — owns one Pi `Agent`, the `HookRegistry`, and runs the Bub-style turn pipeline.
+
+**Model validation** — `src/infra/config/validate.ts` — load-time checks for every `(provider, modelId)` the config references. Structural errors (missing `/` in `model`, missing `provider` in mesh entry) throw `ConfigValidationError` at load time. Pi-registry misses warn (don't throw) — custom OpenAI-compatible gateways (Volcano Ark ep-xxx, Azure deployments, vLLM) have modelIds Pi never registered. All four `getModel()` call sites in the codebase (profile.ts, model-builder.ts, pi-agent.ts setModel) funnel through `resolveAndCache()` so the lookup happens once per tuple, not once per turn.
 
 ```
 resolve_session → admit_message → load_state → build_prompt

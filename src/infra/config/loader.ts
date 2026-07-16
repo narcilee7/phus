@@ -31,6 +31,12 @@ import { ENV_OVERRIDE_VARS } from "./schema.js";
 import type { ProviderConfig, ProviderProfile } from "@/infra/profile.js";
 import type { Schedule } from "@/types/scheduler/index.js";
 import { asScheduleName } from "@/types/brand.js";
+import {
+  looksLikeSecret,
+  resolveAndCache,
+  validateMeshEntry,
+  validateModelString,
+} from "./validate.js";
 
 interface CacheEntry {
   config: ResolvedConfig;
@@ -154,6 +160,11 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   // and external callers).
   const providers = parseProvidersFromTree(interpolated);
 
+  // Load-time validation: structural checks + model registration.
+  // Runs after parseProvidersFromTree so the cache for resolveAndCache
+  // is populated for every (provider, modelId) the config references.
+  validateProvidersTree(providers, warn, cfgPath);
+
   // Plugins
   const pluginsRaw = (interpolated as { plugins?: unknown })?.plugins;
   const plugins: PluginSpec[] = parsePluginSpec(pluginsRaw);
@@ -217,6 +228,118 @@ function getLevelField(interpolated: unknown, fallback: LogLevelLiteral): string
   const obj = (interpolated as { log?: { level?: unknown } } | undefined)?.log;
   const v = obj?.level;
   return typeof v === "string" && v.length > 0 ? v : fallback;
+}
+
+/**
+ * Walk every provider profile + mesh entry and validate. Populates
+ * the model-resolution cache (used downstream by model-builder.ts
+ * and pi-agent.ts so they share a single resolveAndCache() call
+ * per (provider, modelId, baseUrl, overrideId) tuple).
+ *
+ * Throws on structurally invalid model strings (missing "/" etc.)
+ * so the user sees the error at `phus run` instead of at first turn.
+ * Emits warn (not throw) for unknown Pi registry entries — those
+ * are legitimate OpenAI-compatible gateway modelIds (Volcano Ark,
+ * Azure, vLLM) that Pi never registered.
+ */
+function validateProvidersTree(
+  providers: ProviderConfig,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+  cfgPath: string,
+): void {
+  const errors: string[] = [];
+  const seen = new Set<string>();
+
+  for (const [profileName, profile] of Object.entries(providers.profiles)) {
+    // Skip the synthetic fallback profile — no model to validate.
+    if (profile === providers.profiles.default && Object.keys(providers.profiles).length === 1) {
+      // Synthetic default with no user config — only validate if mesh exists.
+      if (!profile.mesh || profile.mesh.length === 0) continue;
+    }
+
+    // 1. Validate profile.model string format
+    const parsed = validateModelString(profile.model, { profileName });
+    if (typeof parsed === "string") {
+      errors.push(`${cfgPath}: ${parsed}`);
+      continue;
+    }
+    // 2. Resolve via Pi registry (or synthesize for unknown gateways)
+    const resolution = resolveAndCache({
+      provider: parsed.provider,
+      modelId: parsed.modelId,
+      baseUrl: profile.baseUrl,
+      overrideId: profile.modelId,
+    });
+    if (!resolution.inRegistry) {
+      const cacheKey = `${parsed.provider}|${parsed.modelId}`;
+      if (!seen.has(cacheKey)) {
+        seen.add(cacheKey);
+        warn("config.model.not_in_registry", {
+          provider: parsed.provider,
+          modelId: parsed.modelId,
+          profile: profileName,
+          source: cfgPath,
+          hint: profile.baseUrl
+            ? "custom gateway endpoint — this is expected if baseUrl is an OpenAI-compatible gateway"
+            : "no baseUrl set — verify the provider name and model id are correct",
+        });
+      }
+    }
+
+    // 3. apiKeyEnv secret-in-yaml heuristic
+    const secretHint = looksLikeSecret(profile.apiKeyEnv);
+    if (secretHint) {
+      warn("config.apiKeyEnv.looks_like_secret", {
+        profile: profileName,
+        apiKeyEnv: profile.apiKeyEnv,
+        reason: secretHint,
+        source: cfgPath,
+      });
+    }
+
+    // 4. Validate each mesh entry
+    if (profile.mesh) {
+      for (let i = 0; i < profile.mesh.length; i++) {
+        const entry = validateMeshEntry(profile.mesh[i], i, { profileName });
+        if (typeof entry === "string") {
+          errors.push(`${cfgPath}: ${entry}`);
+          continue;
+        }
+        const meshResolution = resolveAndCache({
+          provider: entry.provider,
+          modelId: entry.modelId,
+          baseUrl: profile.mesh?.[i]?.baseUrl,
+          overrideId: profile.mesh?.[i]?.modelId,
+        });
+        const cacheKey = `${entry.provider}|${entry.modelId}`;
+        if (!meshResolution.inRegistry && !seen.has(cacheKey)) {
+          seen.add(cacheKey);
+          warn("config.model.not_in_registry", {
+            provider: entry.provider,
+            modelId: entry.modelId,
+            profile: profileName,
+            meshIndex: i,
+            source: cfgPath,
+            hint: profile.mesh?.[i]?.baseUrl
+              ? "custom gateway endpoint — expected for OpenAI-compatible gateways"
+              : "no baseUrl set — verify the provider name and model id are correct",
+          });
+        }
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new ConfigValidationError(errors);
+  }
+}
+
+/** Thrown by validateProvidersTree when the YAML has structural errors. */
+export class ConfigValidationError extends Error {
+  override readonly name = "ConfigValidationError";
+  constructor(public readonly errors: string[]) {
+    super(`phus.config.yaml has ${errors.length} validation error(s):\n  - ${errors.join("\n  - ")}`);
+  }
 }
 
 function envOrYaml(

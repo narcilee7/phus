@@ -14,9 +14,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "yaml";
-import { getModel, getEnvApiKey } from "@mariozechner/pi-ai";
+import { getEnvApiKey } from "@mariozechner/pi-ai";
 import type { Model } from "@mariozechner/pi-ai";
 import { logger } from "@/infra/logging.js";
+import { resolveAndCache } from "@/infra/config/index.js";
 
 export interface ProviderProfile {
   name: string;
@@ -131,7 +132,13 @@ export function resolveProfile(
   return p;
 }
 
-/** Build a Pi Model from a profile, applying overrides. */
+/** Build a Pi Model from a profile, applying overrides.
+ *
+ *  Delegates to `resolveAndCache()` (validated at config-load time)
+ *  so a single (provider, modelId, baseUrl, overrideId) tuple is
+ *  resolved once per process. Custom OpenAI-compatible gateways
+ *  (modelIds not in Pi's registry) succeed with a synthesized
+ *  stub Model. */
 export function modelFromProfile(profile: ProviderProfile): Model<any> {
   const [provider, modelId] = profile.model.split("/", 2);
   if (!provider || !modelId) {
@@ -139,7 +146,12 @@ export function modelFromProfile(profile: ProviderProfile): Model<any> {
       `Profile "${profile.name}": invalid model "${profile.model}". Expected "<provider>/<modelId>".`,
     );
   }
-  const base = getModel(provider as any, modelId as any);
+  const { model: base } = resolveAndCache({
+    provider,
+    modelId,
+    baseUrl: profile.baseUrl,
+    overrideId: profile.modelId,
+  });
 
   const overrides: Partial<Model<any>> & { headers?: Record<string, string> } = {};
   if (profile.baseUrl) overrides.baseUrl = profile.baseUrl;

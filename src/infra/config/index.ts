@@ -17,7 +17,16 @@ export {
   resetConfigCache,
   configPath,
   setLogSink,
+  ConfigValidationError,
 } from "./loader.js";
+export {
+  resolveAndCache,
+  resetModelCache,
+  validateModelString,
+  validateMeshEntry,
+  looksLikeSecret,
+  type ModelResolution,
+} from "./validate.js";
 export type {
   ResolvedConfig,
   PathsConfig,
