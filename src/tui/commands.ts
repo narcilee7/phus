@@ -130,42 +130,57 @@ export async function runSlash(
   }
 }
 
+export interface SlashCommand {
+  name: string;
+  description: string;
+}
+
+export const SLASH_COMMANDS: SlashCommand[] = [
+  { name: "model", description: "show or switch model (e.g. /model openai/gpt-4o)" },
+  { name: "model-list", description: "list known models" },
+  { name: "reasoning", description: "show or set: off | minimal | low | medium | high" },
+  { name: "profiles", description: "list provider profiles" },
+  { name: "reload", description: "reload plugins and skills from disk" },
+  { name: "tape", description: "tape statistics" },
+  { name: "trace", description: "last N turns (default 5)" },
+  { name: "sessions", description: "list sessions in tape" },
+  { name: "use", description: "switch active session" },
+  { name: "compact", description: "compact, keep last N (default 10)" },
+  { name: "context", description: "show system prompt + skills + tape summary" },
+  { name: "forget", description: "clear conversation history (keeps tape)" },
+  { name: "skills", description: "list skills" },
+  { name: "skill-read", description: "read a skill body" },
+  { name: "plugins", description: "list loaded plugins" },
+  { name: "bash", description: "run shell without AI roundtrip" },
+  { name: "read", description: "read a file" },
+  { name: "policy", description: "show safety policy" },
+  { name: "health", description: "run health check" },
+  { name: "interrupt", description: "abort the current turn" },
+  { name: "retry", description: "retry last prompt" },
+  { name: "new", description: "start a fresh session" },
+  { name: "clear", description: "clear chat area" },
+  { name: "quit", description: "exit" },
+  { name: "exit", description: "exit" },
+];
+
 const HELP_TEXT = [
   "── Runtime ──────────────────────────────────────────",
-  "  /model [id]         show or switch model (e.g. /model openai/gpt-4o)",
-  "  /model-list         list known models",
-  "  /reasoning [level]  show or set: off | minimal | low | medium | high",
-  "  /profiles           list provider profiles",
-  "  /reload             reload plugins and skills from disk",
+  ...SLASH_COMMANDS.slice(0, 5).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Memory ───────────────────────────────────────────",
-  "  /tape               tape statistics",
-  "  /trace [N]          last N turns (default 5)",
-  "  /sessions           list sessions in tape",
-  "  /use <sessionId>    switch active session",
-  "  /compact [N]        compact, keep last N (default 10)",
-  "  /context            show system prompt + skills + tape summary",
-  "  /forget             clear conversation history (keeps tape)",
+  ...SLASH_COMMANDS.slice(5, 12).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Skills & Plugins ─────────────────────────────────",
-  "  /skills             list skills",
-  "  /skill-read <name>  read a skill body",
-  "  /plugins            list loaded plugins",
+  ...SLASH_COMMANDS.slice(12, 15).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Direct execution ─────────────────────────────────",
-  "  /bash <cmd>         run shell without AI roundtrip",
-  "  /read <path>        read a file",
+  ...SLASH_COMMANDS.slice(15, 17).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Safety & health ──────────────────────────────────",
-  "  /policy             show safety policy",
-  "  /health             run health check",
+  ...SLASH_COMMANDS.slice(17, 19).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Control ─────────────────────────────────────────",
-  "  /interrupt          abort the current turn",
-  "  /retry              retry last prompt",
-  "  /new                start a fresh session",
-  "  /clear              clear chat area",
-  "  /quit               exit",
+  ...SLASH_COMMANDS.slice(19).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
 ].join("\n");
 
 // ─── Individual command handlers ──────────────────────────────────

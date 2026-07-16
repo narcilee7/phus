@@ -10,7 +10,9 @@ import type { PhusAgent } from "@/bridge/pi-agent.js";
 import { appReducer, initialState } from "@/tui/state.js";
 import { Header } from "@/tui/components/Header.js";
 import { ChatViewport } from "@/tui/components/ChatViewport.js";
+import { TodoPill } from "@/tui/components/TodoPill.js";
 import { InputBox } from "@/tui/components/InputBox.js";
+import { PermissionPrompt } from "@/tui/components/PermissionPrompt.js";
 import { StatusBar } from "@/tui/components/StatusBar.js";
 import { eventToAction } from "@/tui/events.js";
 import { runSlash } from "@/tui/commands.js";
@@ -27,6 +29,11 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [input, setInput] = React.useState("");
   const [stats, setStats] = React.useState({ entries: 0, skills: 0, turns: 0 });
+
+  const DANGEROUS_TOOLS = React.useMemo(
+    () => new Set(["bash", "file_write", "startup_write", "skill_write", "skill_delete"]),
+    [],
+  );
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
@@ -54,6 +61,26 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     const id = setInterval(tick, 1500);
     return () => clearInterval(id);
   }, [agent]);
+
+  // ─── Tool permission gate ──────────────────────────────────────
+  useEffect(() => {
+    agent.setToolPermissionHandler(async (req) => {
+      if (state.allowedTools.has(req.toolName)) return true;
+      if (!DANGEROUS_TOOLS.has(req.toolName)) return true;
+      return new Promise<boolean>((resolve) => {
+        dispatch({
+          type: "push_permission",
+          request: {
+            id: crypto.randomUUID(),
+            toolName: req.toolName,
+            args: req.args,
+            toolCallId: req.toolCallId,
+            resolve,
+          },
+        });
+      });
+    });
+  }, [agent, state.allowedTools, DANGEROUS_TOOLS, dispatch]);
 
   // ─── Submit handler ──────────────────────────────────────────
   const submit = async (text: string) => {
@@ -129,12 +156,22 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         hasNew={state.scroll.hasNew}
         lastOp={state.lastOp}
       />
+      <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
+      {state.permissionQueue[0] && (
+        <PermissionPrompt
+          request={state.permissionQueue[0]}
+          onResolve={(allow, remember) =>
+            dispatch({ type: "resolve_permission", allow, remember })
+          }
+        />
+      )}
       <InputBox
         value={input}
         busy={state.busy}
         showHint={state.showHint}
         onChange={setInput}
         onSubmit={submit}
+        isActive={state.permissionQueue.length === 0}
       />
       <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} />
     </Box>

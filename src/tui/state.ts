@@ -27,12 +27,22 @@ export interface ScrollState {
   hasNew: boolean;
 }
 
+export interface PermissionRequest {
+  id: string;
+  toolName: string;
+  args: unknown;
+  toolCallId: string;
+  resolve: (allow: boolean) => void;
+}
+
 export interface AppState {
   items: ChatItem[];
   busy: boolean;
   showHint: boolean;
   lastOp: string;
   scroll: ScrollState;
+  permissionQueue: PermissionRequest[];
+  allowedTools: Set<string>;
 }
 
 export const initialState: AppState = {
@@ -41,6 +51,8 @@ export const initialState: AppState = {
   showHint: true,
   lastOp: "idle",
   scroll: { offset: 0, hasNew: false },
+  permissionQueue: [],
+  allowedTools: new Set(),
 };
 
 export type AppAction =
@@ -56,7 +68,9 @@ export type AppAction =
   | { type: "clear_items" }
   | { type: "scroll_up"; lines?: number }
   | { type: "scroll_down"; lines?: number }
-  | { type: "scroll_bottom" };
+  | { type: "scroll_bottom" }
+  | { type: "push_permission"; request: PermissionRequest }
+  | { type: "resolve_permission"; allow: boolean; remember?: boolean };
 
 /** Truncate a string for compact display. */
 export function truncate(s: string, n: number): string {
@@ -191,5 +205,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case "scroll_bottom":
       return { ...state, scroll: { offset: 0, hasNew: false } };
+    case "push_permission":
+      return { ...state, permissionQueue: [...state.permissionQueue, action.request] };
+    case "resolve_permission": {
+      const [first, ...rest] = state.permissionQueue;
+      if (!first) return state;
+      first.resolve(action.allow);
+      const allowedTools =
+        action.remember && action.allow
+          ? new Set([...state.allowedTools, first.toolName])
+          : state.allowedTools;
+      return { ...state, permissionQueue: rest, allowedTools };
+    }
   }
 }
