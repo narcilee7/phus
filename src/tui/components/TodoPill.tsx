@@ -6,6 +6,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { ChatItem } from "@/tui/state.js";
 import { Spinner } from "@/tui/components/Spinner.js";
+import { ToolPill } from "@/tui/components/ToolPill.js";
 
 export function TodoPill({
   items,
@@ -22,22 +23,22 @@ export function TodoPill({
     return null;
   }
 
-  let label: string;
-  if (running.length > 0) {
-    const names = running.map((it) => it.toolName).join(", ");
-    label = running.length === 1 ? `running: ${names}` : `running ${running.length}: ${names}`;
-  } else {
-    label = lastOp || "thinking…";
-  }
-
   return (
-    <Box paddingX={1}>
+    <Box paddingX={1} flexDirection="row" flexWrap="wrap">
       <Spinner />
-      <Box marginLeft={1}>
-        <Text color="cyan" dimColor={!busy}>
-          {label}
-        </Text>
-      </Box>
+      {running.length > 0 ? (
+        <Box marginLeft={1} flexDirection="row" flexWrap="wrap">
+          {running.map((it) => (
+            <ToolPill key={it.id} name={it.toolName || "?"} status="running" />
+          ))}
+        </Box>
+      ) : (
+        <Box marginLeft={1}>
+          <Text color="cyan" dimColor={!busy}>
+            {lastOp || "thinking…"}
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }
