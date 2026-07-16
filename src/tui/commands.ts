@@ -101,6 +101,7 @@ export async function runSlash(
     case "new":
       await agent.clearConversation();
       dispatch({ type: "clear_items" });
+      dispatch({ type: "clear_session_allowed_tools" });
       dispatch({ type: "add_system", text: `✓ fresh session started`, level: "info" });
       return;
 

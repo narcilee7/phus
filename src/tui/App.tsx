@@ -12,11 +12,12 @@ import { Header } from "@/tui/components/Header.js";
 import { ChatViewport } from "@/tui/components/ChatViewport.js";
 import { TodoPill } from "@/tui/components/TodoPill.js";
 import { InputBox } from "@/tui/components/InputBox.js";
-import { PermissionPrompt } from "@/tui/components/PermissionPrompt.js";
+import { PermissionBar } from "@/tui/components/PermissionBar.js";
 import { StatusBar } from "@/tui/components/StatusBar.js";
 import { eventToAction } from "@/tui/events.js";
 import { runSlash } from "@/tui/commands.js";
 import { tuiChannel } from "@/tui/channel.js";
+import type { RememberChoice } from "@/tui/state.js";
 
 interface AppProps {
   agent: PhusAgent;
@@ -66,6 +67,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   useEffect(() => {
     agent.setToolPermissionHandler(async (req) => {
       if (state.allowedTools.has(req.toolName)) return true;
+      if (state.sessionAllowedTools.has(req.toolName)) return true;
       if (!DANGEROUS_TOOLS.has(req.toolName)) return true;
       return new Promise<boolean>((resolve) => {
         dispatch({
@@ -80,7 +82,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         });
       });
     });
-  }, [agent, state.allowedTools, DANGEROUS_TOOLS, dispatch]);
+  }, [agent, state.allowedTools, state.sessionAllowedTools, DANGEROUS_TOOLS, dispatch]);
 
   // ─── Submit handler ──────────────────────────────────────────
   const submit = async (text: string) => {
@@ -158,9 +160,9 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       />
       <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
       {state.permissionQueue[0] && (
-        <PermissionPrompt
+        <PermissionBar
           request={state.permissionQueue[0]}
-          onResolve={(allow, remember) =>
+          onResolve={(allow: boolean, remember: RememberChoice) =>
             dispatch({ type: "resolve_permission", allow, remember })
           }
         />

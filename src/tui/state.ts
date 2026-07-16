@@ -4,6 +4,7 @@
 
 export type ChatItemKind = "user" | "assistant" | "tool_call" | "tool_result" | "system";
 export type SystemLevel = "info" | "warn" | "error";
+export type RememberChoice = "once" | "session" | "always";
 
 export interface ChatItem {
   id: string;
@@ -43,6 +44,8 @@ export interface AppState {
   scroll: ScrollState;
   permissionQueue: PermissionRequest[];
   allowedTools: Set<string>;
+  /** Tools allowed for the current session only (cleared on /new). */
+  sessionAllowedTools: Set<string>;
 }
 
 export const initialState: AppState = {
@@ -53,6 +56,7 @@ export const initialState: AppState = {
   scroll: { offset: 0, hasNew: false },
   permissionQueue: [],
   allowedTools: new Set(),
+  sessionAllowedTools: new Set(),
 };
 
 export type AppAction =
@@ -70,7 +74,8 @@ export type AppAction =
   | { type: "scroll_down"; lines?: number }
   | { type: "scroll_bottom" }
   | { type: "push_permission"; request: PermissionRequest }
-  | { type: "resolve_permission"; allow: boolean; remember?: boolean };
+  | { type: "resolve_permission"; allow: boolean; remember?: RememberChoice }
+  | { type: "clear_session_allowed_tools" };
 
 /** Truncate a string for compact display. */
 export function truncate(s: string, n: number): string {
@@ -211,11 +216,19 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const [first, ...rest] = state.permissionQueue;
       if (!first) return state;
       first.resolve(action.allow);
-      const allowedTools =
-        action.remember && action.allow
-          ? new Set([...state.allowedTools, first.toolName])
-          : state.allowedTools;
-      return { ...state, permissionQueue: rest, allowedTools };
+      const remember = action.remember ?? "once";
+      const newState: AppState = { ...state, permissionQueue: rest };
+      if (!action.allow || remember === "once") {
+        return newState;
+      }
+      if (remember === "always") {
+        newState.allowedTools = new Set([...state.allowedTools, first.toolName]);
+      } else if (remember === "session") {
+        newState.sessionAllowedTools = new Set([...state.sessionAllowedTools, first.toolName]);
+      }
+      return newState;
     }
+    case "clear_session_allowed_tools":
+      return { ...state, sessionAllowedTools: new Set() };
   }
 }
