@@ -225,6 +225,26 @@ schedules:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Channels (gateway mode only)
+# ─────────────────────────────────────────────────────────────────────
+#
+# Declare channels here instead of (or in addition to) CLI flags.
+# CLI flags override YAML entries of the same type.
+#
+# Supported types: websocket, sse, telegram.
+#
+# channels:
+#   - type: websocket
+#     port: 3001
+#   - type: sse
+#     port: 3002
+#   - type: telegram
+#     token: ${TELEGRAM_TOKEN}
+#     allowedUsers: []
+#     allowedChats: []
+
+
+# ─────────────────────────────────────────────────────────────────────
 # ${VAR} interpolation reference
 # ─────────────────────────────────────────────────────────────────────
 #
