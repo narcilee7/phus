@@ -169,12 +169,13 @@ export class SSEChannel implements ChannelAdapter {
   }
 
   status(): ChannelStatus {
+    const address = this.server?.address();
     return {
       name: this.name,
       listening: this.server !== undefined && !this.closed,
       connected: this.responses.size,
       details: {
-        port: this.config.port,
+        port: typeof address === "object" ? address?.port : this.config.port,
         host: this.config.host,
         path: this.config.path,
       },

@@ -108,11 +108,10 @@ export class TelegramChannel implements ChannelAdapter {
     for (const msg of outbounds) {
       if (msg.type !== "text") continue;
       try {
-        await this.bot.telegram.sendMessage(msg.to, msg.content, {
-          ...(msg.replyTo
-            ? { reply_parameters: { message_id: Number(msg.replyTo) } }
-            : {}),
-        });
+        const extra = msg.replyTo
+          ? { reply_parameters: { message_id: Number(msg.replyTo) } }
+          : {};
+        await this.bot.telegram.sendMessage(msg.to, msg.content, extra);
       } catch (err: any) {
         logger.error("channel.telegram.send_failed", { to: msg.to, error: err?.message ?? err });
       }
