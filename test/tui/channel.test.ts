@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { tuiChannel } from "../../src/tui/channel.js";
-import type { AppAction } from "../../src/tui/state.js";
+import type { AppAction, ChatItem } from "../../src/tui/state.js";
 
 describe("tuiChannel", () => {
   it("has name 'tui'", () => {
@@ -16,16 +16,27 @@ describe("tuiChannel", () => {
     expect(() => ch.listen()).not.toThrow();
   });
 
-  it("send(text, content) → finalize_streaming + append_delta + finalize_streaming", async () => {
+  it("send(text) appends content when no streaming assistant exists", async () => {
     const dispatched: AppAction[] = [];
-    const ch = tuiChannel((a) => dispatched.push(a));
+    const items: ChatItem[] = [];
+    const ch = tuiChannel((a) => dispatched.push(a), () => ({ items }));
     await ch.send([{ type: "text", content: "hello", to: "u", channel: "tui" } as any]);
 
     expect(dispatched).toEqual([
-      { type: "finalize_streaming" },
       { type: "append_delta", delta: "hello" },
       { type: "finalize_streaming" },
     ]);
+  });
+
+  it("send(text) only finalizes when a streaming assistant is already rendered", async () => {
+    const dispatched: AppAction[] = [];
+    const items: ChatItem[] = [
+      { id: "1", kind: "assistant", ts: 1, text: "hello", isStreaming: true },
+    ];
+    const ch = tuiChannel((a) => dispatched.push(a), () => ({ items }));
+    await ch.send([{ type: "text", content: "hello", to: "u", channel: "tui" } as any]);
+
+    expect(dispatched).toEqual([{ type: "finalize_streaming" }]);
   });
 
   it("skips non-text outbounds", async () => {
@@ -40,7 +51,8 @@ describe("tuiChannel", () => {
 
   it("handles mixed text and non-text outbounds", async () => {
     const dispatched: AppAction[] = [];
-    const ch = tuiChannel((a) => dispatched.push(a));
+    const items: ChatItem[] = [];
+    const ch = tuiChannel((a) => dispatched.push(a), () => ({ items }));
     await ch.send([
       { type: "text", content: "A", to: "u", channel: "tui" } as any,
       { type: "image", data: "...", mimeType: "image/png" } as any,
@@ -48,27 +60,28 @@ describe("tuiChannel", () => {
     ]);
 
     expect(dispatched).toEqual([
-      { type: "finalize_streaming" }, { type: "append_delta", delta: "A" }, { type: "finalize_streaming" },
-      { type: "finalize_streaming" }, { type: "append_delta", delta: "B" }, { type: "finalize_streaming" },
+      { type: "append_delta", delta: "A" }, { type: "finalize_streaming" },
+      { type: "append_delta", delta: "B" }, { type: "finalize_streaming" },
     ]);
   });
 
   it("skips text outbounds with empty content", async () => {
     const dispatched: AppAction[] = [];
-    const ch = tuiChannel((a) => dispatched.push(a));
+    const items: ChatItem[] = [];
+    const ch = tuiChannel((a) => dispatched.push(a), () => ({ items }));
     await ch.send([{ type: "text", content: "", to: "u", channel: "tui" } as any]);
-    // Empty content fails the `o.content` truthiness check — no actions dispatched.
     expect(dispatched).toEqual([]);
   });
 
-  it("calls dispatch exactly 3N times for N text outbounds", async () => {
+  it("calls dispatch 2N times for N text outbounds without streaming", async () => {
     const spy = vi.fn();
-    const ch = tuiChannel(spy);
+    const items: ChatItem[] = [];
+    const ch = tuiChannel(spy, () => ({ items }));
     await ch.send([
       { type: "text", content: "x", to: "u", channel: "tui" } as any,
       { type: "text", content: "y", to: "u", channel: "tui" } as any,
       { type: "text", content: "z", to: "u", channel: "tui" } as any,
     ]);
-    expect(spy).toHaveBeenCalledTimes(9);
+    expect(spy).toHaveBeenCalledTimes(6);
   });
 });

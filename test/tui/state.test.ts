@@ -53,6 +53,24 @@ describe("append_delta", () => {
   });
 });
 
+describe("append_thinking", () => {
+  it("starts a new streaming assistant with reasoning", () => {
+    const state = action({ type: "append_thinking", delta: "hmm" });
+    expect(state.items).toHaveLength(1);
+    const item = state.items[0]!;
+    expect(item.kind).toBe("assistant");
+    expect(item.reasoning).toBe("hmm");
+    expect(item.isStreaming).toBe(true);
+  });
+
+  it("appends reasoning to an existing streaming assistant", () => {
+    const s1 = action({ type: "append_thinking", delta: "hmm" });
+    const s2 = appReducer(s1, { type: "append_thinking", delta: " ok" });
+    expect(s2.items).toHaveLength(1);
+    expect(s2.items[0]!.reasoning).toBe("hmm ok");
+  });
+});
+
 describe("upsert_tool_call", () => {
   it("inserts a new tool_call item", () => {
     const state = action({

@@ -18,7 +18,9 @@ export function eventToAction(event: any): AppAction | null {
       if (ame?.type === "text_delta") {
         return { type: "append_delta", delta: String(ame.delta ?? "") };
       }
-      // Skip thinking_delta for now to avoid clutter.
+      if (ame?.type === "thinking_delta") {
+        return { type: "append_thinking", delta: String(ame.delta ?? "") };
+      }
       return null;
     }
     case "tool_execution_start":

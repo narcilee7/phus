@@ -10,6 +10,7 @@ import type { AppAction } from "@/tui/state.js";
 
 export function tuiChannel(
   dispatch: (action: AppAction) => void,
+  getState?: () => { items: { kind: string; isStreaming?: boolean }[] },
 ): ChannelAdapter {
   return {
     name: "tui",
@@ -18,8 +19,14 @@ export function tuiChannel(
     },
     async send(outbounds) {
       for (const o of outbounds) {
-        if (o.type === "text" && o.content) {
+        if (o.type !== "text") continue;
+        const hasStreamingAssistant =
+          getState?.().items.some((it) => it.kind === "assistant" && it.isStreaming) ?? false;
+        if (hasStreamingAssistant) {
+          // Text was already rendered via streaming deltas; just finalize.
           dispatch({ type: "finalize_streaming" });
+        } else if (o.content) {
+          // No streaming happened (e.g. short-circuit path): add the final text.
           dispatch({ type: "append_delta", delta: o.content });
           dispatch({ type: "finalize_streaming" });
         }

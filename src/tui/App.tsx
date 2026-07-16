@@ -46,6 +46,14 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   const { stdout } = useStdout();
   const [terminalRows, setTerminalRows] = React.useState(stdout.rows);
 
+  // Hide the terminal's real cursor; MultiLineInput draws its own.
+  React.useEffect(() => {
+    stdout.write("\u001B[?25l");
+    return () => {
+      stdout.write("\u001B[?25h");
+    };
+  }, [stdout]);
+
   const DANGEROUS_TOOLS = React.useMemo(
     () => new Set(["bash", "file_write", "startup_write", "skill_write", "skill_delete"]),
     [],
@@ -179,7 +187,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         metadata: { chatId: "tui" },
         ts: Date.now(),
       };
-      await agent.turn(envelope, tuiChannel(dispatch));
+      await agent.turn(envelope, tuiChannel(dispatch, () => ({ items: state.items })));
     } catch (err: any) {
       dispatch({ type: "add_system", text: `error: ${err.message ?? err}`, level: "error" });
     } finally {
