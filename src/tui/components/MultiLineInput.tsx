@@ -58,12 +58,15 @@ export function MultiLineInput({
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
 
-  const query = value.startsWith("/") && !value.includes("\n") ? value.slice(1) : "";
-  const matches = suggestions
-    .filter((s) => s.startsWith(query) && !s.includes(" "))
-    .sort((a, b) => a.localeCompare(b))
-    .slice(0, 8);
-  const showSuggestions = isActive && suggestionsOpen && query.length > 0 && matches.length > 0;
+  const isSlashMode = value.startsWith("/") && !value.includes("\n");
+  const query = isSlashMode ? value.slice(1) : "";
+  const matches = isSlashMode
+    ? suggestions
+        .filter((s) => s.startsWith(query) && !s.includes(" "))
+        .sort((a, b) => a.localeCompare(b))
+        .slice(0, 8)
+    : [];
+  const showSuggestions = isActive && suggestionsOpen && isSlashMode && matches.length > 0;
 
   useEffect(() => {
     setSelectedSuggestion(0);
@@ -123,7 +126,12 @@ export function MultiLineInput({
         setSuggestionsOpen(false);
         return;
       }
-      if (key.tab || key.downArrow) {
+      if (key.tab) {
+        const chosen = matches[selectedSuggestion]!;
+        onChange(`/${chosen} `);
+        return;
+      }
+      if (key.downArrow) {
         setSelectedSuggestion((i) => (i + 1) % matches.length);
         return;
       }
@@ -215,7 +223,12 @@ export function MultiLineInput({
       return;
     }
 
-    if (key.backspace) {
+    // Treat both backspace and delete as "delete character before cursor".
+    // Ink can't reliably distinguish Mac Delete (\x7f) from PC forward-delete
+    // (\x1b[3~): both are reported as key.delete. For a chat input the cursor
+    // is almost always at the end of the line, so backward deletion is the
+    // behavior users expect from the Delete/Backspace key.
+    if (key.backspace || key.delete) {
       if (cur.col > 0) {
         const line = lines[cur.line]!;
         lines[cur.line] = line.slice(0, cur.col - 1) + line.slice(cur.col);
@@ -228,19 +241,6 @@ export function MultiLineInput({
         lines.splice(cur.line, 1);
         onChange(lines.join("\n"));
         setCursor({ line: cur.line - 1, col: prevLine.length });
-      }
-      return;
-    }
-
-    if (key.delete) {
-      const line = lines[cur.line]!;
-      if (cur.col < line.length) {
-        lines[cur.line] = line.slice(0, cur.col) + line.slice(cur.col + 1);
-        onChange(lines.join("\n"));
-      } else if (cur.line < lines.length - 1) {
-        lines[cur.line] = line + lines[cur.line + 1]!;
-        lines.splice(cur.line + 1, 1);
-        onChange(lines.join("\n"));
       }
       return;
     }
@@ -297,7 +297,7 @@ export function MultiLineInput({
               )}
             </Text>
           ))}
-          <Text dimColor>↑↓ navigate · Enter complete · Esc close</Text>
+          <Text dimColor>↑↓ navigate · Tab complete · Enter submit · Esc close</Text>
         </Box>
       )}
     </Box>
