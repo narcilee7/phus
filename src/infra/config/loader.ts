@@ -291,6 +291,15 @@ function validateProvidersTree(
       });
     }
 
+    // Inline API keys work but are discouraged.
+    if (profile.apiKey) {
+      warn("config.apiKey.inline_used", {
+        profile: profileName,
+        hint: "apiKey is convenient but less secure than apiKeyEnv; consider moving the secret to an environment variable",
+        source: cfgPath,
+      });
+    }
+
     // Validate each mesh entry
     if (profile.mesh) {
       for (let i = 0; i < profile.mesh.length; i++) {

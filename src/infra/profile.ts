@@ -42,6 +42,8 @@ export interface ProviderProfile {
   wireId?: string;
   /** Optional extra headers to send with every request. */
   headers?: Record<string, string>;
+  /** API key written directly in the config file (less secure than env vars). */
+  apiKey?: string;
   /** Env var name to read the API key from. Defaults to Pi's getEnvApiKey(). */
   apiKeyEnv?: string;
   /** Thinking level for this profile. */
@@ -235,8 +237,9 @@ export function modelFromProfile(profile: ProviderProfile): Model<any> {
   return Object.keys(overrides).length > 0 ? { ...base, ...overrides } : base;
 }
 
-/** Read the API key for a profile (explicit env var > Pi auto-detect). */
+/** Read the API key for a profile (explicit key > env var > Pi auto-detect). */
 export function apiKeyForProfile(profile: ProviderProfile): string | undefined {
+  if (profile.apiKey) return profile.apiKey;
   if (profile.apiKeyEnv) return process.env[profile.apiKeyEnv];
   return profile.provider ? getEnvApiKey(profile.provider) : undefined;
 }
