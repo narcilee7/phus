@@ -3,8 +3,9 @@
 // into the state reducer. All command dispatching lives in
 // ./commands.ts; all event → action mapping in ./events.ts.
 
-import React, { useEffect, useReducer } from "react";
+import React, { useEffect, useReducer, useRef } from "react";
 import { Box, useApp, useInput } from "ink";
+import { readFile } from "node:fs/promises";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 import { appReducer, initialState } from "@/tui/state.js";
@@ -33,6 +34,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   const [input, setInput] = React.useState("");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [stats, setStats] = React.useState({ entries: 0, skills: 0, turns: 0 });
+  const fileSnapshots = useRef(new Map<string, { path: string; content: string }>());
 
   const DANGEROUS_TOOLS = React.useMemo(
     () => new Set(["bash", "file_write", "startup_write", "skill_write", "skill_delete"]),
@@ -42,6 +44,18 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
     const unsub = agent.subscribeToAgentEvents((event: any) => {
+      if (event.type === "tool_execution_start" && event.toolName === "file_write") {
+        const path = event.args?.path;
+        if (typeof path === "string") {
+          readFile(path, "utf-8")
+            .then((content) => {
+              fileSnapshots.current.set(event.toolCallId, { path, content });
+            })
+            .catch(() => {
+              fileSnapshots.current.set(event.toolCallId, { path, content: "" });
+            });
+        }
+      }
       const action = eventToAction(event);
       if (action) dispatch(action);
     });
@@ -183,6 +197,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         scrollOffset={state.scroll.offset}
         hasNew={state.scroll.hasNew}
         lastOp={state.lastOp}
+        fileSnapshots={fileSnapshots.current}
       />
       <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
       {state.permissionQueue[0] && !paletteOpen && (

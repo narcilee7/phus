@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useStdout } from "ink";
 import type { ChatItem } from "@/tui/state.js";
-import { ChatItemView } from "@/tui/components/ChatItemView.js";
+import { ChatItemView, type FileSnapshot } from "@/tui/components/ChatItemView.js";
 import { Spinner } from "@/tui/components/Spinner.js";
 
 export interface ChatViewportProps {
@@ -14,12 +14,13 @@ export interface ChatViewportProps {
   scrollOffset: number;
   hasNew: boolean;
   lastOp: string;
+  fileSnapshots?: Map<string, FileSnapshot>;
 }
 
 /** Rows reserved for header, input box, status bar and borders. */
 const RESERVED_ROWS = 10;
 
-export function ChatViewport({ items, busy, scrollOffset, hasNew, lastOp }: ChatViewportProps) {
+export function ChatViewport({ items, busy, scrollOffset, hasNew, lastOp, fileSnapshots }: ChatViewportProps) {
   const { stdout } = useStdout();
   const [rows, setRows] = useState(stdout.rows);
 
@@ -51,7 +52,7 @@ export function ChatViewport({ items, busy, scrollOffset, hasNew, lastOp }: Chat
       height={height}
     >
       {visible.map((it) => (
-        <ChatItemView key={it.id} item={it} />
+        <ChatItemView key={it.id} item={it} items={items} fileSnapshots={fileSnapshots} />
       ))}
       {busy && (
         <Box>
