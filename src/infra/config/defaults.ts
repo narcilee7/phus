@@ -11,6 +11,8 @@ export const DEFAULTS = {
   tapeDb: "./tape.sqlite",
   /** Skills directory (Agent Skills standard layout). */
   skillsDir: "./skills",
+  /** Project memory file (the agent's cross-session notes). */
+  memoryFile: "./phus.md",
   /** Structured JSON log path (one event per line, pino). */
   logFile: "./logs/phus.jsonl",
   /** Minimum log level. */

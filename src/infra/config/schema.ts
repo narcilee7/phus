@@ -14,6 +14,31 @@ export interface PathsConfig {
   home: string;
   tapeDb: string;
   skillsDir: string;
+  /** Project memory file (phus.md). The agent reads & writes this across sessions. */
+  memoryFile: string;
+}
+
+/**
+ * Autonomy mode for `memory_write` tool calls.
+ *
+ * - `propose` (default): every write requires explicit user approval via the
+ *   TUI PermissionBar.
+ * - `approval-list`: writes matching `autoApprove` go straight through;
+ *   everything else needs approval. `requireApproval` is a hard deny-list
+ *   that overrides `autoApprove`.
+ * - `yolo`: writes always go through, only audit logged.
+ */
+export type MemoryMode = "propose" | "approval-list" | "yolo";
+
+/**
+ * Parsed `memory:` section of phus.config.yaml. Consumed by
+ * `AutonomyGate.fromConfig` to decide per-call whether to prompt.
+ */
+export interface MemoryConfig {
+  mode: MemoryMode;
+  autoApprove: string[];
+  requireApproval: string[];
+  logToTape: boolean;
 }
 
 /** Resolved logger config. */
@@ -34,6 +59,23 @@ export interface PluginSpec {
 }
 
 /**
+ * Channel entry as it appears in `phus.config.yaml::channels`.
+ * The `type` field selects the built-in channel implementation;
+ * remaining fields are passed through to the channel constructor.
+ */
+export interface ChannelConfig {
+  type: "websocket" | "sse" | "telegram";
+  enabled?: boolean;
+  port?: number;
+  host?: string;
+  path?: string;
+  token?: string;
+  allowedUsers?: string[] | string;
+  allowedChats?: string[] | string;
+  [key: string]: unknown;
+}
+
+/**
  * Fully-resolved, interpolated, cached config — what every consumer
  * reads via `loadConfig()`. Re-loading returns the same object until
  * the file changes or `resetConfigCache()` is called.
@@ -43,7 +85,10 @@ export interface ResolvedConfig {
   log: LogConfig;
   providers: ProviderConfig;
   plugins: PluginSpec[];
+  channels: ChannelConfig[];
   schedules: Schedule[];
+  /** Project memory autonomy + storage config. */
+  memory: MemoryConfig;
   /** Active profile name (env > YAML > default). */
   profileName: string;
   /** Interpolated YAML tree, exposed for plugin `register(ctx)` to read arbitrary sections. */

@@ -21,8 +21,11 @@ import yaml from "yaml";
 import { DEFAULTS, LOG_LEVELS, type LogLevelLiteral } from "./defaults.js";
 import { interpolateEnv } from "./interpolate.js";
 import type {
+  ChannelConfig,
   EnvOverrideVar,
   LogConfig,
+  MemoryConfig,
+  MemoryMode,
   PathsConfig,
   PluginSpec,
   ResolvedConfig,
@@ -133,7 +136,12 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     home,
     tapeDb: getPathField(interpolated, "tapeDb", DEFAULTS.tapeDb),
     skillsDir: getPathField(interpolated, "skillsDir", DEFAULTS.skillsDir),
+    memoryFile: getPathField(interpolated, "memoryFile", DEFAULTS.memoryFile),
   };
+
+  // Project memory autonomy config. Defaults to the safest mode (`propose`)
+  // so existing users get an explicit-permission workflow without changes.
+  const memory = parseMemoryConfig(interpolated, warn);
 
   // Build log config (env overrides still win for ops vars)
   const logFile = envOrYaml(
@@ -171,6 +179,10 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   const schedulesRaw = (interpolated as { schedules?: unknown })?.schedules;
   const schedules: Schedule[] = parseSchedules(schedulesRaw);
 
+  // Channels
+  const channelsRaw = (interpolated as { channels?: unknown })?.channels;
+  const channels: ChannelConfig[] = parseChannels(channelsRaw, warn);
+
   // Active profile (env wins)
   const profileName =
     process.env.PHUS_PROFILE ??
@@ -187,6 +199,7 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     providers,
     plugins,
     schedules,
+    memory,
     profileName,
     raw: interpolated,
     source: { path: cfgPath, mtimeMs, present },
@@ -482,6 +495,37 @@ function resolveModelFields(
     typeof raw.modelId === "string" && raw.modelId.length > 0 ? raw.modelId : undefined;
   if (!provider || !modelId) return null;
   return { provider, modelId };
+}
+
+function parseMemoryConfig(
+  interpolated: unknown,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+): MemoryConfig {
+  const raw = (interpolated as { memory?: unknown } | undefined)?.memory;
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+
+  const modeRaw = obj.mode;
+  const validModes: readonly MemoryMode[] = ["propose", "approval-list", "yolo"];
+  let mode: MemoryMode = "propose";
+  if (typeof modeRaw === "string" && (validModes as readonly string[]).includes(modeRaw)) {
+    mode = modeRaw as MemoryMode;
+  } else if (modeRaw !== undefined) {
+    warn("config.memory.invalid_mode", {
+      value: String(modeRaw),
+      valid: validModes,
+      using: "propose",
+    });
+  }
+
+  const autoApprove = Array.isArray(obj.autoApprove)
+    ? obj.autoApprove.filter((x): x is string => typeof x === "string")
+    : [];
+  const requireApproval = Array.isArray(obj.requireApproval)
+    ? obj.requireApproval.filter((x): x is string => typeof x === "string")
+    : [];
+  const logToTape = obj.logToTape !== false; // default true
+
+  return { mode, autoApprove, requireApproval, logToTape };
 }
 
 function parsePluginSpec(raw: unknown): PluginSpec[] {
