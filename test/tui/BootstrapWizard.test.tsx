@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
+import { existsSync } from "node:fs";
 import { BootstrapWizard } from "../../src/tui/components/BootstrapWizard.js";
 
 const wait = (ms = 100) => new Promise((r) => setTimeout(r, ms));
@@ -27,6 +28,10 @@ vi.mock("node:fs/promises", () => ({
     written.path = path;
     written.content = content;
   }),
+}));
+
+vi.mock("node:fs", () => ({
+  existsSync: vi.fn(() => false),
 }));
 
 vi.mock("../../src/infra/config/index.js", () => ({
@@ -84,5 +89,34 @@ describe("BootstrapWizard", () => {
     stdin.write("\x03");
     await wait(100);
     expect(onDone).toHaveBeenCalledWith(false);
+  });
+
+  it("refuses to overwrite an existing config file", async () => {
+    written.path = "";
+    written.content = "";
+    vi.mocked(existsSync).mockReturnValue(true);
+    const onDone = vi.fn();
+    const { stdin, lastFrame } = render(<BootstrapWizard onDone={onDone} />);
+    await wait(300);
+
+    stdin.write("\r"); // welcome → provider
+    await wait(100);
+    stdin.write("\r"); // provider → model
+    await wait(100);
+    stdin.write("\r"); // model → apiKey
+    await wait(100);
+    stdin.write("ANTHROPIC_API_KEY");
+    await wait(50);
+    stdin.write("\r"); // apiKey → profile
+    await wait(100);
+    stdin.write("\r"); // profile → confirm
+    await wait(100);
+    stdin.write("y"); // confirm write
+    await wait(200);
+
+    expect(lastFrame()).toContain("config already exists");
+    expect(written.path).toBe("");
+
+    vi.mocked(existsSync).mockReturnValue(false);
   });
 });

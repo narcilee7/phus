@@ -6,6 +6,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput, useApp, useStdout } from "ink";
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import yaml from "yaml";
@@ -243,6 +244,11 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
 
   async function writeConfig() {
     const cfgPath = configPath();
+    if (existsSync(cfgPath)) {
+      setError(`config already exists at ${cfgPath}; wizard will not overwrite it`);
+      setStep("error");
+      return;
+    }
     const home = path.dirname(cfgPath);
     const provider = providers[providerIndex];
     const modelId = models[modelIndex];
@@ -323,7 +329,7 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
           value={apiKeyEnv}
           onChange={setApiKeyEnv}
           placeholder="OPENAI_API_KEY"
-          hint="The name of the env var that holds your API key. The actual secret stays out of this file."
+          hint={"Name of the env var that holds your API key (e.g. DEEPSEEK_API_KEY). Leave blank only if the key is already exported in your shell. Phus will fail at runtime otherwise."}
         />
       )}
 

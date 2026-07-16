@@ -226,6 +226,30 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
 
   // ─── Render ───────────────────────────────────────────────────
   const sidebarHeight = Math.max(10, terminalRows - 6);
+  // Dynamic layout budget: reserve space for header, status bar, input box,
+  // and any transient overlays so the chat viewport never pushes them off-screen.
+  const headerRows = 4;
+  const statusBarRows = 1;
+  const inputBoxRows = 4;
+  const todoPillRows =
+    state.busy || state.items.some((it) => it.kind === "tool_call" && it.isError === undefined)
+      ? 1
+      : 0;
+  // PermissionBar is a bordered box with vertical margins; 6 rows is the
+  // conservative footprint. CommandPalette has height=14 plus marginY=1.
+  const permissionBarRows =
+    state.permissionQueue[0] && !paletteOpen && !sidebarOpen ? 6 : 0;
+  const paletteRows = paletteOpen ? 16 : 0;
+  const chatHeight = Math.max(
+    8,
+    terminalRows -
+      headerRows -
+      statusBarRows -
+      inputBoxRows -
+      todoPillRows -
+      permissionBarRows -
+      paletteRows,
+  );
   return (
     <Box flexDirection="column" height={terminalRows}>
       <Header
@@ -258,6 +282,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
             hasNew={state.scroll.hasNew}
             lastOp={state.lastOp}
             fileSnapshots={fileSnapshots.current}
+            height={chatHeight}
           />
           <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
           {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (

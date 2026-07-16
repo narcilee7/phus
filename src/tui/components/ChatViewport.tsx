@@ -1,6 +1,7 @@
 // src/tui/components/ChatViewport.tsx
 // Scrollable chat history. Renders a sliding window of ChatItems so the
-// TUI stays usable when the conversation grows long.
+// TUI stays usable when the conversation grows long. The container clips
+// overflow so long items never spill over the input box.
 
 import React, { useEffect, useState } from "react";
 import { Box, Text, useStdout } from "ink";
@@ -15,12 +16,23 @@ export interface ChatViewportProps {
   hasNew: boolean;
   lastOp: string;
   fileSnapshots?: Map<string, FileSnapshot>;
+  /** Optional explicit height. When omitted, the viewport computes its own
+   *  height from the terminal size. */
+  height?: number;
 }
 
 /** Rows reserved for header, input box, status bar and borders. */
 const RESERVED_ROWS = 10;
 
-export function ChatViewport({ items, busy, scrollOffset, hasNew, lastOp, fileSnapshots }: ChatViewportProps) {
+export function ChatViewport({
+  items,
+  busy,
+  scrollOffset,
+  hasNew,
+  lastOp,
+  fileSnapshots,
+  height: propHeight,
+}: ChatViewportProps) {
   const { stdout } = useStdout();
   const [rows, setRows] = useState(stdout.rows);
 
@@ -32,10 +44,10 @@ export function ChatViewport({ items, busy, scrollOffset, hasNew, lastOp, fileSn
     };
   }, [stdout]);
 
-  const height = Math.max(8, rows - RESERVED_ROWS);
+  const height = propHeight ?? Math.max(8, rows - RESERVED_ROWS);
   // Treat one item as ~2 rows on average; this is a coarse approximation
-  // because terminal wrapping is hard to predict, but it keeps the viewport
-  // bounded and scrollable.
+  // because terminal wrapping is hard to predict, but overflow="hidden"
+  // clips any spill-over so the input box stays visible.
   const visibleCount = Math.max(3, Math.floor(height / 2));
   const maxOffset = Math.max(0, items.length - visibleCount);
   const effectiveOffset = Math.min(scrollOffset, maxOffset);
@@ -50,6 +62,7 @@ export function ChatViewport({ items, busy, scrollOffset, hasNew, lastOp, fileSn
       borderColor="gray"
       paddingX={1}
       height={height}
+      overflow="hidden"
     >
       {visible.map((it) => (
         <ChatItemView key={it.id} item={it} items={items} fileSnapshots={fileSnapshots} />

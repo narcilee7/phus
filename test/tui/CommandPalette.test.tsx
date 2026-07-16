@@ -86,6 +86,39 @@ describe("CommandPalette", () => {
     for (let i = 0; i < 30; i++) stdin.write("\x1b[B");
     await wait(200);
     frame = lastFrame()!;
-    expect(frame).toContain("file10.ts");
+    expect(frame).toContain("file04.ts");
+  });
+
+  it("pushes the list up one item at a time like Codex", async () => {
+    const { stdin, lastFrame } = render(<CommandPalette agent={makeAgent()} onSelect={vi.fn()} onClose={vi.fn()} />);
+    await wait(300);
+    // 26 slash commands, then file00 starts at index 26.
+    for (let i = 0; i < 26; i++) stdin.write("\x1b[B");
+    await wait(200);
+    expect(lastFrame()).toContain("file00.ts");
+    // One more down arrow should scroll the window up by exactly one item.
+    stdin.write("\x1b[B");
+    await wait(100);
+    const frame = lastFrame()!;
+    expect(frame).toContain("file01.ts");
+  });
+
+  it("clamps selection when the filtered list shrinks", async () => {
+    const onSelect = vi.fn();
+    const { stdin, lastFrame } = render(<CommandPalette agent={makeAgent()} onSelect={onSelect} onClose={vi.fn()} />);
+    await wait(300);
+    // Navigate far down into the file list.
+    for (let i = 0; i < 30; i++) stdin.write("\x1b[B");
+    await wait(200);
+    expect(lastFrame()).toContain("file04.ts");
+    // Filter down to one slash command; the old high index must clamp to 0.
+    stdin.write("quit");
+    await wait(200);
+    const frame = lastFrame()!;
+    expect(frame).toContain("/quit");
+    stdin.write("\r");
+    await wait(100);
+    expect(onSelect).toHaveBeenCalled();
+    expect(String(onSelect.mock.calls[0]![0])).toContain("/quit");
   });
 });

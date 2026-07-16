@@ -123,10 +123,23 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
     setSelectedIndex(0);
   }, [query]);
 
-  const visibleStart = Math.max(
-    0,
-    Math.min(selectedIndex, results.length - VISIBLE_COUNT),
-  );
+  // Clamp selected index when the result list shrinks (e.g. query changed
+  // before the reset effect fired, or async items loaded while navigating).
+  useEffect(() => {
+    setSelectedIndex((i) => Math.min(i, Math.max(0, results.length - 1)));
+  }, [results.length]);
+
+  const safeSelectedIndex = Math.min(selectedIndex, Math.max(0, results.length - 1));
+  // Codex-style smooth scroll: keep the selected row near the bottom of the
+  // visible window so the list pushes up one item at a time.
+  const bottomAnchor = VISIBLE_COUNT - 1;
+  const visibleStart =
+    results.length <= VISIBLE_COUNT
+      ? 0
+      : Math.max(
+          0,
+          Math.min(safeSelectedIndex - bottomAnchor, results.length - VISIBLE_COUNT),
+        );
   const visibleResults = results.slice(visibleStart, visibleStart + VISIBLE_COUNT);
 
   useInput((input, key) => {
@@ -143,7 +156,7 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
       return;
     }
     if (key.return) {
-      const item = results[selectedIndex];
+      const item = results[safeSelectedIndex];
       if (item) {
         const action: PaletteAction = item.type === "session" ? "run" : "insert";
         onSelect(item.value, action);
@@ -179,7 +192,7 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
           return (
             <Box key={`${item.type}-${item.label}`} flexDirection="row">
               <Text>
-                {actualIndex === selectedIndex ? (
+                {actualIndex === safeSelectedIndex ? (
                   <Text backgroundColor="cyan" color="black">
                     › {item.icon} {item.label}
                   </Text>
