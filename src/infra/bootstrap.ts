@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { logger } from "@/infra/logging.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 type StartupMode = "custom" | "fallback" | "default";
 
@@ -14,10 +15,8 @@ const STARTUP_FOUND = "startup.found";
 const STARTUP_OUTPUT = "startup.output";
 const STARTUP_FAILED = "startup.failed"
 
-const PHUS_HOME = process.env.PHUS_HOME || "./.phus";
-
 export function startupScriptPath(): string {
-  return path.join(PHUS_HOME, "startup.sh");
+  return path.join(loadConfig().paths.home, "startup.sh");
 }
 
 /**

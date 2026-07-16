@@ -3,6 +3,7 @@
 
 import type { Command } from "commander";
 import { traceSession } from "@/commands/trace.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 export function registerTraceCommand(program: Command): void {
   program
@@ -12,7 +13,7 @@ export function registerTraceCommand(program: Command): void {
     .option("-k, --kind <kind>", "Filter: turn | tool_call | tool_result | error | anchor")
     .option("--json", "Emit raw JSON instead of human-readable")
     .action((sessionId: string, opts: { limit: string; kind?: string; json?: boolean }) => {
-      const dbPath = process.env.PHUS_TAPE_DB ?? "./tape.sqlite";
+      const dbPath = loadConfig().paths.tapeDb;
       traceSession(dbPath, sessionId, {
         limit: parseInt(opts.limit, 10),
         kind: opts.kind as any,

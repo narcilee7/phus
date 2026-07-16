@@ -11,7 +11,6 @@ import { AuthorDefinition } from "@/types/enumTypes/index.js";
 import { Skill } from "@/types/skill.js";
 
 const SKILL_FILE = "SKILL.md";
-const SKILL_DIRS = process.env.PHUS_SKILLS_DIR || "./skills";
 
 type SkillRootSource = "builtin" | "user" | "project"
 
@@ -32,8 +31,9 @@ export class SkillRegistry {
   private skills = new Map<string, Skill>();
   private roots: Array<RootItem>;
 
+  /** `skillsDir` is required — callers get the path from `loadConfig().paths.skillsDir`. */
   constructor(
-    skillsDir: string | undefined = SKILL_DIRS,
+    skillsDir: string,
     extraRoots: Array<RootItem> = [],
   ) {
     fs.mkdirSync(skillsDir, { recursive: true });

@@ -3,11 +3,13 @@
 
 import { getModel, type Model } from "@mariozechner/pi-ai";
 import { resolveProfile, modelFromProfile, apiKeyForProfile, type ProviderProfile } from "@/infra/profile.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 /** Build a Pi-compatible `Model` from the active profile, also setting
- *  any `PHUS_<PROVIDER>_API_KEY` env var so Pi's transport picks it up. */
+ *  any `<PROVIDER>_API_KEY` env var so Pi's transport picks it up. */
 export function resolveModel(): Model<any> {
-  const profile = resolveProfile(process.env.PHUS_PROFILE);
+  const profileName = loadConfig().profileName;
+  const profile = resolveProfile(profileName);
   const model = modelFromProfile(profile);
   const key = apiKeyForProfile(profile);
   if (key) {
@@ -26,7 +28,7 @@ export function resolveModel(): Model<any> {
  *  3. The `<PROVIDER>_API_KEY` convention */
 export function resolveApiKey(provider: string): string | undefined {
   try {
-    const profile: ProviderProfile = resolveProfile(process.env.PHUS_PROFILE);
+    const profile: ProviderProfile = resolveProfile(loadConfig().profileName);
     if (profile.apiKeyEnv && process.env[profile.apiKeyEnv]) {
       return process.env[profile.apiKeyEnv];
     }

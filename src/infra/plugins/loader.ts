@@ -18,6 +18,7 @@ import type { ChannelAdapter } from "@/channels/base.js";
 import { LoadedPlugin, Plugin, PluginContext, PluginLoaderOptions } from "@/types/plugins/index.js";
 import { Skill } from "@/types/skill.js";
 import { enqueuePendingCliCommand } from "@/infra/plugins/cli-queue.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 export function loadPlugins(
   hooks: HookRegistry,
@@ -25,7 +26,7 @@ export function loadPlugins(
   skills: { registerRuntime?: (skill: Skill) => void } = {},
   opts: PluginLoaderOptions = {},
 ): LoadedPlugin[] {
-  const home = opts.home ?? process.env.PHUS_HOME ?? "./.phus";
+  const home = opts.home ?? loadConfig().paths.home;
   const results: LoadedPlugin[] = [];
 
   // 1. Discover plugin paths.

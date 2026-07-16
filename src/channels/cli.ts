@@ -7,6 +7,7 @@ import * as readline from "node:readline";
 import { makeTextEnvelope } from "@/channels/base.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 export class CLIChannel implements ChannelAdapter {
   readonly name = "cli";
@@ -31,7 +32,7 @@ export class CLIChannel implements ChannelAdapter {
         const { execute, initInternalCommands } = await import("@/core/runtime/internal-commands/index.js");
         initInternalCommands({
           agent,
-          home: () => process.env.PHUS_HOME ?? "./.phus",
+          home: () => loadConfig().paths.home,
         });
         const result = await execute(text, "cli");
         if (result !== null && result !== "not-a-command") {
@@ -81,11 +82,12 @@ export class CLIChannel implements ChannelAdapter {
   }
 }
 
-/** Run a single prompt through the agent and exit. */
-export async function runOnce(prompt: string): Promise<void> {
+/** Run a single prompt through the agent and exit. Optional
+ *  `profileName` overrides the active profile for this run. */
+export async function runOnce(prompt: string, profileName?: string): Promise<void> {
   // Lazy import so `chat` mode doesn't pull in unused code paths.
   const { PhusAgent } = await import("@/bridge/pi-agent.js");
-  const handle = await PhusAgent.create();
+  const handle = await PhusAgent.create(profileName ? { profileName } : {});
   const agent = handle.agent;
   const internals = handle.internals;
   const channel = new CLIChannel();

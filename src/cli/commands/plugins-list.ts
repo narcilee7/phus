@@ -2,6 +2,7 @@
 // `phus plugins-list` — list discovered plugins (without loading them).
 
 import type { Command } from "commander";
+import { loadConfig } from "@/infra/config/index.js";
 
 export function registerPluginsListCommand(program: Command): void {
   program
@@ -14,8 +15,9 @@ export function registerPluginsListCommand(program: Command): void {
       const channels: import("@/channels/base.js").ChannelAdapter[] = [];
       const loaded = loadPlugins(hooks, channels);
       if (loaded.length === 0) {
+        const home = loadConfig().paths.home;
         console.log("No plugins found.");
-        console.log(`Search paths: $PHUS_HOME/plugins/  (PHUS_HOME=${process.env.PHUS_HOME ?? "./.phus"})`);
+        console.log(`Search paths: $PHUS_HOME/plugins/  (PHUS_HOME=${home})`);
         console.log(`Config file:  $PHUS_HOME/phus.config.yaml`);
         return;
       }

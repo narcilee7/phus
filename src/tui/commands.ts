@@ -5,6 +5,7 @@
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 import { asSessionId } from "@/types/brand.js";
 import type { AppAction, AppState, SystemLevel } from "@/tui/state.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 export type SlashResult = "quit" | "clear" | void;
 
@@ -179,7 +180,7 @@ async function runInternalCommand(
   );
   initInternalCommands({
     agent,
-    home: () => process.env.PHUS_HOME ?? "./.phus",
+    home: () => loadConfig().paths.home,
     mesh: agent.getMesh(),
   });
   const result = await execute(line, "tui");
@@ -272,7 +273,7 @@ async function cmdProfiles(
 ): Promise<void> {
   const { formatProfiles, resolveProfile, modelFromProfile, loadProviderConfig } =
     await import("@/infra/profile.js");
-  const activeName = process.env.PHUS_PROFILE ?? "(default)";
+  const activeName = loadConfig().profileName;
   if (!arg) {
     dispatch({
       type: "add_system",
@@ -284,7 +285,8 @@ async function cmdProfiles(
   try {
     const cfg = loadProviderConfig();
     resolveProfile(arg, cfg);
-    process.env.PHUS_PROFILE = arg;
+    // Switch the live agent's model in place; the active profile is
+    // an in-process concern for the TUI, so we don't mutate env.
     const next = modelFromProfile(resolveProfile(arg, cfg));
     agent.setModel(next.id, next.provider);
     dispatch({

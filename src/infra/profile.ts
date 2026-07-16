@@ -77,17 +77,16 @@ export interface ProviderConfig {
 
 const DEFAULT_PROFILE: ProviderProfile = {
   name: "default",
-  model: process.env.PHUS_MODEL ?? "anthropic/claude-sonnet-4-20250514",
-  baseUrl: process.env.PHUS_BASE_URL,
-  modelId: process.env.PHUS_MODEL_ID,
+  model: "anthropic/claude-sonnet-4-20250514",
   thinkingLevel: "medium",
 };
 
-/** Load provider config from $PHUS_HOME/phus.config.yaml. */
+/** Load provider config from $PHUS_HOME/phus.config.yaml (legacy sync
+ *  entry point — production code goes through `loadConfig()`). */
 export function loadProviderConfig(home = process.env.PHUS_HOME ?? "./.phus"): ProviderConfig {
   const cfgPath = path.join(home, "phus.config.yaml");
   if (!fs.existsSync(cfgPath)) {
-    return { profiles: { default: DEFAULT_PROFILE }, defaultProfile: "default" };
+    return { profiles: { default: { ...DEFAULT_PROFILE, name: "default" } }, defaultProfile: "default" };
   }
   try {
     const raw = yaml.parse(fs.readFileSync(cfgPath, "utf-8")) as {
@@ -95,9 +94,8 @@ export function loadProviderConfig(home = process.env.PHUS_HOME ?? "./.phus"): P
     };
     const providers = raw?.providers;
     if (!providers) {
-      return { profiles: { default: DEFAULT_PROFILE }, defaultProfile: "default" };
+      return { profiles: { default: { ...DEFAULT_PROFILE, name: "default" } }, defaultProfile: "default" };
     }
-    // Merge env-var defaults into the named default profile if it exists.
     const profiles: Record<string, ProviderProfile> = {};
     for (const [name, p] of Object.entries(providers.profiles ?? {})) {
       profiles[name] = { ...p, name };
@@ -112,7 +110,7 @@ export function loadProviderConfig(home = process.env.PHUS_HOME ?? "./.phus"): P
       path: cfgPath,
       error: (err as Error).message,
     });
-    return { profiles: { default: DEFAULT_PROFILE }, defaultProfile: "default" };
+    return { profiles: { default: { ...DEFAULT_PROFILE, name: "default" } }, defaultProfile: "default" };
   }
 }
 

@@ -119,18 +119,19 @@ The public surface is `PhusAgentFacade` (interface) — channels, TUI, and CLI c
 
 ## Key env vars (all optional, baked-in defaults exist)
 
-| Var | Default | Purpose |
-|---|---|---|
-| `PHUS_MODEL` | `anthropic/claude-sonnet-4-20250514` | `<provider>/<modelId>`, resolved via Pi's `getModel` |
-| `PHUS_HOME` | `./.phus` | Phus home (skills, tape, startup.sh, plugins) |
-| `PHUS_TAPE_DB` | `./.phus/tape.sqlite` | SQLite tape path |
-| `PHUS_SKILLS_DIR` | `./skills` | Skills directory |
-| `PHUS_LOG_FILE` | `./logs/phus.jsonl` | Structured log path |
-| `PHUS_LOG_LEVEL` | `info` | `fatal`/`error`/`warn`/`info`/`debug`/`trace` |
-| `PHUS_DEBUG_WIRE` | unset | When set, logs every Pi wire payload via `wire.payload` |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` / `GEMINI_API_KEY` / `DEEPSEEK_API_KEY` / `GROQ_API_KEY` / `MISTRAL_API_KEY` / `XAI_API_KEY` / `HF_TOKEN` / `ANTHROPIC_OAUTH_TOKEN` | — | Pi reads these automatically; set at least one |
+Config is **layered**: `$PHUS_HOME/phus.config.yaml` is the source of truth for paths, log, providers, plugins, schedules. A few env vars still override their YAML counterparts as deployment knobs. Secrets stay env-only.
 
-`TELEGRAM_TOKEN`, `TELEGRAM_ALLOW_USERS`, `TELEGRAM_ALLOW_CHATS` are gateway-only.
+| Var | Default | Purpose / precedence |
+|---|---|---|
+| `PHUS_HOME` | `./.phus` | Phus home (skills, tape, startup.sh, plugins). **Env > YAML > default.** |
+| `PHUS_PROFILE` | `default` | Active provider profile name. **Env > YAML `providers.defaultProfile` > `default`.** |
+| `PHUS_LOG_FILE` | `./logs/phus.jsonl` | Structured log path. **Env > YAML > default.** |
+| `PHUS_LOG_LEVEL` | `info` | `fatal`/`error`/`warn`/`info`/`debug`/`trace`. **Env > YAML > default.** |
+| `PHUS_DEBUG_WIRE` | unset | When set, logs every Pi wire payload via `wire.payload`. Debug toggle, env-only. |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` / `GEMINI_API_KEY` / `DEEPSEEK_API_KEY` / `GROQ_API_KEY` / `MISTRAL_API_KEY` / `XAI_API_KEY` / `HF_TOKEN` / `ANTHROPIC_OAUTH_TOKEN` | — | Secrets — env-only. Pi reads these automatically; set at least one. Reference from YAML via `${OPENAI_API_KEY}` if needed. |
+| `TELEGRAM_TOKEN`, `TELEGRAM_ALLOW_USERS`, `TELEGRAM_ALLOW_CHATS` | — | Gateway-only. `TELEGRAM_TOKEN` stays env-only (it's a secret). |
+
+The unified loader lives at `src/infra/config/loader.ts::loadConfig()`. Every consumer reads from it instead of touching `process.env` directly. See `documents/Deployment.md` for the full precedence table and migration story.
 
 ## Output binary
 

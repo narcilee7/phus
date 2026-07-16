@@ -28,9 +28,7 @@ import type {
   ResolvedConfig,
 } from "./schema.js";
 import { ENV_OVERRIDE_VARS } from "./schema.js";
-import {
-  loadProviderConfig as _loadProviderConfigImpl,
-} from "@/infra/profile.js";
+import type { ProviderConfig, ProviderProfile } from "@/infra/profile.js";
 import type { Schedule } from "@/types/scheduler/index.js";
 import { asScheduleName } from "@/types/brand.js";
 
@@ -151,11 +149,10 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     : DEFAULTS.logLevel;
   const log: LogConfig = { file: logFile, level: logLevel };
 
-  // Providers — delegate to existing profile loader so ProviderProfile
-  // typing stays intact. We pass a fake `home` only to compute the
-  // providers slice; loadProviderConfig still reads from disk itself
-  // for now (Phase D will inline it).
-  const providers = _loadProviderConfigImpl(home);
+  // Providers — parsed inline to avoid a circular dep with
+  // infra/profile.ts (which has its own legacy sync loader for tests
+  // and external callers).
+  const providers = parseProvidersFromTree(interpolated);
 
   // Plugins
   const pluginsRaw = (interpolated as { plugins?: unknown })?.plugins;
@@ -237,6 +234,35 @@ function envOrYaml(
     return envVal;
   }
   return yamlValue;
+}
+
+function parseProvidersFromTree(tree: unknown): ProviderConfig {
+  const obj = (tree as { providers?: { defaultProfile?: string; profiles?: Record<string, Partial<ProviderProfile>> } } | undefined)?.providers;
+  if (!obj) {
+    return {
+      profiles: {
+        default: {
+          name: "default",
+          model: DEFAULTS.defaultModel,
+          thinkingLevel: "medium",
+        },
+      },
+      defaultProfile: DEFAULTS.defaultProfile,
+    };
+  }
+  const profiles: Record<string, ProviderProfile> = {};
+  for (const [name, p] of Object.entries(obj.profiles ?? {})) {
+    if (!p || typeof p.model !== "string") continue;
+    profiles[name] = { ...p, name } as ProviderProfile;
+  }
+  if (!profiles.default) {
+    profiles.default = {
+      name: "default",
+      model: DEFAULTS.defaultModel,
+      thinkingLevel: "medium",
+    };
+  }
+  return { profiles, defaultProfile: obj.defaultProfile ?? DEFAULTS.defaultProfile };
 }
 
 function parsePluginSpec(raw: unknown): PluginSpec[] {
