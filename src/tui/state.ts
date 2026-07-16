@@ -20,11 +20,19 @@ export interface ChatItem {
   level?: SystemLevel;
 }
 
+export interface ScrollState {
+  /** Items from the bottom we are scrolled up. 0 means pinned to bottom. */
+  offset: number;
+  /** True when new content arrived while scrolled up. */
+  hasNew: boolean;
+}
+
 export interface AppState {
   items: ChatItem[];
   busy: boolean;
   showHint: boolean;
   lastOp: string;
+  scroll: ScrollState;
 }
 
 export const initialState: AppState = {
@@ -32,6 +40,7 @@ export const initialState: AppState = {
   busy: false,
   showHint: true,
   lastOp: "idle",
+  scroll: { offset: 0, hasNew: false },
 };
 
 export type AppAction =
@@ -44,11 +53,21 @@ export type AppAction =
   | { type: "set_busy"; busy: boolean }
   | { type: "set_last_op"; op: string }
   | { type: "hide_hint" }
-  | { type: "clear_items" };
+  | { type: "clear_items" }
+  | { type: "scroll_up"; lines?: number }
+  | { type: "scroll_down"; lines?: number }
+  | { type: "scroll_bottom" };
 
 /** Truncate a string for compact display. */
 export function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+/** When the user has scrolled up and new content arrives, mark it so the
+ *  TUI can show a "new messages" indicator without auto-jumping to bottom. */
+function withScrollOnNewContent(state: AppState): AppState {
+  if (state.scroll.offset === 0) return state;
+  return { ...state, scroll: { ...state.scroll, hasNew: true } };
 }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -57,15 +76,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (!action.delta) return state;
       const last = state.items[state.items.length - 1];
       if (last && last.kind === "assistant" && last.isStreaming) {
-        return {
+        return withScrollOnNewContent({
           ...state,
           items: [
             ...state.items.slice(0, -1),
             { ...last, text: (last.text ?? "") + action.delta },
           ],
-        };
+        });
       }
-      return {
+      return withScrollOnNewContent({
         ...state,
         items: [
           ...state.items,
@@ -77,21 +96,21 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             isStreaming: true,
           },
         ],
-      };
+      });
     }
     case "upsert_tool_call": {
       const existing = state.items.find(
         (it) => it.kind === "tool_call" && it.toolCallId === action.toolCallId,
       );
       if (existing) {
-        return {
+        return withScrollOnNewContent({
           ...state,
           items: state.items.map((it) =>
             it.id === existing.id ? { ...it, args: action.args } : it,
           ),
-        };
+        });
       }
-      return {
+      return withScrollOnNewContent({
         ...state,
         items: [
           ...state.items,
@@ -104,7 +123,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             args: action.args,
           },
         ],
-      };
+      });
     }
     case "complete_tool_call": {
       const callIdx = state.items.findIndex(
@@ -123,7 +142,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         result: action.result,
         isError: action.isError,
       });
-      return { ...state, items: updated };
+      return withScrollOnNewContent({ ...state, items: updated });
     }
     case "finalize_streaming":
       return {
@@ -133,15 +152,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ),
       };
     case "add_user":
-      return {
+      return withScrollOnNewContent({
         ...state,
         items: [
           ...state.items,
           { id: crypto.randomUUID(), kind: "user", text: action.text, ts: Date.now() },
         ],
-      };
+      });
     case "add_system":
-      return {
+      return withScrollOnNewContent({
         ...state,
         items: [
           ...state.items,
@@ -153,7 +172,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             level: action.level,
           },
         ],
-      };
+      });
     case "set_busy":
       return { ...state, busy: action.busy };
     case "set_last_op":
@@ -161,6 +180,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "hide_hint":
       return { ...state, showHint: false };
     case "clear_items":
-      return { ...state, items: [] };
+      return { ...state, items: [], scroll: { offset: 0, hasNew: false } };
+    case "scroll_up": {
+      const lines = action.lines ?? 1;
+      return { ...state, scroll: { ...state.scroll, offset: state.scroll.offset + lines } };
+    }
+    case "scroll_down": {
+      const lines = action.lines ?? 1;
+      return { ...state, scroll: { ...state.scroll, offset: Math.max(0, state.scroll.offset - lines) } };
+    }
+    case "scroll_bottom":
+      return { ...state, scroll: { offset: 0, hasNew: false } };
   }
 }

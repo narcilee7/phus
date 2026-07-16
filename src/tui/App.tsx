@@ -9,8 +9,7 @@ import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 import { appReducer, initialState } from "@/tui/state.js";
 import { Header } from "@/tui/components/Header.js";
-import { ChatItemView } from "@/tui/components/ChatItemView.js";
-import { Spinner } from "@/tui/components/Spinner.js";
+import { ChatViewport } from "@/tui/components/ChatViewport.js";
 import { InputBox } from "@/tui/components/InputBox.js";
 import { StatusBar } from "@/tui/components/StatusBar.js";
 import { eventToAction } from "@/tui/events.js";
@@ -69,6 +68,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       return;
     }
 
+    dispatch({ type: "scroll_bottom" });
     dispatch({ type: "set_busy", busy: true });
     dispatch({ type: "set_last_op", op: "thinking…" });
     dispatch({ type: "add_user", text });
@@ -92,7 +92,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     }
   };
 
-  // ─── Ctrl+C / Ctrl+L shortcuts ───────────────────────────────
+  // ─── Ctrl+C / Ctrl+L shortcuts + scroll keys ──────────────────
   useInput((input, key) => {
     if (key.ctrl && input === "c") {
       if (state.busy) {
@@ -107,23 +107,28 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     if (key.ctrl && input === "l") {
       dispatch({ type: "clear_items" });
     }
+    if (key.pageUp) {
+      dispatch({ type: "scroll_up", lines: 5 });
+    }
+    if (key.pageDown) {
+      dispatch({ type: "scroll_down", lines: 5 });
+    }
+    if (key.ctrl && key.end) {
+      dispatch({ type: "scroll_bottom" });
+    }
   });
 
   // ─── Render ───────────────────────────────────────────────────
   return (
     <Box flexDirection="column">
       <Header model={modelLabel} session={sessionId} stats={stats} lastOp={state.lastOp} />
-      <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} minHeight={20}>
-        {state.items.slice(-100).map((it) => (
-          <ChatItemView key={it.id} item={it} />
-        ))}
-        {state.busy && (
-          <Box>
-            <Spinner />
-            <Box marginLeft={1}>thinking…</Box>
-          </Box>
-        )}
-      </Box>
+      <ChatViewport
+        items={state.items}
+        busy={state.busy}
+        scrollOffset={state.scroll.offset}
+        hasNew={state.scroll.hasNew}
+        lastOp={state.lastOp}
+      />
       <InputBox
         value={input}
         busy={state.busy}

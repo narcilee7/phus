@@ -1,0 +1,264 @@
+# ─────────────────────────────────────────────────────────────────────
+# Phus configuration reference
+#
+# Copy this file to $PHUS_HOME/phus.config.yaml and edit. Every key
+# is optional — missing keys fall back to the defaults baked into
+# `src/infra/config/defaults.ts`. The active file path is:
+#
+#   $PHUS_HOME/phus.config.yaml          (default: ./.phus/phus.config.yaml)
+#
+# Quick start:
+#
+#   cp phus.config.example.yaml ./.phus/phus.config.yaml
+#   # edit, then run:  phus health
+#
+# ─────────────────────────────────────────────────────────────────────
+# Source-of-truth precedence
+# ─────────────────────────────────────────────────────────────────────
+#
+# Most settings come from this file. A few env vars still override
+# their YAML counterparts (deployment knobs set by systemd / Docker /
+# k8s). These four emit a `config.env_override_used` warn event when
+# set:
+#
+#   PHUS_HOME       > paths.home
+#   PHUS_LOG_FILE   > log.file
+#   PHUS_LOG_LEVEL  > log.level
+#   PHUS_PROFILE    > providers.defaultProfile
+#
+# Everything else (paths.tapeDb, paths.skillsDir, provider profiles,
+# mesh, plugins, schedules) is YAML-only — env has no effect.
+#
+# Secrets (API keys, TELEGRAM_TOKEN, etc.) stay in env. Reference them
+# from YAML with ${VAR} interpolation — see the examples below.
+#
+# ─────────────────────────────────────────────────────────────────────
+# Filesystem paths
+# ─────────────────────────────────────────────────────────────────────
+#
+# paths.home is set by PHUS_HOME env (bootstrap pointer). The other
+# two are YAML-only.
+#
+paths:
+  # tapeDb:    SQLite database (one row per turn / tool_call / anchor).
+  #             Will be created on first turn if missing.
+  tapeDb: ./.phus/tape.sqlite
+
+  # skillsDir: Agent Skills standard layout — one dir per skill,
+  #             SKILL.md inside.
+  skillsDir: ./skills
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Structured logger (pino → JSONL)
+# ─────────────────────────────────────────────────────────────────────
+#
+# log.level: fatal | error | warn | info | debug | trace
+# PHUS_LOG_LEVEL env still wins (operational override).
+#
+log:
+  file:  ./logs/phus.jsonl
+  level: info
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Provider profiles
+# ─────────────────────────────────────────────────────────────────────
+#
+# Each profile names a Pi-registered model + per-profile overrides.
+# The active profile is chosen by PHUS_PROFILE env > defaultProfile.
+#
+# Profile fields:
+#   model         <provider>/<modelId>     required, from Pi's registry
+#   baseUrl       string                   override the provider URL
+#   modelId       string                   override the id on the wire
+#   apiKeyEnv     string                   env var holding the API key
+#   thinkingLevel off | minimal | low | medium | high | xhigh
+#   maxSteps      number                   max tool-use loop iters (50)
+#   meshStrategy  failover | weighted | cost-first | latency-first
+#   mesh          array                    cross-provider failover list
+#
+providers:
+  defaultProfile: smart
+
+  profiles:
+    # Default — Anthropic direct, balanced quality + speed.
+    smart:
+      model: anthropic/claude-sonnet-4-20250514
+      thinkingLevel: medium
+      description: default — balanced quality + speed
+
+    # Cheap + fast for routine work.
+    fast:
+      model: openai/gpt-4o-mini
+      thinkingLevel: low
+      description: cheap OpenAI for routine work
+
+    # Volcano Ark DeepSeek via OpenAI-compatible gateway.
+    # The modelId override is the Volcano Ark endpoint id; PHUS_MODEL
+    # still uses Pi's registry name for type safety.
+    volcano:
+      model: deepseek/deepseek-v3-250324
+      baseUrl: https://ark.cn-beijing.volces.com/api/v3
+      modelId: ${VOLCANO_MODEL_ID:-deepseek-v3-250324}
+      apiKeyEnv: VOLCANO_API_KEY
+      thinkingLevel: medium
+      description: Volcano Ark (火山方舟) DeepSeek-V3
+
+    # OpenRouter proxy — one key, any model.
+    openrouter:
+      model: openrouter/anthropic/claude-3.5-sonnet
+      apiKeyEnv: OPENROUTER_API_KEY
+      thinkingLevel: medium
+      description: OpenRouter proxy (any model)
+
+    # Self-hosted vLLM or any OpenAI-compatible gateway.
+    vllm:
+      model: openai/custom-model
+      baseUrl: ${VLLM_BASE_URL:-https://your-vllm.internal/v1}
+      apiKeyEnv: VLLM_API_KEY
+      description: self-hosted vLLM endpoint
+
+    # ─── Mesh (in-process failover across providers) ────────────
+    # A profile can declare MULTIPLE endpoints. Phus builds a runtime
+    # mesh with circuit breaker + retry. Use this INSTEAD OF LiteLLM
+    # — same resilience, zero extra ops.
+    #
+    # Endpoint fields:
+    #   name           string           required, unique
+    #   provider       string           required, Pi provider id
+    #   modelId        string           required, model id for the wire
+    #   baseUrl        string           optional, override URL
+    #   apiKeyEnv      string           optional, env var holding the key
+    #   priority       number           lower = preferred (default 0)
+    #   weight         number           for `weighted` strategy (default 1)
+    #   costPerMillion {input, output}  for `cost-first` strategy
+    #   tags           [string]         for observability only
+    #
+    smart-mesh:
+      meshStrategy: failover
+      thinkingLevel: medium
+      description: Sonnet primary, GPT-4o fallback, Volcano Ark emergency
+      mesh:
+        - name: claude-sonnet
+          provider: anthropic
+          modelId: claude-sonnet-4-20250514
+          apiKeyEnv: ANTHROPIC_API_KEY
+          priority: 0
+          costPerMillion: { input: 3, output: 15 }
+          tags: [premium, west]
+
+        - name: gpt-4o
+          provider: openai
+          modelId: gpt-4o
+          apiKeyEnv: OPENAI_API_KEY
+          priority: 1
+          costPerMillion: { input: 2.5, output: 10 }
+          tags: [premium, west]
+
+        - name: deepseek-v4-pro
+          provider: openai
+          modelId: ${DEEPSEEK_MODEL_ID:-deepseek-v4-pro}
+          baseUrl: https://ark.cn-beijing.volces.com/api/v3
+          apiKeyEnv: DEEPSEEK_API_KEY
+          priority: 2
+          costPerMillion: { input: 0.27, output: 1.1 }
+          tags: [cheap, china]
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Plugins
+# ─────────────────────────────────────────────────────────────────────
+#
+# Each entry is either a string path or a structured object.
+# Loaded in order. Last entry's `config` is passed to the plugin's
+# register(ctx) as ctx.config. See documents/Plugins.md.
+#
+plugins:
+  - name: tool-logger
+    path: ./plugins/tool-logger.ts
+    config:
+      logLevel: debug
+      sampleRate: 1.0
+
+  - ./plugins/greet-everyone.ts
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Schedules (gateway mode only)
+# ─────────────────────────────────────────────────────────────────────
+#
+# 5-field standard cron: "minute hour day-of-month month day-of-week"
+# The fired hook receives HookContext with extras = {
+#   schedule: <name>, cron: <expr>, payload: <object>, firedAt: <ms>
+# }
+#
+# Set enabled: false to register-but-not-fire (e.g. ,schedule.enable heartbeat-tick).
+#
+schedules:
+  # Hourly housekeeping — refresh context, prune checkpoints.
+  - name: hourly-checkin
+    cron: "0 * * * *"
+    hookName: system_prompt
+    description: hourly context refresh
+
+  # Daily at 03:00 — auto-compact old sessions.
+  - name: daily-compact
+    cron: "0 3 * * *"
+    hookName: save_state
+    description: daily compaction hook
+
+  # Disabled by default — opt in via ,schedule.enable heartbeat-tick.
+  - name: heartbeat-tick
+    cron: "*/15 * * * *"
+    hookName: provide_steering_inbox
+    enabled: false
+    description: inject "still alive?" nudge every 15 min
+
+
+# ─────────────────────────────────────────────────────────────────────
+# ${VAR} interpolation reference
+# ─────────────────────────────────────────────────────────────────────
+#
+# Anywhere a string appears in this file, you can reference an env var.
+#
+#   ${VAR}                  → process.env.VAR (warn if unset, leave literal)
+#   ${VAR:-default}         → process.env.VAR || "default" (default only when unset)
+#   $VAR                    → same as ${VAR}, but only when preceded by
+#                             start-of-string or a non-identifier char
+#   $$                      → literal $   (escape)
+#   \$                      → literal $   (escape)
+#
+# Variables are matched as identifiers: [A-Z_][A-Z0-9_]*. Lowercase
+# secrets (e.g. "sk-...") are never touched.
+#
+# Unset, non-defaulted references are left as-is and Phus emits one
+# `config.interpolate_unset` warn event per distinct variable name.
+# Check `phus logs --event config.interpolate_unset` if you suspect a
+# typo.
+#
+# ─────────────────────────────────────────────────────────────────────
+# What STAYS env-only (never put these in this file)
+# ─────────────────────────────────────────────────────────────────────
+#
+#   OPENAI_API_KEY
+#   ANTHROPIC_API_KEY
+#   ANTHROPIC_OAUTH_TOKEN       (Claude Pro/Max OAuth)
+#   GEMINI_API_KEY
+#   DEEPSEEK_API_KEY
+#   GROQ_API_KEY
+#   MISTRAL_API_KEY
+#   XAI_API_KEY
+#   HF_TOKEN
+#   OPENROUTER_API_KEY
+#   TELEGRAM_TOKEN
+#   TELEGRAM_ALLOW_USERS        (comma-separated)
+#   TELEGRAM_ALLOW_CHATS        (comma-separated)
+#   PHUS_DEBUG_WIRE             (Pi wire-payload debug toggle)
+#
+# Reference these from this file by env-var name only — never inline
+# the actual values:
+#
+#   apiKeyEnv: OPENAI_API_KEY    # correct
+#   apiKey: sk-ant-...           # wrong — never commit secrets
+#

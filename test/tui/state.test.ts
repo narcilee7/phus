@@ -14,6 +14,7 @@ describe("initialState", () => {
     expect(initialState.busy).toBe(false);
     expect(initialState.showHint).toBe(true);
     expect(initialState.lastOp).toBe("idle");
+    expect(initialState.scroll).toEqual({ offset: 0, hasNew: false });
   });
 });
 
@@ -151,6 +152,50 @@ describe("set_busy / set_last_op / hide_hint", () => {
   it("hide_hint flips the flag to false", () => {
     expect(initialState.showHint).toBe(true);
     expect(appReducer(initialState, { type: "hide_hint" }).showHint).toBe(false);
+  });
+});
+
+describe("scroll", () => {
+  it("scroll_up increases offset", () => {
+    const s = appReducer(initialState, { type: "scroll_up" });
+    expect(s.scroll.offset).toBe(1);
+  });
+
+  it("scroll_up accepts a line count", () => {
+    const s = appReducer(initialState, { type: "scroll_up", lines: 5 });
+    expect(s.scroll.offset).toBe(5);
+  });
+
+  it("scroll_down decreases offset but not below zero", () => {
+    const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
+    const s2 = appReducer(s1, { type: "scroll_down", lines: 2 });
+    expect(s2.scroll.offset).toBe(1);
+    const s3 = appReducer(s2, { type: "scroll_down", lines: 5 });
+    expect(s3.scroll.offset).toBe(0);
+  });
+
+  it("scroll_bottom resets offset and hasNew", () => {
+    const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
+    const s2 = appReducer(s1, { type: "scroll_bottom" });
+    expect(s2.scroll).toEqual({ offset: 0, hasNew: false });
+  });
+
+  it("marks hasNew when content arrives while scrolled up", () => {
+    const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
+    const s2 = appReducer(s1, { type: "add_user", text: "hello" });
+    expect(s2.scroll.hasNew).toBe(true);
+    expect(s2.scroll.offset).toBe(3);
+  });
+
+  it("does not mark hasNew when content arrives at bottom", () => {
+    const s1 = appReducer(initialState, { type: "add_user", text: "hello" });
+    expect(s1.scroll.hasNew).toBe(false);
+  });
+
+  it("clear_items resets scroll", () => {
+    const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
+    const s2 = appReducer(s1, { type: "clear_items" });
+    expect(s2.scroll).toEqual({ offset: 0, hasNew: false });
   });
 });
 
