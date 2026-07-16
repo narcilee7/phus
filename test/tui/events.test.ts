@@ -13,12 +13,12 @@ describe("eventToAction", () => {
     expect(a).toEqual({ type: "append_delta", delta: "hi" });
   });
 
-  it("ignores message_update with thinking_delta", () => {
+  it("maps message_update + thinking_delta → append_thinking", () => {
     const a = eventToAction({
       type: "message_update",
       assistantMessageEvent: { type: "thinking_delta", delta: "hmm" },
     });
-    expect(a).toBeNull();
+    expect(a).toEqual({ type: "append_thinking", delta: "hmm" });
   });
 
   it("ignores message_update with no assistantMessageEvent", () => {

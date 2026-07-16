@@ -10,7 +10,7 @@ export function registerTraceCommand(program: Command): void {
     .command("trace <sessionId>")
     .description("Print a turn timeline for one session")
     .option("-l, --limit <n>", "Max entries to show", "50")
-    .option("-k, --kind <kind>", "Filter: turn | tool_call | tool_result | error | anchor")
+    .option("-k, --kind <kind>", "Filter: turn | tool_call | tool_result | error | anchor | memory_write")
     .option("--json", "Emit raw JSON instead of human-readable")
     .action((sessionId: string, opts: { limit: string; kind?: string; json?: boolean }) => {
       const dbPath = loadConfig().paths.tapeDb;

@@ -21,8 +21,11 @@ import yaml from "yaml";
 import { DEFAULTS, LOG_LEVELS, type LogLevelLiteral } from "./defaults.js";
 import { interpolateEnv } from "./interpolate.js";
 import type {
+  ChannelConfig,
   EnvOverrideVar,
   LogConfig,
+  MemoryConfig,
+  MemoryMode,
   PathsConfig,
   PluginSpec,
   ResolvedConfig,
@@ -133,7 +136,12 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     home,
     tapeDb: getPathField(interpolated, "tapeDb", DEFAULTS.tapeDb),
     skillsDir: getPathField(interpolated, "skillsDir", DEFAULTS.skillsDir),
+    memoryFile: getPathField(interpolated, "memoryFile", DEFAULTS.memoryFile),
   };
+
+  // Project memory autonomy config. Defaults to the safest mode (`propose`)
+  // so existing users get an explicit-permission workflow without changes.
+  const memory = parseMemoryConfig(interpolated, warn);
 
   // Build log config (env overrides still win for ops vars)
   const logFile = envOrYaml(
@@ -171,6 +179,10 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   const schedulesRaw = (interpolated as { schedules?: unknown })?.schedules;
   const schedules: Schedule[] = parseSchedules(schedulesRaw);
 
+  // Channels
+  const channelsRaw = (interpolated as { channels?: unknown })?.channels;
+  const channels: ChannelConfig[] = parseChannels(channelsRaw, warn);
+
   // Active profile (env wins)
   const profileName =
     process.env.PHUS_PROFILE ??
@@ -186,7 +198,9 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     log,
     providers,
     plugins,
+    channels,
     schedules,
+    memory,
     profileName,
     raw: interpolated,
     source: { path: cfgPath, mtimeMs, present },
@@ -287,6 +301,15 @@ function validateProvidersTree(
         profile: profileName,
         apiKeyEnv: profile.apiKeyEnv,
         reason: secretHint,
+        source: cfgPath,
+      });
+    }
+
+    // Inline API keys work but are discouraged.
+    if (profile.apiKey) {
+      warn("config.apiKey.inline_used", {
+        profile: profileName,
+        hint: "apiKey is convenient but less secure than apiKeyEnv; consider moving the secret to an environment variable",
         source: cfgPath,
       });
     }
@@ -475,6 +498,37 @@ function resolveModelFields(
   return { provider, modelId };
 }
 
+function parseMemoryConfig(
+  interpolated: unknown,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+): MemoryConfig {
+  const raw = (interpolated as { memory?: unknown } | undefined)?.memory;
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+
+  const modeRaw = obj.mode;
+  const validModes: readonly MemoryMode[] = ["propose", "approval-list", "yolo"];
+  let mode: MemoryMode = "propose";
+  if (typeof modeRaw === "string" && (validModes as readonly string[]).includes(modeRaw)) {
+    mode = modeRaw as MemoryMode;
+  } else if (modeRaw !== undefined) {
+    warn("config.memory.invalid_mode", {
+      value: String(modeRaw),
+      valid: validModes,
+      using: "propose",
+    });
+  }
+
+  const autoApprove = Array.isArray(obj.autoApprove)
+    ? obj.autoApprove.filter((x): x is string => typeof x === "string")
+    : [];
+  const requireApproval = Array.isArray(obj.requireApproval)
+    ? obj.requireApproval.filter((x): x is string => typeof x === "string")
+    : [];
+  const logToTape = obj.logToTape !== false; // default true
+
+  return { mode, autoApprove, requireApproval, logToTape };
+}
+
 function parsePluginSpec(raw: unknown): PluginSpec[] {
   if (!Array.isArray(raw)) return [];
   const out: PluginSpec[] = [];
@@ -511,6 +565,27 @@ function parseSchedules(raw: unknown): Schedule[] {
       enabled: e.enabled !== false,
       description: e.description,
     });
+  }
+  return out;
+}
+
+function parseChannels(
+  raw: unknown,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+): ChannelConfig[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChannelConfig[] = [];
+  const validTypes = new Set<string>(["websocket", "sse", "telegram"]);
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const type = typeof e.type === "string" ? e.type : "";
+    if (!validTypes.has(type)) {
+      warn("config.channel.invalid_type", { type, valid: Array.from(validTypes) });
+      continue;
+    }
+    if (e.enabled === false) continue;
+    out.push({ ...e, type: type as ChannelConfig["type"] });
   }
   return out;
 }

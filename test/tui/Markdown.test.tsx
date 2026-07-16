@@ -83,4 +83,16 @@ describe("Markdown", () => {
     expect(frame).toContain("b");
     expect(frame).toContain("1");
   });
+
+  it("skips empty list items", async () => {
+    const { lastFrame } = render(<Markdown content={"- one\n- \n- two"} />);
+    await wait();
+    const frame = lastFrame()!;
+    expect(frame).toContain("one");
+    expect(frame).toContain("two");
+    // A list with only an empty item should render no bullet at all.
+    const { lastFrame: emptyLastFrame } = render(<Markdown content={"- "} />);
+    await wait();
+    expect(emptyLastFrame()).not.toContain("•");
+  });
 });

@@ -5,7 +5,7 @@ import Database from "better-sqlite3";
 
 export interface TraceOptions {
   limit?: number;
-  kind?: "turn" | "tool_call" | "tool_result" | "error" | "anchor";
+  kind?: "turn" | "tool_call" | "tool_result" | "error" | "anchor" | "memory_write";
   json?: boolean;
 }
 
@@ -65,6 +65,8 @@ function summarize(payload: any): string {
       return `[${payload.stage}] ${payload.error}`;
     case "anchor":
       return payload.name;
+    case "memory_write":
+      return `${payload.autonomyDecision} ${payload.action?.kind ?? "?"} ${payload.action?.section ?? "?"} — ${payload.reason ?? ""}`.trim();
     default:
       return truncate(JSON.stringify(payload));
   }

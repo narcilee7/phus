@@ -5,8 +5,13 @@
 // parses argv. All real command logic lives in `src/cli/commands/`.
 
 import { loadConfig, setLogSink } from "@/infra/config/index.js";
+import { loadEnvFile } from "@/infra/env-file.js";
 import { initLogger, logger } from "@/infra/logging.js";
 import { buildProgram, registerPluginCliCommands } from "@/cli/program.js";
+
+// 0. Load optional `$PHUS_HOME/.env` so API keys and other secrets are
+//    available before config interpolation and model resolution run.
+loadEnvFile();
 
 // 1. Resolve config BEFORE building the program so plugins and any
 //    diagnostic logs they emit see substituted config + active level.

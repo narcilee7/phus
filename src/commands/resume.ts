@@ -23,8 +23,8 @@ export async function resumeSession(sessionId: string, prompt: string): Promise<
   }
 
   logger.info(`[phus] resuming session ${sessionId} from checkpoint (${cp.ts}, ${Array.isArray(cp.messages) ? cp.messages.length : 0} messages)`);
-  // Restore Pi's transcript
-  handle.internals.piAgent.state.messages = cp.messages as any;
+  // Restore Pi's transcript and session id through the public facade.
+  await agent.restoreCheckpoint(branded);
 
   // If user provided a follow-up prompt, send it; otherwise just continue
   const channel = new CLIChannel();
@@ -34,8 +34,6 @@ export async function resumeSession(sessionId: string, prompt: string): Promise<
     channel: "cli",
     metadata: { chatId: "resume" },
   });
-  (handle.internals as any)._currentSessionId = sessionId;
-  (handle.internals as any)._sessionOverride = sessionId;
   await agent.turn(envelope, channel);
   await handle.dispose();
   logger.info("resume.completed", { sessionId, fromCheckpoint: cp.ts });

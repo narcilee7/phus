@@ -53,6 +53,19 @@ function renderInline(tokens: Token[] | undefined, keyPrefix: string): React.Rea
   });
 }
 
+function hasVisibleText(tokens: Token[] | undefined): boolean {
+  if (!tokens) return false;
+  return tokens.some((t) => {
+    if ("text" in t && typeof (t as any).text === "string" && (t as any).text.trim().length > 0) {
+      return true;
+    }
+    if ("tokens" in t && Array.isArray((t as any).tokens)) {
+      return hasVisibleText((t as any).tokens);
+    }
+    return false;
+  });
+}
+
 function renderTable(token: Tokens.Table, key: string): React.ReactNode {
   const rows: string[][] = [
     token.header.map((c) => c.text),
@@ -152,6 +165,7 @@ function renderBlock(token: Token, key: string | number): React.ReactNode {
       return (
         <Box key={key} flexDirection="column" marginY={1}>
           {list.items.map((item, idx) => {
+            if (!hasVisibleText(item.tokens)) return null;
             const bullet = list.ordered ? `${(list.start || 1) + idx}. ` : "• ";
             return (
               <Box key={`${key}-item-${idx}`} flexDirection="row">

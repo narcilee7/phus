@@ -13,7 +13,8 @@ export type TapeEntryKind =
   | "tool_call"
   | "tool_result"
   | "error"
-  | "checkpoint";
+  | "checkpoint"
+  | "memory_write";
 
 export type TapeTurnEntry = {
   kind: "turn";
@@ -64,12 +65,33 @@ export type TapeCheckpointEntry = {
   turnId?: TurnId;
 };
 
+/** What the agent did to phus.md. `body` is undefined for `delete`. */
+export type MemoryWriteAction = {
+  kind: "append" | "replace" | "delete";
+  section: string;
+  body?: string;
+};
+
+/** Emitted every time the agent mutates project memory. The `diff` is
+ *  a short unified-diff so `phus logs` / self-reflection can replay
+ *  the change without re-reading phus.md. */
+export type TapeMemoryWriteEntry = {
+  kind: "memory_write";
+  sessionId: SessionId;
+  action: MemoryWriteAction;
+  reason: string;
+  diff: string;
+  autonomyDecision: "auto" | "approve";
+  ts: number;
+};
+
 export type TapeEntry =
   | TapeTurnEntry
   | TapeAnchorEntry
   | TapeToolCallEntry
   | TapeToolResultEntry
   | TapeErrorEntry
-  | TapeCheckpointEntry;
+  | TapeCheckpointEntry
+  | TapeMemoryWriteEntry;
 
 export type TapeState = Record<string, unknown>;

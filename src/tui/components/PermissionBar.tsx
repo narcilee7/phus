@@ -34,7 +34,7 @@ export function PermissionBar({
     }
   });
 
-  const summary = formatArgs(request.args);
+  const summary = request.preview ?? formatArgs(request.args);
 
   return (
     <Box
@@ -48,7 +48,8 @@ export function PermissionBar({
       <Box flexDirection="column" flexGrow={1}>
         <Text>
           <Text color="yellow">⚠ </Text>
-          Allow <Text bold color="yellow">{request.toolName}</Text>?
+          Allow <Text bold color="yellow">{request.toolName}</Text>
+          {request.caption ? <Text>? ({request.caption})</Text> : <Text>?</Text>}
         </Text>
         {summary && (
           <Text dimColor wrap="wrap">

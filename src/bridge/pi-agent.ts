@@ -46,6 +46,7 @@ import { extractText } from "@/bridge/text.js";
 import { resolveApiKey } from "@/bridge/model-resolver.js";
 import { registerDefaultHooks } from "@/bridge/default-hooks.js";
 import { buildContextBlock } from "@/bridge/prompt-assembly.js";
+import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
 
 export interface PhusAgentDeps {
   /** Logger used for all diagnostic and error events. */
@@ -68,6 +69,10 @@ export interface PhusAgentDeps {
   scheduler?: unknown;
   /** Extra channels plugins have registered. */
   channels?: ChannelAdapter[];
+  /** Project memory store (phus.md). Required for memory_read/memory_write. */
+  memoryStore: MemoryStore;
+  /** Autonomy gate consulted by the TUI permission handler. */
+  autonomyGate: AutonomyGate;
   /** Override for the auto-compaction threshold. */
   autoCompact?: AutoCompactConfig;
 }
@@ -141,6 +146,15 @@ export interface PhusAgentFacade {
   /** Render a recent-turn summary (used by `,context`). */
   getTapeSummary(sessionId: SessionId | undefined, limit: number): string;
 
+  // ─── Project memory (used by TUI permission flow + diagnostics) ─
+  /** Autonomy gate for memory_write. The TUI consults this to decide
+   *  whether to prompt the user or auto-approve. */
+  getAutonomyGate(): AutonomyGate;
+  /** Memory store (phus.md). TUI uses this for diff previews. */
+  getMemoryStore(): MemoryStore;
+  /** Bytes currently on disk for phus.md — surfaced in diagnostics. */
+  getMemoryBytes(): number;
+
   // ─── Plugin loading (used by `,reload` / `,plugins`) ───────────
   /**
    * Re-discover skills + plugins from disk. Returns a summary line
@@ -205,6 +219,8 @@ export class PhusAgent implements PhusAgentFacade {
   readonly piAgent: Agent;
   readonly tape: Tape;
   readonly skills: SkillRegistry;
+  readonly memoryStore: MemoryStore;
+  readonly autonomyGate: AutonomyGate;
   readonly policy: readonly PolicyRule[];
   readonly profile: ProviderProfile;
   readonly mesh: MeshLike;
@@ -222,6 +238,8 @@ export class PhusAgent implements PhusAgentFacade {
   constructor(deps: PhusAgentDeps) {
     this.tape = deps.tape;
     this.skills = deps.skills;
+    this.memoryStore = deps.memoryStore;
+    this.autonomyGate = deps.autonomyGate;
     this.policy = deps.policy;
     this.profile = deps.profile;
     this.mesh = deps.mesh;
@@ -232,7 +250,10 @@ export class PhusAgent implements PhusAgentFacade {
     this.autoCompactEnabled = deps.profile.autoCompact !== false;
 
     const tools: AgentTool[] = [
-      ...createMetaTools(this.skills, this.tape).map(toAgentTool),
+      ...createMetaTools(this.skills, this.tape, {
+        store: this.memoryStore,
+        getCurrentSessionId: () => this.currentSessionId,
+      }).map(toAgentTool),
       ...createExternalTools(),
     ];
 
@@ -291,6 +312,7 @@ export class PhusAgent implements PhusAgentFacade {
       hooks: this.hooks,
       tape: this.tape,
       skills: this.skills,
+      memory: this.memoryStore,
       getContextWindow: () => this.piAgent.state.model.contextWindow,
       getCurrentSessionId: () => this.currentSessionId,
       getMessages: () => this.piAgent.state.messages,
@@ -754,6 +776,19 @@ export class PhusAgent implements PhusAgentFacade {
 
   getTapeTotalEntries(): number {
     return this.tape.stats().totalEntries;
+  }
+
+  // ─── Memory facade methods ───────────────────────────────────
+  getAutonomyGate(): AutonomyGate {
+    return this.autonomyGate;
+  }
+
+  getMemoryStore(): MemoryStore {
+    return this.memoryStore;
+  }
+
+  getMemoryBytes(): number {
+    return this.memoryStore.size();
   }
 
   getSessionCount(): number {

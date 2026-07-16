@@ -26,6 +26,19 @@ function formatValue(value: unknown): string {
   if (value === undefined) return "undefined";
   if (value === null) return "null";
   if (typeof value === "string") return value;
+  if (typeof value === "object" && value !== null) {
+    const obj = value as Record<string, unknown>;
+    // Agent tool results: { content: [{ type: "text", text: "..." }] }
+    if (Array.isArray(obj.content)) {
+      const texts = obj.content
+        .map((c) => (typeof c === "object" && c !== null ? (c as Record<string, unknown>).text : undefined))
+        .filter((t): t is string => typeof t === "string");
+      if (texts.length > 0) return texts.join("");
+    }
+    // Legacy / plain stdout-shaped results.
+    if (typeof obj.stdout === "string") return obj.stdout;
+    if (typeof obj.stderr === "string" && obj.stderr.length > 0) return obj.stderr;
+  }
   try {
     return JSON.stringify(value, null, 2);
   } catch {
@@ -135,18 +148,29 @@ export function ChatItemView({ item, items, fileSnapshots }: ChatItemViewProps) 
         </Box>
       );
 
-    case "assistant":
+    case "assistant": {
+      const hasContent = (item.text ?? "").trim().length > 0 || (item.reasoning ?? "").length > 0;
+      if (!hasContent && !item.isStreaming) return null;
       return (
         <Box flexDirection="column" marginY={1} width="100%">
           <Box>
             <Text color="cyan">⛰ </Text>
             {item.isStreaming && <Text color="cyan">▍</Text>}
           </Box>
+          {item.reasoning && (
+            <Box width="100%" marginBottom={1}>
+              <Text dimColor wrap="wrap">
+                <Text color="gray" bold>thinking </Text>
+                {item.reasoning}
+              </Text>
+            </Box>
+          )}
           <Box width="100%">
             <Markdown content={item.text ?? ""} />
           </Box>
         </Box>
       );
+    }
 
     case "tool_call":
       return (
@@ -158,7 +182,8 @@ export function ChatItemView({ item, items, fileSnapshots }: ChatItemViewProps) 
     case "tool_result":
       return <ToolResultView item={item} items={items} fileSnapshots={fileSnapshots} />;
 
-    case "system":
+    case "system": {
+      if (!item.text || item.text.trim().length === 0) return null;
       return (
         <Box marginY={1}>
           <Text wrap="wrap">
@@ -169,5 +194,6 @@ export function ChatItemView({ item, items, fileSnapshots }: ChatItemViewProps) 
           </Text>
         </Box>
       );
+    }
   }
 }

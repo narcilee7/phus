@@ -20,6 +20,7 @@ import { logger } from "@/infra/logging.js";
 import { resolveModel } from "@/bridge/model-resolver.js";
 import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
 import { loadConfig, type ResolvedConfig } from "@/infra/config/index.js";
+import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
 
 export interface DefaultDepsOptions {
   /** Force a specific profile (e.g. `phus run --profile foo`). */
@@ -37,6 +38,8 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
   const profile: ProviderProfile = resolveProfile(profileName, config.providers);
   const tape = new Tape(config.paths.tapeDb);
   const skills = new SkillRegistry(config.paths.skillsDir);
+  const memoryStore = new MemoryStore(config.paths.memoryFile);
+  const autonomyGate = AutonomyGate.fromConfig(config.memory);
   const policy = defaultPolicy();
   const hooks = new HookRegistry({ isolateErrors: true });
 
@@ -73,6 +76,8 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
     logger,
     tape,
     skills,
+    memoryStore,
+    autonomyGate,
     hooks,
     mesh,
     steeringInbox,

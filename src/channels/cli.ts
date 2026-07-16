@@ -89,7 +89,6 @@ export async function runOnce(prompt: string, profileName?: string): Promise<voi
   const { PhusAgent } = await import("@/bridge/pi-agent.js");
   const handle = await PhusAgent.create(profileName ? { profileName } : {});
   const agent = handle.agent;
-  const internals = handle.internals;
   const channel = new CLIChannel();
   const envelope = makeTextEnvelope({
     from: "user",
@@ -97,17 +96,12 @@ export async function runOnce(prompt: string, profileName?: string): Promise<voi
     channel: "cli",
     metadata: { chatId: "default" },
   });
-  await agent.turn(envelope, channel);
-  const assistantTexts = internals.piAgent.state.messages
-    .filter((m: any) => m.role === "assistant")
-    .map((m: any) => ({
-      to: "default",
-      content: extractText(m),
-      type: "text" as const,
-      channel: "cli",
-    }));
+  const turn = await agent.turn(envelope, channel);
 
-  if (assistantTexts.every((m: any) => !m.content.trim())) {
+  const hasText = turn.outbound.some(
+    (m) => m.type === "text" && m.content.trim().length > 0,
+  );
+  if (!hasText) {
     process.stderr.write(
       "\n⚠️  Agent returned no text. Common causes:\n" +
         "   • Wrong PHUS_MODEL_ID (gateway doesn't recognize the model name)\n" +
@@ -116,16 +110,5 @@ export async function runOnce(prompt: string, profileName?: string): Promise<voi
     );
   }
 
-  await channel.send(assistantTexts as any);
   await handle.dispose();
-}
-
-function extractText(msg: any): string {
-  if (!msg || msg.role !== "assistant") return "";
-  const content = msg.content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((c: any) => c?.type === "text" && typeof c.text === "string")
-    .map((c: any) => c.text)
-    .join("");
 }

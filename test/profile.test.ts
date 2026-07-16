@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { loadProviderConfig, resolveProfile, modelFromProfile, formatProfiles } from "../src/infra/profile.js";
+import { loadProviderConfig, resolveProfile, modelFromProfile, formatProfiles, apiKeyForProfile } from "../src/infra/profile.js";
 
 describe("profile loader", () => {
   let dir: string;
@@ -135,5 +135,45 @@ describe("profile loader", () => {
     expect(out).toContain("★ fast");
     expect(out).toContain("  smart");
     expect(out).toContain("openai/gpt-4o-mini");
+  });
+
+  it("apiKeyForProfile prefers inline apiKey over env var", () => {
+    const profile = {
+      name: "default",
+      provider: "deepseek",
+      modelId: "deepseek-v4-flash",
+      apiKey: "sk-inline",
+      apiKeyEnv: "DEEPSEEK_API_KEY",
+    };
+    process.env.DEEPSEEK_API_KEY = "sk-env";
+    expect(apiKeyForProfile(profile)).toBe("sk-inline");
+    delete process.env.DEEPSEEK_API_KEY;
+  });
+
+  it("apiKeyForProfile falls back to apiKeyEnv when apiKey is absent", () => {
+    const profile = {
+      name: "default",
+      provider: "deepseek",
+      modelId: "deepseek-v4-flash",
+      apiKeyEnv: "DEEPSEEK_API_KEY",
+    };
+    process.env.DEEPSEEK_API_KEY = "sk-env";
+    expect(apiKeyForProfile(profile)).toBe("sk-env");
+    delete process.env.DEEPSEEK_API_KEY;
+  });
+
+  it("apiKeyForProfile reads inline apiKey from YAML", () => {
+    fs.writeFileSync(
+      path.join(dir, "phus.config.yaml"),
+      `providers:
+  profiles:
+    default:
+      provider: deepseek
+      modelId: deepseek-v4-flash
+      apiKey: sk-yaml
+`,
+    );
+    const profile = resolveProfile("default");
+    expect(apiKeyForProfile(profile)).toBe("sk-yaml");
   });
 });

@@ -11,6 +11,7 @@ export interface ChatItem {
   kind: ChatItemKind;
   ts: number;
   text?: string;
+  reasoning?: string;
   isStreaming?: boolean;
   toolName?: string;
   toolCallId?: string;
@@ -33,6 +34,11 @@ export interface PermissionRequest {
   toolName: string;
   args: unknown;
   toolCallId: string;
+  /** Optional human-readable preview shown above the Y/S/A/N buttons.
+   *  Used by `memory_write` to render a diff before approval. */
+  preview?: string;
+  /** Short caption (e.g. "append 'Style' section", "replace memory"). */
+  caption?: string;
   resolve: (allow: boolean) => void;
 }
 
@@ -61,6 +67,7 @@ export const initialState: AppState = {
 
 export type AppAction =
   | { type: "append_delta"; delta: string }
+  | { type: "append_thinking"; delta: string }
   | { type: "upsert_tool_call"; toolCallId: string; toolName: string; args: unknown }
   | { type: "complete_tool_call"; toolCallId: string; result: unknown; isError: boolean }
   | { type: "finalize_streaming" }
@@ -112,6 +119,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             kind: "assistant",
             ts: Date.now(),
             text: action.delta,
+            isStreaming: true,
+          },
+        ],
+      });
+    }
+    case "append_thinking": {
+      if (!action.delta) return state;
+      const last = state.items[state.items.length - 1];
+      if (last && last.kind === "assistant" && last.isStreaming) {
+        return withScrollOnNewContent({
+          ...state,
+          items: [
+            ...state.items.slice(0, -1),
+            { ...last, reasoning: (last.reasoning ?? "") + action.delta },
+          ],
+        });
+      }
+      return withScrollOnNewContent({
+        ...state,
+        items: [
+          ...state.items,
+          {
+            id: crypto.randomUUID(),
+            kind: "assistant",
+            ts: Date.now(),
+            reasoning: action.delta,
             isStreaming: true,
           },
         ],

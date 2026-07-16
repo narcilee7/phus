@@ -14,7 +14,7 @@ import { bootstrap } from "@/infra/bootstrap.js";
 import { logger } from "@/infra/logging.js";
 import { loadConfig } from "@/infra/config/index.js";
 import { initInternalCommands } from "@/core/runtime/internal-commands/index.js";
-import { collectChannels } from "@/commands/channels.js";
+import { channelStatuses, collectChannels } from "@/commands/channels.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import type { Schedule } from "@/types/scheduler/index.js";
 
@@ -29,7 +29,7 @@ export function registerGatewayCommand(program: Command): void {
       const mode = bootstrap();
       const config = loadConfig();
       const handle = await PhusAgent.create({ config });
-      const channels = await collectChannels(handle.internals, opts);
+      const channels = await collectChannels(handle.internals, opts, config.channels);
 
       if (channels.length === 0) {
         if (mode === "default") {
@@ -78,8 +78,10 @@ export function registerGatewayCommand(program: Command): void {
       process.on("SIGTERM", () => shutdown("SIGTERM"));
       process.on("SIGINT", () => shutdown("SIGINT"));
 
+      const statuses = await channelStatuses(channels);
       logger.info("gateway.started", {
         channels: channels.map((c: ChannelAdapter) => c.name),
+        channelStatuses: statuses,
         schedules: scheduler.list().length,
         pid: process.pid,
       });
