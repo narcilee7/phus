@@ -7,10 +7,12 @@ import { render } from "ink-testing-library";
 import { MultiLineInput } from "../../src/tui/components/MultiLineInput.js";
 
 const SUGGESTIONS = ["help", "clear", "quit", "models", "profiles"];
+const MENTION_SUGGESTIONS = ["src/foo.ts", "src/bar.ts", "README.md"];
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 
 function ControlledInput(props: {
   suggestions?: string[];
+  mentionSuggestions?: string[];
   onSubmit?: (text: string) => void;
 }) {
   const [value, setValue] = useState("");
@@ -20,6 +22,7 @@ function ControlledInput(props: {
       onChange={setValue}
       onSubmit={props.onSubmit ?? vi.fn()}
       suggestions={props.suggestions ?? SUGGESTIONS}
+      mentionSuggestions={props.mentionSuggestions ?? MENTION_SUGGESTIONS}
       placeholder="type a message"
       isActive
     />
@@ -103,5 +106,40 @@ describe("MultiLineInput slash behavior", () => {
     const frame = lastFrame()!;
     expect(frame).toContain("/help");
     expect(frame).not.toContain("/clear"); // dropdown should close after completion
+  });
+});
+
+describe("MultiLineInput @mention behavior", () => {
+  it("shows file suggestions after typing @", async () => {
+    const { stdin, lastFrame } = render(<ControlledInput />);
+    await wait();
+    stdin.write("@");
+    await wait();
+    const frame = lastFrame()!;
+    expect(frame).toContain("@src/foo.ts");
+    expect(frame).toContain("@README.md");
+  });
+
+  it("filters file suggestions after typing @src/f", async () => {
+    const { stdin, lastFrame } = render(<ControlledInput />);
+    await wait();
+    stdin.write("@src/f");
+    await wait();
+    const frame = lastFrame()!;
+    expect(frame).toContain("@src/foo.ts");
+    expect(frame).not.toContain("@README.md");
+  });
+
+  it("tab completes a mention", async () => {
+    const onSubmit = vi.fn();
+    const { stdin } = render(<ControlledInput onSubmit={onSubmit} />);
+    await wait();
+    stdin.write("@src/f");
+    await wait();
+    stdin.write("\t");
+    await wait();
+    stdin.write("\r");
+    await wait();
+    expect(onSubmit).toHaveBeenCalledWith("@src/foo.ts ");
   });
 });

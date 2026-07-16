@@ -4,6 +4,7 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
+import Fuse from "fuse.js";
 
 export interface MultiLineInputProps {
   value: string;
@@ -15,6 +16,8 @@ export interface MultiLineInputProps {
   isActive?: boolean;
   /** Command names (without leading slash) to suggest when user types "/". */
   suggestions?: string[];
+  /** File paths to suggest when user types "@". */
+  mentionSuggestions?: string[];
 }
 
 interface Cursor {
@@ -41,6 +44,24 @@ function setValueAtCursor(value: string, cursor: Cursor, insert: string): { valu
   };
 }
 
+interface MentionState {
+  query: string;
+  atIndex: number;
+  lineIndex: number;
+}
+
+function findMentionState(value: string, cursor: Cursor): MentionState | null {
+  const lines = value.split("\n");
+  const cur = clampCursor(value, cursor);
+  const line = lines[cur.line] ?? "";
+  const before = line.slice(0, cur.col);
+  const atIndex = before.lastIndexOf("@");
+  if (atIndex === -1) return null;
+  const query = before.slice(atIndex + 1);
+  if (query.includes(" ")) return null;
+  return { query, atIndex, lineIndex: cur.line };
+}
+
 export function MultiLineInput({
   value,
   onChange,
@@ -50,6 +71,7 @@ export function MultiLineInput({
   placeholder,
   isActive = true,
   suggestions = [],
+  mentionSuggestions = [],
 }: MultiLineInputProps) {
   const [cursor, setCursor] = useState<Cursor>({ line: 0, col: 0 });
   const [history, setHistory] = useState<string[]>([]);
@@ -57,6 +79,8 @@ export function MultiLineInput({
   const [draft, setDraft] = useState("");
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
+  const [selectedMention, setSelectedMention] = useState(0);
+  const [mentionsOpen, setMentionsOpen] = useState(true);
 
   const isSlashMode = value.startsWith("/") && !value.includes("\n");
   const query = isSlashMode ? value.slice(1) : "";
@@ -68,9 +92,20 @@ export function MultiLineInput({
     : [];
   const showSuggestions = isActive && suggestionsOpen && isSlashMode && matches.length > 0;
 
+  const mentionState = findMentionState(value, cursor);
+  const mentionMatches = mentionState && mentionSuggestions.length > 0
+    ? new Fuse(mentionSuggestions, { threshold: 0.4 })
+        .search(mentionState.query)
+        .map((r) => r.item)
+        .slice(0, 8)
+    : [];
+  const showMentions = isActive && mentionsOpen && !!mentionState && mentionMatches.length > 0;
+
   useEffect(() => {
     setSelectedSuggestion(0);
     setSuggestionsOpen(true);
+    setSelectedMention(0);
+    setMentionsOpen(true);
   }, [value]);
 
   const submit = useCallback(() => {
@@ -119,6 +154,32 @@ export function MultiLineInput({
     // Let App.tsx handle these global shortcuts.
     if ((key.ctrl && input === "c") || (key.ctrl && input === "l") || key.pageUp || key.pageDown) {
       return;
+    }
+
+    if (showMentions && mentionState) {
+      if (key.escape) {
+        setMentionsOpen(false);
+        return;
+      }
+      if (key.tab || key.return) {
+        const chosen = mentionMatches[selectedMention]!;
+        const lines = value.split("\n");
+        const line = lines[mentionState.lineIndex]!;
+        const before = line.slice(0, mentionState.atIndex);
+        const after = line.slice(cursor.col);
+        lines[mentionState.lineIndex] = `${before}@${chosen} ${after}`;
+        onChange(lines.join("\n"));
+        setCursor({ line: mentionState.lineIndex, col: before.length + chosen.length + 2 });
+        return;
+      }
+      if (key.downArrow) {
+        setSelectedMention((i) => (i + 1) % mentionMatches.length);
+        return;
+      }
+      if (key.upArrow || (key.shift && key.tab)) {
+        setSelectedMention((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+        return;
+      }
     }
 
     if (showSuggestions) {
@@ -294,6 +355,22 @@ export function MultiLineInput({
                 </Text>
               ) : (
                 <Text dimColor>  /{m}</Text>
+              )}
+            </Text>
+          ))}
+          <Text dimColor>↑↓ navigate · Tab complete · Enter submit · Esc close</Text>
+        </Box>
+      )}
+      {showMentions && (
+        <Box flexDirection="column" marginTop={1}>
+          {mentionMatches.map((m, idx) => (
+            <Text key={m} wrap="wrap">
+              {idx === selectedMention ? (
+                <Text backgroundColor="cyan" color="black">
+                  › @{m}
+                </Text>
+              ) : (
+                <Text dimColor>  @{m}</Text>
               )}
             </Text>
           ))}

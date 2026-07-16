@@ -13,11 +13,13 @@ import { ChatViewport } from "@/tui/components/ChatViewport.js";
 import { TodoPill } from "@/tui/components/TodoPill.js";
 import { InputBox } from "@/tui/components/InputBox.js";
 import { PermissionBar } from "@/tui/components/PermissionBar.js";
+import { CommandPalette, type PaletteAction } from "@/tui/components/CommandPalette.js";
 import { StatusBar } from "@/tui/components/StatusBar.js";
 import { eventToAction } from "@/tui/events.js";
 import { runSlash } from "@/tui/commands.js";
 import { tuiChannel } from "@/tui/channel.js";
 import type { RememberChoice } from "@/tui/state.js";
+import { extractMentions, readFileMention, buildContextBlock } from "@/tui/mentions.js";
 
 interface AppProps {
   agent: PhusAgent;
@@ -29,6 +31,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   const { exit } = useApp();
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [input, setInput] = React.useState("");
+  const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [stats, setStats] = React.useState({ entries: 0, skills: 0, turns: 0 });
 
   const DANGEROUS_TOOLS = React.useMemo(
@@ -102,11 +105,29 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     dispatch({ type: "set_last_op", op: "thinking…" });
     dispatch({ type: "add_user", text });
 
+    // Read @-mentioned files and inject them as a context block.
+    const mentions = extractMentions(text).filter((m) => m.type === "file");
+    const fileContexts: { path: string; content: string; size: number }[] = [];
+    for (const mention of mentions) {
+      try {
+        const ctx = await readFileMention(mention.target);
+        fileContexts.push({ path: ctx.path, content: ctx.content, size: ctx.size });
+      } catch (err: any) {
+        dispatch({
+          type: "add_system",
+          text: `could not read ${mention.target}: ${err.message ?? err}`,
+          level: "warn",
+        });
+      }
+    }
+    const contextBlock = buildContextBlock(fileContexts);
+    const content = contextBlock ? `${contextBlock}\n\n${text}` : text;
+
     try {
       const envelope = {
         id: crypto.randomUUID(),
         from: "user",
-        content: text,
+        content,
         type: "text" as const,
         channel: "tui",
         metadata: { chatId: "tui" },
@@ -121,8 +142,13 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     }
   };
 
-  // ─── Ctrl+C / Ctrl+L shortcuts + scroll keys ──────────────────
+  // ─── Ctrl+C / Ctrl+L shortcuts + scroll keys + command palette ──
   useInput((input, key) => {
+    if (paletteOpen) return;
+    if ((key.ctrl || key.meta) && input === "k" && state.permissionQueue.length === 0) {
+      setPaletteOpen(true);
+      return;
+    }
     if (key.ctrl && input === "c") {
       if (state.busy) {
         agent.abort();
@@ -159,12 +185,26 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         lastOp={state.lastOp}
       />
       <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
-      {state.permissionQueue[0] && (
+      {state.permissionQueue[0] && !paletteOpen && (
         <PermissionBar
           request={state.permissionQueue[0]}
           onResolve={(allow: boolean, remember: RememberChoice) =>
             dispatch({ type: "resolve_permission", allow, remember })
           }
+        />
+      )}
+      {paletteOpen && (
+        <CommandPalette
+          agent={agent}
+          onSelect={(value: string, action: PaletteAction) => {
+            setPaletteOpen(false);
+            if (action === "insert") {
+              setInput((prev) => prev + value);
+            } else {
+              void submit(value);
+            }
+          }}
+          onClose={() => setPaletteOpen(false)}
         />
       )}
       <InputBox
@@ -173,7 +213,10 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
         showHint={state.showHint}
         onChange={setInput}
         onSubmit={submit}
-        isActive={state.permissionQueue.length === 0}
+        isActive={state.permissionQueue.length === 0 && !paletteOpen}
+        mentions={extractMentions(input)
+          .filter((m) => m.type === "file")
+          .map((m) => ({ path: m.target, size: 0 }))}
       />
       <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} />
     </Box>
