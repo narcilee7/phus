@@ -31,8 +31,6 @@ export function createExternalTools(): AgentTool[] {
         const cmd = String(p.command);
         const cwd = (p.cwd as string | undefined) ?? process.cwd();
         const timeoutMs = p.timeoutMs ?? 30_000;
-        // B.2.4: emit heartbeat every 5s for long-running commands so the
-        // TUI / log can show "still working" instead of dead silence.
         let heartbeat: NodeJS.Timeout | undefined;
         const startedAt = Date.now();
         if (timeoutMs > 10_000) {
