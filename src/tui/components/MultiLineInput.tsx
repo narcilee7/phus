@@ -2,7 +2,7 @@
 // Multi-line prompt input with history navigation (Shift+Enter for newline,
 // Enter to submit, Up/Down for history when on the first/last line).
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import Fuse from "fuse.js";
 
@@ -81,6 +81,22 @@ export function MultiLineInput({
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   const [selectedMention, setSelectedMention] = useState(0);
   const [mentionsOpen, setMentionsOpen] = useState(true);
+  // Refs mirror value/cursor so rapid input (e.g. terminal paste) can read
+  // the latest state synchronously instead of seeing a stale React snapshot.
+  const valueRef = useRef(value);
+  const cursorRef = useRef(cursor);
+  // Heuristic: if input events arrive <50ms apart, treat them as a terminal
+  // paste so that embedded newlines/tabs are inserted literally instead of
+  // submitting or triggering shortcuts.
+  const lastInputAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    cursorRef.current = cursor;
+  }, [cursor]);
 
   const isSlashMode = value.startsWith("/") && !value.includes("\n");
   const query = isSlashMode ? value.slice(1) : "";
@@ -156,6 +172,35 @@ export function MultiLineInput({
       return;
     }
 
+    const now = Date.now();
+    const isRapidPaste = lastInputAtRef.current !== null && now - lastInputAtRef.current < 50;
+    lastInputAtRef.current = now;
+
+    // Work on refs so rapid input (e.g. paste) sees the latest value/cursor.
+    let value = valueRef.current;
+    let cursor = cursorRef.current;
+
+    function commit(nextValue: string, nextCursor: Cursor) {
+      valueRef.current = nextValue;
+      cursorRef.current = nextCursor;
+      value = nextValue;
+      cursor = nextCursor;
+      onChange(nextValue);
+      setCursor(nextCursor);
+    }
+
+    function commitValue(nextValue: string) {
+      valueRef.current = nextValue;
+      value = nextValue;
+      onChange(nextValue);
+    }
+
+    function commitCursor(nextCursor: Cursor) {
+      cursorRef.current = nextCursor;
+      cursor = nextCursor;
+      setCursor(nextCursor);
+    }
+
     if (showMentions && mentionState) {
       if (key.escape) {
         setMentionsOpen(false);
@@ -168,8 +213,7 @@ export function MultiLineInput({
         const before = line.slice(0, mentionState.atIndex);
         const after = line.slice(cursor.col);
         lines[mentionState.lineIndex] = `${before}@${chosen} ${after}`;
-        onChange(lines.join("\n"));
-        setCursor({ line: mentionState.lineIndex, col: before.length + chosen.length + 2 });
+        commit(lines.join("\n"), { line: mentionState.lineIndex, col: before.length + chosen.length + 2 });
         return;
       }
       if (key.downArrow) {
@@ -189,7 +233,7 @@ export function MultiLineInput({
       }
       if (key.tab) {
         const chosen = matches[selectedSuggestion]!;
-        onChange(`/${chosen} `);
+        commitValue(`/${chosen} `);
         return;
       }
       if (key.downArrow) {
@@ -209,21 +253,24 @@ export function MultiLineInput({
         if (chosen === query) {
           submit();
         } else {
-          onChange(`/${chosen} `);
+          commitValue(`/${chosen} `);
         }
         return;
       }
     }
 
     if (key.tab || (key.shift && key.tab)) {
+      if (isRapidPaste) {
+        const { value: next, cursor: nextCursor } = setValueAtCursor(value, clampCursor(value, cursor), "\t");
+        commit(next, nextCursor);
+      }
       return;
     }
 
     if (key.return) {
-      if (key.shift) {
+      if (key.shift || isRapidPaste) {
         const { value: next, cursor: nextCursor } = setValueAtCursor(value, clampCursor(value, cursor), "\n");
-        onChange(next);
-        setCursor({ line: nextCursor.line + 1, col: 0 });
+        commit(next, { line: nextCursor.line + 1, col: 0 });
       } else {
         submit();
       }
@@ -236,7 +283,7 @@ export function MultiLineInput({
     if (key.upArrow) {
       if (cur.line > 0) {
         const prevLine = lines[cur.line - 1]!;
-        setCursor({ line: cur.line - 1, col: Math.min(cur.col, prevLine.length) });
+        commitCursor({ line: cur.line - 1, col: Math.min(cur.col, prevLine.length) });
       } else {
         loadHistory(-1);
       }
@@ -246,7 +293,7 @@ export function MultiLineInput({
     if (key.downArrow) {
       if (cur.line < lines.length - 1) {
         const nextLine = lines[cur.line + 1]!;
-        setCursor({ line: cur.line + 1, col: Math.min(cur.col, nextLine.length) });
+        commitCursor({ line: cur.line + 1, col: Math.min(cur.col, nextLine.length) });
       } else {
         loadHistory(1);
       }
@@ -255,10 +302,10 @@ export function MultiLineInput({
 
     if (key.leftArrow) {
       if (cur.col > 0) {
-        setCursor({ line: cur.line, col: cur.col - 1 });
+        commitCursor({ line: cur.line, col: cur.col - 1 });
       } else if (cur.line > 0) {
         const prevLine = lines[cur.line - 1]!;
-        setCursor({ line: cur.line - 1, col: prevLine.length });
+        commitCursor({ line: cur.line - 1, col: prevLine.length });
       }
       return;
     }
@@ -266,21 +313,21 @@ export function MultiLineInput({
     if (key.rightArrow) {
       const line = lines[cur.line]!;
       if (cur.col < line.length) {
-        setCursor({ line: cur.line, col: cur.col + 1 });
+        commitCursor({ line: cur.line, col: cur.col + 1 });
       } else if (cur.line < lines.length - 1) {
-        setCursor({ line: cur.line + 1, col: 0 });
+        commitCursor({ line: cur.line + 1, col: 0 });
       }
       return;
     }
 
     if (key.home) {
-      setCursor({ line: cur.line, col: 0 });
+      commitCursor({ line: cur.line, col: 0 });
       return;
     }
 
     if (key.end) {
       const line = lines[cur.line]!;
-      setCursor({ line: cur.line, col: line.length });
+      commitCursor({ line: cur.line, col: line.length });
       return;
     }
 
@@ -293,15 +340,13 @@ export function MultiLineInput({
       if (cur.col > 0) {
         const line = lines[cur.line]!;
         lines[cur.line] = line.slice(0, cur.col - 1) + line.slice(cur.col);
-        onChange(lines.join("\n"));
-        setCursor({ line: cur.line, col: cur.col - 1 });
+        commit(lines.join("\n"), { line: cur.line, col: cur.col - 1 });
       } else if (cur.line > 0) {
         const prevLine = lines[cur.line - 1]!;
         const currentLine = lines[cur.line]!;
         lines[cur.line - 1] = prevLine + currentLine;
         lines.splice(cur.line, 1);
-        onChange(lines.join("\n"));
-        setCursor({ line: cur.line - 1, col: prevLine.length });
+        commit(lines.join("\n"), { line: cur.line - 1, col: prevLine.length });
       }
       return;
     }
@@ -310,8 +355,7 @@ export function MultiLineInput({
     if (!input || (input.length === 1 && input.charCodeAt(0) < 32)) return;
 
     const { value: next, cursor: nextCursor } = setValueAtCursor(value, cur, input);
-    onChange(next);
-    setCursor(nextCursor);
+    commit(next, nextCursor);
   }, { isActive });
 
   const lines = value.split("\n");

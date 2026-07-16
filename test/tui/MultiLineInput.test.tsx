@@ -107,6 +107,29 @@ describe("MultiLineInput slash behavior", () => {
     expect(frame).toContain("/help");
     expect(frame).not.toContain("/clear"); // dropdown should close after completion
   });
+
+  it("submits on Enter when typing normally", async () => {
+    const onSubmit = vi.fn();
+    const { stdin } = render(<ControlledInput onSubmit={onSubmit} />);
+    await wait();
+    stdin.write("hello");
+    await wait(100);
+    stdin.write("\r");
+    await wait();
+    expect(onSubmit).toHaveBeenCalledWith("hello");
+  });
+
+  it("inserts newline instead of submitting during rapid paste", async () => {
+    const onSubmit = vi.fn();
+    const { stdin, lastFrame } = render(<ControlledInput onSubmit={onSubmit} />);
+    await wait();
+    // Simulate paste: characters arrive back-to-back, then a newline.
+    stdin.write("hello");
+    stdin.write("\r");
+    await wait();
+    expect(lastFrame()).toContain("hello\n");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });
 
 describe("MultiLineInput @mention behavior", () => {
