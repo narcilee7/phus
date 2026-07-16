@@ -27,7 +27,7 @@ interface CommandPaletteProps {
 
 const EXCLUDED_DIRS = new Set([".git", "node_modules", "dist", ".phus", ".claude", ".vscode"]);
 const MAX_FILES = 200;
-const MAX_RESULTS = 10;
+const VISIBLE_COUNT = 10;
 
 export async function scanFiles(dir: string, depth: number): Promise<string[]> {
   if (depth <= 0) return [];
@@ -115,13 +115,19 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
 
   const results = useMemo(() => {
     const trimmed = query.trim();
-    if (!trimmed) return items.slice(0, MAX_RESULTS);
-    return fuse.search(trimmed).map((r) => r.item).slice(0, MAX_RESULTS);
+    if (!trimmed) return items;
+    return fuse.search(trimmed).map((r) => r.item);
   }, [query, items, fuse]);
 
   useEffect(() => {
     setSelectedIndex(0);
   }, [query]);
+
+  const visibleStart = Math.max(
+    0,
+    Math.min(selectedIndex, results.length - VISIBLE_COUNT),
+  );
+  const visibleResults = results.slice(visibleStart, visibleStart + VISIBLE_COUNT);
 
   useInput((input, key) => {
     if (key.escape || (key.ctrl && input === "c")) {
@@ -168,21 +174,24 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
         <Text color="cyan">▍</Text>
       </Box>
       <Box flexDirection="column" flexGrow={1}>
-        {results.map((item, idx) => (
-          <Box key={`${item.type}-${item.label}`} flexDirection="row">
-            <Text>
-              {idx === selectedIndex ? (
-                <Text backgroundColor="cyan" color="black">
-                  › {item.icon} {item.label}
-                </Text>
-              ) : (
-                <Text dimColor>
-                  {"  "}{item.icon} {item.label}
-                </Text>
-              )}
-            </Text>
-          </Box>
-        ))}
+        {visibleResults.map((item, idx) => {
+          const actualIndex = visibleStart + idx;
+          return (
+            <Box key={`${item.type}-${item.label}`} flexDirection="row">
+              <Text>
+                {actualIndex === selectedIndex ? (
+                  <Text backgroundColor="cyan" color="black">
+                    › {item.icon} {item.label}
+                  </Text>
+                ) : (
+                  <Text dimColor>
+                    {"  "}{item.icon} {item.label}
+                  </Text>
+                )}
+              </Text>
+            </Box>
+          );
+        })}
         {results.length === 0 && (
           <Text dimColor>(no matches)</Text>
         )}
