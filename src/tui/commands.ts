@@ -95,6 +95,9 @@ export async function runSlash(
       dispatch({ type: "add_system", text: "✓ current turn aborted", level: "warn" });
       return;
 
+    case "undo":
+      return await cmdUndo(agent, dispatch);
+
     case "retry":
       return cmdRetry(state, dispatch);
 
@@ -157,6 +160,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "policy", description: "show safety policy" },
   { name: "health", description: "run health check" },
   { name: "interrupt", description: "abort the current turn" },
+  { name: "undo", description: "restore the last checkpoint for this session" },
   { name: "retry", description: "retry last prompt" },
   { name: "new", description: "start a fresh session" },
   { name: "clear", description: "clear chat area" },
@@ -456,6 +460,21 @@ async function cmdRead(arg: string, dispatch: (a: AppAction) => void): Promise<v
     });
   } catch (err: any) {
     dispatch({ type: "add_system", text: `read failed: ${err.message}`, level: "error" });
+  }
+}
+
+async function cmdUndo(agent: PhusAgent, dispatch: (a: AppAction) => void): Promise<SlashResult> {
+  const sid = agent.getCurrentSessionId();
+  if (!sid) {
+    dispatch({ type: "add_system", text: "no active session to undo", level: "warn" });
+    return;
+  }
+  try {
+    await agent.restoreCheckpoint(sid);
+    dispatch({ type: "clear_items" });
+    dispatch({ type: "add_system", text: "✓ restored to last checkpoint", level: "info" });
+  } catch (err: any) {
+    dispatch({ type: "add_system", text: `undo failed: ${err.message ?? err}`, level: "error" });
   }
 }
 

@@ -39,6 +39,7 @@ function makeAgent(over: Partial<PhusAgent> = {}): PhusAgent {
     compactCurrentSession: async () => "compacted: summarized=5, kept=3",
     clearConversation: async () => {},
     replayTape: function* () {},
+    restoreCheckpoint: vi.fn(async () => {}),
     interrupt: vi.fn(),
     loadPluginsForReload: async () => ({ skills: 1, plugins: 0, pluginStatus: [] }),
     getPolicy: () => [{ toolName: "bash", evaluate: () => ({ allow: true }) } as any],
@@ -308,6 +309,23 @@ describe("runSlash — /context / /policy / /health / /reload", () => {
     await runSlash("/interrupt", agent, initialState, dispatch);
     expect(interrupt).toHaveBeenCalled();
     expect(getSystemText(dispatched)).toContain("✓ current turn aborted");
+  });
+
+  it("/undo restores checkpoint for current session + clears items", async () => {
+    const restoreCheckpoint = vi.fn(async () => {});
+    const agent = makeAgent({ restoreCheckpoint } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/undo", agent, initialState, dispatch);
+    expect(restoreCheckpoint).toHaveBeenCalledWith("cli:default");
+    expect(dispatched.some((a) => a.type === "clear_items")).toBe(true);
+    expect(getSystemText(dispatched)).toContain("✓ restored to last checkpoint");
+  });
+
+  it("/undo warns when there is no active session", async () => {
+    const agent = makeAgent({ getCurrentSessionId: () => undefined } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/undo", agent, initialState, dispatch);
+    expect(getSystemText(dispatched)).toContain("no active session");
   });
 
   it("/forget clears conversation + dispatches confirmation", async () => {
