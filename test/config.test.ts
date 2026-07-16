@@ -191,7 +191,8 @@ describe("loadConfig", () => {
         "  defaultProfile: fast",
         "  profiles:",
         "    fast:",
-        "      model: openai/gpt-4o-mini",
+        "      provider: openai",
+        "      modelId: gpt-4o-mini",
         "      description: cheap",
         "plugins:",
         "  - name: foo",
@@ -212,7 +213,8 @@ describe("loadConfig", () => {
     expect(cfg.log.level).toBe("debug");
     expect(cfg.profileName).toBe("fast");
     expect(cfg.providers.profiles.fast).toBeDefined();
-    expect(cfg.providers.profiles.fast?.model).toBe("openai/gpt-4o-mini");
+    expect(cfg.providers.profiles.fast?.provider).toBe("openai");
+    expect(cfg.providers.profiles.fast?.modelId).toBe("gpt-4o-mini");
     expect(cfg.plugins).toHaveLength(2);
     expect(cfg.plugins[0]?.path).toBe("./plugins/foo.ts");
     expect((cfg.plugins[0]?.config as { debug: boolean } | undefined)?.debug).toBe(true);
@@ -292,5 +294,78 @@ describe("loadConfig", () => {
 
   it("configPath() returns the resolved absolute path", () => {
     expect(configPath()).toBe(path.join(dir, "phus.config.yaml"));
+  });
+
+  it("emits config.model.not_in_registry for unknown gateway modelIds with baseUrl", () => {
+    fs.writeFileSync(
+      path.join(dir, "phus.config.yaml"),
+      [
+        "providers:",
+        "  defaultProfile: gateway",
+        "  profiles:",
+        "    gateway:",
+        "      provider: openai",
+        "      modelId: ep-20241120-abc123",
+        "      baseUrl: https://ark.cn-beijing.volces.com/api/v3",
+      ].join("\n"),
+    );
+    loadConfig();
+    const events = recorded.filter((r) => r.event === "config.model.not_in_registry");
+    expect(events).toHaveLength(1);
+    expect(events[0]?.fields.provider).toBe("openai");
+    expect(events[0]?.fields.modelId).toBe("ep-20241120-abc123");
+    expect(events[0]?.fields.hint).toMatch(/custom gateway/);
+  });
+
+  it("emits config.apiKeyEnv.looks_like_secret for inline secrets", () => {
+    fs.writeFileSync(
+      path.join(dir, "phus.config.yaml"),
+      [
+        "providers:",
+        "  defaultProfile: oops",
+        "  profiles:",
+        "    oops:",
+        "      provider: anthropic",
+        "      modelId: claude-sonnet-4-20250514",
+        "      apiKeyEnv: sk-ant-api03-abcdef1234567890",
+      ].join("\n"),
+    );
+    loadConfig();
+    const events = recorded.filter((r) => r.event === "config.apiKeyEnv.looks_like_secret");
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(events[0]?.fields.reason).toMatch(/sk-ant-/);
+  });
+
+  it("drops a profile that is missing provider or modelId", () => {
+    fs.writeFileSync(
+      path.join(dir, "phus.config.yaml"),
+      [
+        "providers:",
+        "  defaultProfile: broken",
+        "  profiles:",
+        "    broken:",
+        "      model: claude-sonnet-4",     // no provider segment
+      ].join("\n"),
+    );
+    const cfg = loadConfig();
+    expect(cfg.providers.profiles.broken).toBeUndefined();
+  });
+
+  it("drops a mesh entry that lacks provider", () => {
+    fs.writeFileSync(
+      path.join(dir, "phus.config.yaml"),
+      [
+        "providers:",
+        "  defaultProfile: broken",
+        "  profiles:",
+        "    broken:",
+        "      provider: anthropic",
+        "      modelId: claude-sonnet-4-20250514",
+        "      mesh:",
+        "        - modelId: gpt-4o-mini",     // no provider
+      ].join("\n"),
+    );
+    const cfg = loadConfig();
+    expect(cfg.providers.profiles.broken?.mesh).toHaveLength(0);
   });
 });

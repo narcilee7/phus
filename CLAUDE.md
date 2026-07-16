@@ -62,7 +62,24 @@ Core      (core/)                       ← Hook / Tape / Skill / Policy / Mesh
 
 **Bridge** — `src/bridge/pi-agent.ts` — owns one Pi `Agent`, the `HookRegistry`, and runs the Bub-style turn pipeline.
 
-**Model validation** — `src/infra/config/validate.ts` — load-time checks for every `(provider, modelId)` the config references. Structural errors (missing `/` in `model`, missing `provider` in mesh entry) throw `ConfigValidationError` at load time. Pi-registry misses warn (don't throw) — custom OpenAI-compatible gateways (Volcano Ark ep-xxx, Azure deployments, vLLM) have modelIds Pi never registered. All four `getModel()` call sites in the codebase (profile.ts, model-builder.ts, pi-agent.ts setModel) funnel through `resolveAndCache()` so the lookup happens once per tuple, not once per turn.
+**Model validation** — `src/infra/config/validate.ts` — load-time checks for every `(provider, modelId)` the config references. Profiles missing `provider` or `modelId` throw `ConfigValidationError` at load time. Pi-registry misses warn (don't throw) — custom OpenAI-compatible gateways (Volcano Ark ep-xxx, Azure deployments, vLLM) have modelIds Pi never registered. All four `getModel()` call sites in the codebase (profile.ts, model-builder.ts, pi-agent.ts setModel) funnel through `resolveAndCache()` so the lookup happens once per tuple, not once per turn.
+
+**Provider profile schema** (current, single canonical form, no legacy translation):
+```yaml
+providers:
+  profiles:
+    smart:
+      provider: anthropic         # required, Pi registry id
+      modelId: claude-sonnet-4-20250514   # required, canonical Pi id
+      wireId: ${VOLCANO_WIRE_ID}  # optional, override the id sent on the wire (gateway)
+      baseUrl: https://...        # optional
+      apiKeyEnv: ANTHROPIC_API_KEY
+      mesh:                       # optional, cross-provider failover list
+        - provider: openai
+          modelId: gpt-4o
+          priority: 1
+```
+`provider` and `modelId` are required on every profile and every mesh entry. `wireId` is the explicit override for gateways (Volcano Ark's ep-xxx, Azure deployments). Profiles or mesh entries that omit `provider` or `modelId` are silently dropped at parse time; the validator surfaces a `ConfigValidationError` listing the bad ones.
 
 ```
 resolve_session → admit_message → load_state → build_prompt

@@ -28,14 +28,12 @@ import type {
   ResolvedConfig,
 } from "./schema.js";
 import { ENV_OVERRIDE_VARS } from "./schema.js";
-import type { ProviderConfig, ProviderProfile } from "@/infra/profile.js";
+import type { ProviderConfig, ProviderProfile, MeshSpec } from "@/infra/profile.js";
 import type { Schedule } from "@/types/scheduler/index.js";
 import { asScheduleName } from "@/types/brand.js";
 import {
   looksLikeSecret,
   resolveAndCache,
-  validateMeshEntry,
-  validateModelString,
 } from "./validate.js";
 
 interface CacheEntry {
@@ -158,7 +156,7 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   // Providers — parsed inline to avoid a circular dep with
   // infra/profile.ts (which has its own legacy sync loader for tests
   // and external callers).
-  const providers = parseProvidersFromTree(interpolated);
+  const providers = parseProvidersFromTree(interpolated, warn);
 
   // Load-time validation: structural checks + model registration.
   // Runs after parseProvidersFromTree so the cache for resolveAndCache
@@ -251,32 +249,28 @@ function validateProvidersTree(
   const seen = new Set<string>();
 
   for (const [profileName, profile] of Object.entries(providers.profiles)) {
-    // Skip the synthetic fallback profile — no model to validate.
-    if (profile === providers.profiles.default && Object.keys(providers.profiles).length === 1) {
-      // Synthetic default with no user config — only validate if mesh exists.
-      if (!profile.mesh || profile.mesh.length === 0) continue;
-    }
-
-    // 1. Validate profile.model string format
-    const parsed = validateModelString(profile.model, { profileName });
-    if (typeof parsed === "string") {
-      errors.push(`${cfgPath}: ${parsed}`);
+    if (!profile.provider || !profile.modelId) {
+      errors.push(
+        `${cfgPath}: profile "${profileName}" is missing required provider or modelId ` +
+        `(set both explicitly, or use the legacy model: "<provider>/<modelId>" form)`,
+      );
       continue;
     }
-    // 2. Resolve via Pi registry (or synthesize for unknown gateways)
+
+    // Resolve via Pi registry (or synthesize for unknown gateways)
     const resolution = resolveAndCache({
-      provider: parsed.provider,
-      modelId: parsed.modelId,
+      provider: profile.provider,
+      modelId: profile.modelId,
       baseUrl: profile.baseUrl,
-      overrideId: profile.modelId,
+      overrideId: profile.wireId ?? profile.modelId,
     });
     if (!resolution.inRegistry) {
-      const cacheKey = `${parsed.provider}|${parsed.modelId}`;
+      const cacheKey = `${profile.provider}|${profile.modelId}`;
       if (!seen.has(cacheKey)) {
         seen.add(cacheKey);
         warn("config.model.not_in_registry", {
-          provider: parsed.provider,
-          modelId: parsed.modelId,
+          provider: profile.provider,
+          modelId: profile.modelId,
           profile: profileName,
           source: cfgPath,
           hint: profile.baseUrl
@@ -286,7 +280,7 @@ function validateProvidersTree(
       }
     }
 
-    // 3. apiKeyEnv secret-in-yaml heuristic
+    // apiKeyEnv secret-in-yaml heuristic
     const secretHint = looksLikeSecret(profile.apiKeyEnv);
     if (secretHint) {
       warn("config.apiKeyEnv.looks_like_secret", {
@@ -297,19 +291,19 @@ function validateProvidersTree(
       });
     }
 
-    // 4. Validate each mesh entry
+    // Validate each mesh entry
     if (profile.mesh) {
       for (let i = 0; i < profile.mesh.length; i++) {
-        const entry = validateMeshEntry(profile.mesh[i], i, { profileName });
-        if (typeof entry === "string") {
-          errors.push(`${cfgPath}: ${entry}`);
+        const entry = profile.mesh[i]!;
+        if (!entry.provider || !entry.modelId) {
+          errors.push(`${cfgPath}: mesh[${i}] of profile "${profileName}" is missing provider or modelId`);
           continue;
         }
         const meshResolution = resolveAndCache({
           provider: entry.provider,
           modelId: entry.modelId,
-          baseUrl: profile.mesh?.[i]?.baseUrl,
-          overrideId: profile.mesh?.[i]?.modelId,
+          baseUrl: entry.baseUrl,
+          overrideId: entry.wireId ?? entry.modelId,
         });
         const cacheKey = `${entry.provider}|${entry.modelId}`;
         if (!meshResolution.inRegistry && !seen.has(cacheKey)) {
@@ -320,7 +314,7 @@ function validateProvidersTree(
             profile: profileName,
             meshIndex: i,
             source: cfgPath,
-            hint: profile.mesh?.[i]?.baseUrl
+            hint: entry.baseUrl
               ? "custom gateway endpoint — expected for OpenAI-compatible gateways"
               : "no baseUrl set — verify the provider name and model id are correct",
           });
@@ -359,33 +353,126 @@ function envOrYaml(
   return yamlValue;
 }
 
-function parseProvidersFromTree(tree: unknown): ProviderConfig {
-  const obj = (tree as { providers?: { defaultProfile?: string; profiles?: Record<string, Partial<ProviderProfile>> } } | undefined)?.providers;
+/**
+ * Parse `providers` from the interpolated YAML tree.
+ *
+ * Schema (current, single canonical form):
+ *   providers:
+ *     defaultProfile: <name>
+ *     profiles:
+ *       <name>:
+ *         provider: <provider>           # required, Pi registry id
+ *         modelId: <modelId>             # required, canonical Pi id
+ *         wireId: <wire-id>             # optional, override for gateway wire id
+ *         baseUrl: <url>                # optional
+ *         apiKeyEnv: <ENV_VAR_NAME>      # optional
+ *         mesh:
+ *           - provider: <provider>       # required
+ *             modelId: <modelId>         # required
+ *             wireId: <wire-id>         # optional
+ *             baseUrl: <url>            # optional
+ *
+ * Backward compatibility: legacy `model: "<provider>/<modelId>"` is
+ * translated into `provider` + `modelId` when the explicit fields are
+ * absent. Profiles missing required fields are skipped; the validator
+ * surfaces a clear error for profiles that survive parsing.
+ */
+function parseProvidersFromTree(
+  tree: unknown,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+): ProviderConfig {
+  const obj = (tree as {
+    providers?: {
+      defaultProfile?: string;
+      profiles?: Record<string, Record<string, unknown> & { mesh?: unknown }>;
+    };
+  } | undefined)?.providers;
+
   if (!obj) {
     return {
       profiles: {
         default: {
           name: "default",
-          model: DEFAULTS.defaultModel,
+          provider: "anthropic",
+          modelId: "claude-sonnet-4-20250514",
           thinkingLevel: "medium",
         },
       },
       defaultProfile: DEFAULTS.defaultProfile,
     };
   }
+
   const profiles: Record<string, ProviderProfile> = {};
-  for (const [name, p] of Object.entries(obj.profiles ?? {})) {
-    if (!p || typeof p.model !== "string") continue;
-    profiles[name] = { ...p, name } as ProviderProfile;
+  for (const [name, raw] of Object.entries(obj.profiles ?? {})) {
+    if (!raw || typeof raw !== "object") continue;
+    const profile = projectProfile(name, raw, warn);
+    if (profile) profiles[name] = profile;
   }
   if (!profiles.default) {
     profiles.default = {
       name: "default",
-      model: DEFAULTS.defaultModel,
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-20250514",
       thinkingLevel: "medium",
     };
   }
   return { profiles, defaultProfile: obj.defaultProfile ?? DEFAULTS.defaultProfile };
+}
+
+/** Project one raw YAML profile object into a typed `ProviderProfile`. */
+function projectProfile(
+  name: string,
+  raw: Record<string, unknown>,
+  _warn: (event: string, fields: Record<string, unknown>) => void,
+): ProviderProfile | null {
+  const resolved = resolveModelFields(raw);
+  if (!resolved) return null;
+
+  const wireId = typeof raw.wireId === "string" && raw.wireId.length > 0 ? raw.wireId : undefined;
+
+  const meshRaw = Array.isArray(raw.mesh) ? raw.mesh : undefined;
+  const mesh = meshRaw
+    ? meshRaw
+        .map((entry, index) => projectMeshEntry(entry, { profileName: name, meshIndex: index }))
+        .filter((m): m is MeshSpec => m !== null)
+    : undefined;
+
+  return {
+    ...raw,
+    name,
+    provider: resolved.provider,
+    modelId: resolved.modelId,
+    wireId,
+    ...(mesh ? { mesh } : {}),
+  } as ProviderProfile;
+}
+
+function projectMeshEntry(
+  raw: unknown,
+  context: { profileName: string; meshIndex: number },
+): MeshSpec | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const resolved = resolveModelFields(r);
+  if (!resolved) return null;
+  const wireId = typeof r.wireId === "string" && r.wireId.length > 0 ? r.wireId : undefined;
+  return { ...r, provider: resolved.provider, modelId: resolved.modelId, wireId } as MeshSpec;
+}
+
+/**
+ * Resolve `provider` + `modelId` from explicit fields. No legacy
+ * translation — both fields are required in the current schema.
+ * Returns null when either is missing.
+ */
+function resolveModelFields(
+  raw: Record<string, unknown>,
+): { provider: string; modelId: string } | null {
+  const provider =
+    typeof raw.provider === "string" && raw.provider.length > 0 ? raw.provider : undefined;
+  const modelId =
+    typeof raw.modelId === "string" && raw.modelId.length > 0 ? raw.modelId : undefined;
+  if (!provider || !modelId) return null;
+  return { provider, modelId };
 }
 
 function parsePluginSpec(raw: unknown): PluginSpec[] {

@@ -267,7 +267,8 @@ export class PhusAgent implements PhusAgentFacade {
     const baseModel = modelFromProfile({
       ...this.profile,
       name: this.profile.name,
-      model: `${ep.spec.provider}/${ep.spec.modelId}`,
+      provider: ep.spec.provider,
+      modelId: ep.spec.modelId,
     });
     if (ep.spec.baseUrl) baseModel.baseUrl = ep.spec.baseUrl;
     if (ep.spec.modelId) baseModel.id = ep.spec.modelId;
@@ -725,9 +726,7 @@ export class PhusAgent implements PhusAgentFacade {
 
   async setModel(modelId: string, provider?: string): Promise<void> {
     // Provider resolution order: explicit arg > profile's current provider.
-    // Note: a profile's model may be slash-joined ("anthropic/claude-sonnet-4"),
-    // so the provider is the first segment — same heuristic the loader uses.
-    const p = provider ?? this.profile.model.split("/", 1)[0]!;
+    const p = provider ?? this.profile.provider;
     // Delegates to the unified resolver — cached + validated at config load.
     // Custom OpenAI-compatible gateways (modelIds Pi never registered) work.
     const { resolveAndCache } = await import("@/infra/config/index.js");

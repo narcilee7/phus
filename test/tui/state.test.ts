@@ -1,7 +1,7 @@
 // test/tui/state.test.ts
 // Pure-function tests for `appReducer` and `truncate`.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appReducer, initialState, truncate, type AppAction } from "../../src/tui/state.js";
 
 function action(a: AppAction) {
@@ -15,6 +15,8 @@ describe("initialState", () => {
     expect(initialState.showHint).toBe(true);
     expect(initialState.lastOp).toBe("idle");
     expect(initialState.scroll).toEqual({ offset: 0, hasNew: false });
+    expect(initialState.permissionQueue).toEqual([]);
+    expect(initialState.allowedTools.size).toBe(0);
   });
 });
 
@@ -196,6 +198,50 @@ describe("scroll", () => {
     const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
     const s2 = appReducer(s1, { type: "clear_items" });
     expect(s2.scroll).toEqual({ offset: 0, hasNew: false });
+  });
+});
+
+describe("permission queue", () => {
+  it("push_permission appends a request", () => {
+    const resolve = vi.fn();
+    const s = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: { command: "ls" }, toolCallId: "tc-1", resolve },
+    });
+    expect(s.permissionQueue).toHaveLength(1);
+    expect(s.permissionQueue[0]!.toolName).toBe("bash");
+  });
+
+  it("resolve_permission resolves the first request and removes it", () => {
+    const resolve = vi.fn();
+    const s1 = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
+    });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: true });
+    expect(resolve).toHaveBeenCalledWith(true);
+    expect(s2.permissionQueue).toHaveLength(0);
+  });
+
+  it("resolve_permission with remember adds the tool to allowedTools", () => {
+    const resolve = vi.fn();
+    const s1 = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
+    });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: true, remember: true });
+    expect(s2.allowedTools.has("bash")).toBe(true);
+  });
+
+  it("resolve_permission with deny does not add to allowedTools", () => {
+    const resolve = vi.fn();
+    const s1 = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
+    });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: false });
+    expect(resolve).toHaveBeenCalledWith(false);
+    expect(s2.allowedTools.has("bash")).toBe(false);
   });
 });
 

@@ -54,8 +54,8 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
       }))
     : [{
         name: profile.name,
-        provider: profile.model.split("/", 1)[0]!,
-        modelId: profile.modelId ?? profile.model.split("/", 2)[1]!,
+        provider: profile.provider,
+        modelId: profile.modelId,
         baseUrl: profile.baseUrl,
         apiKeyEnv: profile.apiKeyEnv,
         priority: 0,

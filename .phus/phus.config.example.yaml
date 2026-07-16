@@ -3,14 +3,14 @@
 # Switch via PHUS_PROFILE env var, `--profile` flag, or `/profiles <name>` in TUI.
 #
 # Each profile:
-#   model        — <provider>/<modelId> as registered in pi-mono (required)
-#   baseUrl      — override provider's default URL (Volcano Ark, Azure, vLLM)
-#   modelId      — override the id sent on the wire (Volcano Ark ep-xxx IDs)
-#   headers      — extra HTTP headers (rarely needed)
-#   apiKeyEnv    — env var name to read API key from (auto-detected by default)
-#   thinkingLevel — off | minimal | low | medium | high | xhigh
-#   maxSteps     — max tool-use loop iterations (default: 50)
-#   description  — shown in `phus profiles` output
+#   provider         <provider>            required, Pi registry id
+#   modelId          <modelId>             required, canonical Pi model id
+#   baseUrl          string                 override provider's default URL
+#   wireId           string                 override the id sent on the wire
+#   apiKeyEnv        env var name           env var holding API key
+#   thinkingLevel    off | minimal | low | medium | high | xhigh
+#   maxSteps         number                 max tool-use loop iterations (default: 50)
+#   description      string                 shown in `phus profiles` output
 #
 providers:
   defaultProfile: smart
@@ -18,36 +18,41 @@ providers:
   profiles:
     # Default: Anthropic Claude direct
     smart:
-      model: anthropic/claude-sonnet-4-20250514
+      provider: anthropic
+      modelId: claude-sonnet-4-20250514
       thinkingLevel: medium
       description: default — balanced quality + speed
 
     # Cheap + fast for routine tasks
     fast:
-      model: openai/gpt-4o-mini
+      provider: openai
+      modelId: gpt-4o-mini
       thinkingLevel: low
       description: cheap OpenAI for routine work
 
     # Volcano Ark DeepSeek via OpenAI-compatible gateway
     volcano:
-      model: deepseek/deepseek-v3-250324
+      provider: deepseek
+      modelId: deepseek-v3-250324
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      modelId: deepseek-v3-250324        # or your ep-xxxxxxxx endpoint id
+      wireId: ${VOLCANO_WIRE_ID:-deepseek-v3-250324}
       apiKeyEnv: VOLCANO_API_KEY
       thinkingLevel: medium
       description: Volcano Ark (火山方舟) DeepSeek-V3
 
     # OpenRouter proxy
     openrouter:
-      model: openrouter/anthropic/claude-3.5-sonnet
+      provider: openrouter
+      modelId: anthropic/claude-3.5-sonnet
       apiKeyEnv: OPENROUTER_API_KEY
       thinkingLevel: medium
       description: OpenRouter proxy (any model)
 
     # Self-hosted vLLM
     vllm:
-      model: openai/custom-model
-      baseUrl: https://your-vllm.internal/v1
+      provider: openai
+      modelId: custom-model
+      baseUrl: ${VLLM_BASE_URL:-https://your-vllm.internal/v1}
       apiKeyEnv: VLLM_API_KEY
       description: self-hosted vLLM endpoint
 
@@ -56,7 +61,8 @@ providers:
     # Set baseUrl to your LiteLLM instance (default: localhost:4000).
     # The "model" must match a model_name in LiteLLM's config.
     litellm:
-      model: openai/gpt-4o
+      provider: openai
+      modelId: gpt-4o
       baseUrl: http://localhost:4000/v1
       apiKeyEnv: LITELLM_MASTER_KEY
       thinkingLevel: medium
@@ -93,8 +99,9 @@ providers:
           tags: [premium, west]
         - name: deepseek-v4-pro
           provider: openai
-          modelId: deepseek-v4-pro-260425
+          modelId: deepseek-v4-pro
           baseUrl: https://ark.cn-beijing.volces.com/api/v3
+          wireId: ${DEEPSEEK_WIRE_ID:-deepseek-v4-pro}
           apiKeyEnv: DEEPSEEK_API_KEY
           priority: 2
           costPerMillion: { input: 0.27, output: 1.1 }
@@ -116,6 +123,7 @@ providers:
           provider: openai
           modelId: deepseek-v3-250324
           baseUrl: https://ark.cn-beijing.volces.com/api/v3
+          wireId: ${DEEPSEEK_WIRE_ID:-deepseek-v3-250324}
           apiKeyEnv: DEEPSEEK_API_KEY
           costPerMillion: { input: 0.27, output: 1.1 }
 

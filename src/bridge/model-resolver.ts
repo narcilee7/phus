@@ -13,7 +13,7 @@ export function resolveModel(): Model<any> {
   const model = modelFromProfile(profile);
   const key = apiKeyForProfile(profile);
   if (key) {
-    const provider = profile.model.split("/", 1)[0];
+    const provider = profile.provider;
     if (provider) {
       const envKey = `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
       process.env[envKey] ??= key;
