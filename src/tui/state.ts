@@ -4,6 +4,7 @@
 
 export type ChatItemKind = "user" | "assistant" | "tool_call" | "tool_result" | "system";
 export type SystemLevel = "info" | "warn" | "error";
+export type RememberChoice = "once" | "session" | "always";
 
 export interface ChatItem {
   id: string;
@@ -20,11 +21,31 @@ export interface ChatItem {
   level?: SystemLevel;
 }
 
+export interface ScrollState {
+  /** Items from the bottom we are scrolled up. 0 means pinned to bottom. */
+  offset: number;
+  /** True when new content arrived while scrolled up. */
+  hasNew: boolean;
+}
+
+export interface PermissionRequest {
+  id: string;
+  toolName: string;
+  args: unknown;
+  toolCallId: string;
+  resolve: (allow: boolean) => void;
+}
+
 export interface AppState {
   items: ChatItem[];
   busy: boolean;
   showHint: boolean;
   lastOp: string;
+  scroll: ScrollState;
+  permissionQueue: PermissionRequest[];
+  allowedTools: Set<string>;
+  /** Tools allowed for the current session only (cleared on /new). */
+  sessionAllowedTools: Set<string>;
 }
 
 export const initialState: AppState = {
@@ -32,6 +53,10 @@ export const initialState: AppState = {
   busy: false,
   showHint: true,
   lastOp: "idle",
+  scroll: { offset: 0, hasNew: false },
+  permissionQueue: [],
+  allowedTools: new Set(),
+  sessionAllowedTools: new Set(),
 };
 
 export type AppAction =
@@ -44,11 +69,24 @@ export type AppAction =
   | { type: "set_busy"; busy: boolean }
   | { type: "set_last_op"; op: string }
   | { type: "hide_hint" }
-  | { type: "clear_items" };
+  | { type: "clear_items" }
+  | { type: "scroll_up"; lines?: number }
+  | { type: "scroll_down"; lines?: number }
+  | { type: "scroll_bottom" }
+  | { type: "push_permission"; request: PermissionRequest }
+  | { type: "resolve_permission"; allow: boolean; remember?: RememberChoice }
+  | { type: "clear_session_allowed_tools" };
 
 /** Truncate a string for compact display. */
 export function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+/** When the user has scrolled up and new content arrives, mark it so the
+ *  TUI can show a "new messages" indicator without auto-jumping to bottom. */
+function withScrollOnNewContent(state: AppState): AppState {
+  if (state.scroll.offset === 0) return state;
+  return { ...state, scroll: { ...state.scroll, hasNew: true } };
 }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -57,15 +95,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (!action.delta) return state;
       const last = state.items[state.items.length - 1];
       if (last && last.kind === "assistant" && last.isStreaming) {
-        return {
+        return withScrollOnNewContent({
           ...state,
           items: [
             ...state.items.slice(0, -1),
             { ...last, text: (last.text ?? "") + action.delta },
           ],
-        };
+        });
       }
-      return {
+      return withScrollOnNewContent({
         ...state,
         items: [
           ...state.items,
@@ -77,21 +115,21 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             isStreaming: true,
           },
         ],
-      };
+      });
     }
     case "upsert_tool_call": {
       const existing = state.items.find(
         (it) => it.kind === "tool_call" && it.toolCallId === action.toolCallId,
       );
       if (existing) {
-        return {
+        return withScrollOnNewContent({
           ...state,
           items: state.items.map((it) =>
             it.id === existing.id ? { ...it, args: action.args } : it,
           ),
-        };
+        });
       }
-      return {
+      return withScrollOnNewContent({
         ...state,
         items: [
           ...state.items,
@@ -104,7 +142,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             args: action.args,
           },
         ],
-      };
+      });
     }
     case "complete_tool_call": {
       const callIdx = state.items.findIndex(
@@ -123,7 +161,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         result: action.result,
         isError: action.isError,
       });
-      return { ...state, items: updated };
+      return withScrollOnNewContent({ ...state, items: updated });
     }
     case "finalize_streaming":
       return {
@@ -133,15 +171,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ),
       };
     case "add_user":
-      return {
+      return withScrollOnNewContent({
         ...state,
         items: [
           ...state.items,
           { id: crypto.randomUUID(), kind: "user", text: action.text, ts: Date.now() },
         ],
-      };
+      });
     case "add_system":
-      return {
+      return withScrollOnNewContent({
         ...state,
         items: [
           ...state.items,
@@ -153,7 +191,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             level: action.level,
           },
         ],
-      };
+      });
     case "set_busy":
       return { ...state, busy: action.busy };
     case "set_last_op":
@@ -161,6 +199,36 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "hide_hint":
       return { ...state, showHint: false };
     case "clear_items":
-      return { ...state, items: [] };
+      return { ...state, items: [], scroll: { offset: 0, hasNew: false } };
+    case "scroll_up": {
+      const lines = action.lines ?? 1;
+      return { ...state, scroll: { ...state.scroll, offset: state.scroll.offset + lines } };
+    }
+    case "scroll_down": {
+      const lines = action.lines ?? 1;
+      return { ...state, scroll: { ...state.scroll, offset: Math.max(0, state.scroll.offset - lines) } };
+    }
+    case "scroll_bottom":
+      return { ...state, scroll: { offset: 0, hasNew: false } };
+    case "push_permission":
+      return { ...state, permissionQueue: [...state.permissionQueue, action.request] };
+    case "resolve_permission": {
+      const [first, ...rest] = state.permissionQueue;
+      if (!first) return state;
+      first.resolve(action.allow);
+      const remember = action.remember ?? "once";
+      const newState: AppState = { ...state, permissionQueue: rest };
+      if (!action.allow || remember === "once") {
+        return newState;
+      }
+      if (remember === "always") {
+        newState.allowedTools = new Set([...state.allowedTools, first.toolName]);
+      } else if (remember === "session") {
+        newState.sessionAllowedTools = new Set([...state.sessionAllowedTools, first.toolName]);
+      }
+      return newState;
+    }
+    case "clear_session_allowed_tools":
+      return { ...state, sessionAllowedTools: new Set() };
   }
 }

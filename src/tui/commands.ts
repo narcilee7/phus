@@ -5,6 +5,7 @@
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 import { asSessionId } from "@/types/brand.js";
 import type { AppAction, AppState, SystemLevel } from "@/tui/state.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 export type SlashResult = "quit" | "clear" | void;
 
@@ -94,12 +95,16 @@ export async function runSlash(
       dispatch({ type: "add_system", text: "✓ current turn aborted", level: "warn" });
       return;
 
+    case "undo":
+      return await cmdUndo(agent, dispatch);
+
     case "retry":
       return cmdRetry(state, dispatch);
 
     case "new":
       await agent.clearConversation();
       dispatch({ type: "clear_items" });
+      dispatch({ type: "clear_session_allowed_tools" });
       dispatch({ type: "add_system", text: `✓ fresh session started`, level: "info" });
       return;
 
@@ -129,42 +134,58 @@ export async function runSlash(
   }
 }
 
+export interface SlashCommand {
+  name: string;
+  description: string;
+}
+
+export const SLASH_COMMANDS: SlashCommand[] = [
+  { name: "model", description: "show or switch model (e.g. /model openai/gpt-4o)" },
+  { name: "model-list", description: "list known models" },
+  { name: "reasoning", description: "show or set: off | minimal | low | medium | high" },
+  { name: "profiles", description: "list provider profiles" },
+  { name: "reload", description: "reload plugins and skills from disk" },
+  { name: "tape", description: "tape statistics" },
+  { name: "trace", description: "last N turns (default 5)" },
+  { name: "sessions", description: "list sessions in tape" },
+  { name: "use", description: "switch active session" },
+  { name: "compact", description: "compact, keep last N (default 10)" },
+  { name: "context", description: "show system prompt + skills + tape summary" },
+  { name: "forget", description: "clear conversation history (keeps tape)" },
+  { name: "skills", description: "list skills" },
+  { name: "skill-read", description: "read a skill body" },
+  { name: "plugins", description: "list loaded plugins" },
+  { name: "bash", description: "run shell without AI roundtrip" },
+  { name: "read", description: "read a file" },
+  { name: "policy", description: "show safety policy" },
+  { name: "health", description: "run health check" },
+  { name: "interrupt", description: "abort the current turn" },
+  { name: "undo", description: "restore the last checkpoint for this session" },
+  { name: "retry", description: "retry last prompt" },
+  { name: "new", description: "start a fresh session" },
+  { name: "clear", description: "clear chat area" },
+  { name: "quit", description: "exit" },
+  { name: "exit", description: "exit" },
+];
+
 const HELP_TEXT = [
   "── Runtime ──────────────────────────────────────────",
-  "  /model [id]         show or switch model (e.g. /model openai/gpt-4o)",
-  "  /model-list         list known models",
-  "  /reasoning [level]  show or set: off | minimal | low | medium | high",
-  "  /profiles           list provider profiles",
-  "  /reload             reload plugins and skills from disk",
+  ...SLASH_COMMANDS.slice(0, 5).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Memory ───────────────────────────────────────────",
-  "  /tape               tape statistics",
-  "  /trace [N]          last N turns (default 5)",
-  "  /sessions           list sessions in tape",
-  "  /use <sessionId>    switch active session",
-  "  /compact [N]        compact, keep last N (default 10)",
-  "  /context            show system prompt + skills + tape summary",
-  "  /forget             clear conversation history (keeps tape)",
+  ...SLASH_COMMANDS.slice(5, 12).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Skills & Plugins ─────────────────────────────────",
-  "  /skills             list skills",
-  "  /skill-read <name>  read a skill body",
-  "  /plugins            list loaded plugins",
+  ...SLASH_COMMANDS.slice(12, 15).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Direct execution ─────────────────────────────────",
-  "  /bash <cmd>         run shell without AI roundtrip",
-  "  /read <path>        read a file",
+  ...SLASH_COMMANDS.slice(15, 17).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Safety & health ──────────────────────────────────",
-  "  /policy             show safety policy",
-  "  /health             run health check",
+  ...SLASH_COMMANDS.slice(17, 19).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
   "",
   "── Control ─────────────────────────────────────────",
-  "  /interrupt          abort the current turn",
-  "  /retry              retry last prompt",
-  "  /new                start a fresh session",
-  "  /clear              clear chat area",
-  "  /quit               exit",
+  ...SLASH_COMMANDS.slice(19).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
 ].join("\n");
 
 // ─── Individual command handlers ──────────────────────────────────
@@ -179,7 +200,7 @@ async function runInternalCommand(
   );
   initInternalCommands({
     agent,
-    home: () => process.env.PHUS_HOME ?? "./.phus",
+    home: () => loadConfig().paths.home,
     mesh: agent.getMesh(),
   });
   const result = await execute(line, "tui");
@@ -272,7 +293,7 @@ async function cmdProfiles(
 ): Promise<void> {
   const { formatProfiles, resolveProfile, modelFromProfile, loadProviderConfig } =
     await import("@/infra/profile.js");
-  const activeName = process.env.PHUS_PROFILE ?? "(default)";
+  const activeName = loadConfig().profileName;
   if (!arg) {
     dispatch({
       type: "add_system",
@@ -284,7 +305,8 @@ async function cmdProfiles(
   try {
     const cfg = loadProviderConfig();
     resolveProfile(arg, cfg);
-    process.env.PHUS_PROFILE = arg;
+    // Switch the live agent's model in place; the active profile is
+    // an in-process concern for the TUI, so we don't mutate env.
     const next = modelFromProfile(resolveProfile(arg, cfg));
     agent.setModel(next.id, next.provider);
     dispatch({
@@ -438,6 +460,21 @@ async function cmdRead(arg: string, dispatch: (a: AppAction) => void): Promise<v
     });
   } catch (err: any) {
     dispatch({ type: "add_system", text: `read failed: ${err.message}`, level: "error" });
+  }
+}
+
+async function cmdUndo(agent: PhusAgent, dispatch: (a: AppAction) => void): Promise<SlashResult> {
+  const sid = agent.getCurrentSessionId();
+  if (!sid) {
+    dispatch({ type: "add_system", text: "no active session to undo", level: "warn" });
+    return;
+  }
+  try {
+    await agent.restoreCheckpoint(sid);
+    dispatch({ type: "clear_items" });
+    dispatch({ type: "add_system", text: "✓ restored to last checkpoint", level: "info" });
+  } catch (err: any) {
+    dispatch({ type: "add_system", text: `undo failed: ${err.message ?? err}`, level: "error" });
   }
 }
 

@@ -6,6 +6,7 @@ import { Type } from "@mariozechner/pi-ai";
 import type { MetaTool } from "@/types/tool.js";
 import type { SessionId } from "@/types/brand.js";
 import { asSessionId } from "@/types/brand.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 export function defineSystemMetaTools(deps: {
   tape: { replay: (sessionId?: string) => Generator<unknown>; stats: () => unknown };
@@ -27,7 +28,7 @@ export function defineSystemMetaTools(deps: {
         content: Type.String({ description: "Shell script content. Must be valid POSIX sh." }),
       }),
       execute: async (args) => {
-        const home = process.env.PHUS_HOME ?? "./.phus";
+        const home = loadConfig().paths.home;
         const fs = await import("node:fs");
         const path = await import("node:path");
         fs.mkdirSync(home, { recursive: true });

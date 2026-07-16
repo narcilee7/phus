@@ -10,7 +10,8 @@ import type { TapeEntry, Turn, TapeAnchorRef } from "@/types/tape/index.js";
 export class Tape {
   private db: Database.Database;
 
-  constructor(dbPath: string | undefined = process.env.PHUS_TAPE_DB ?? "./tape.sqlite") {
+  /** `dbPath` is required — callers get the path from `loadConfig().paths.tapeDb`. */
+  constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");

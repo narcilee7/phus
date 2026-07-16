@@ -7,6 +7,7 @@
 
 import { Command } from "commander";
 import { drainPendingCliCommands } from "@/infra/plugins/cli-queue.js";
+import type { ResolvedConfig } from "@/infra/config/index.js";
 
 import { registerDefaultCommand } from "./commands/default.js";
 import { registerChatCommand } from "./commands/chat.js";
@@ -63,7 +64,7 @@ export function buildProgram(): Command {
 /** Drain the plugin-provided CLI commands queued via
  *  `PluginContext.registerCliCommand` into `program`. Plugin commands
  *  are added after built-ins so users see phus-native help first. */
-export async function registerPluginCliCommands(program: Command): Promise<void> {
+export async function registerPluginCliCommands(program: Command, config: ResolvedConfig): Promise<void> {
   // 1. Drain queue (set by PluginContext.registerCliCommand during plugin load)
   const beforeCount = (await import("@/infra/plugins/cli-queue.js"))._pendingCliCommandCount();
   try {
@@ -76,23 +77,22 @@ export async function registerPluginCliCommands(program: Command): Promise<void>
     });
   }
 
-  // 2. Run the register_cli_commands hook (plugins that prefer the hook)
-  //    Note: we need a PhusAgent just to access the HookRegistry. We
-  //    don't actually start a turn — the agent is created lazily.
+  // 2. Run the register_cli_commands hook (plugins that prefer the hook).
+  //    Throwaway PhusAgent uses the pre-loaded config — no re-parse.
   const { PhusAgent } = await import("@/bridge/pi-agent.js");
   const { makeCtx } = await import("@/core/runtime/hook.js");
   const { initInternalCommands } = await import("@/core/runtime/internal-commands/index.js");
-  const tempHandle = await PhusAgent.create();
+  const tempHandle = await PhusAgent.create({ config, profileName: config.profileName });
   initInternalCommands({
     agent: tempHandle.agent,
-    home: () => process.env.PHUS_HOME ?? "./.phus",
+    home: () => config.paths.home,
     mesh: tempHandle.internals.mesh,
   });
   const ctx = makeCtx({
     state: {},
     tape: tempHandle.internals.tape,
     skills: tempHandle.internals.skills,
-    extras: { program },
+    extras: { program, config },
   });
   await tempHandle.internals.hooks.execute(
     "register_cli_commands",

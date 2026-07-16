@@ -157,3 +157,6 @@ coverage
 
 # tsdown intermediate
 .tsdown/
+
+# phus artifacts
+.phus

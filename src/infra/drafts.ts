@@ -9,6 +9,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import yaml from "yaml";
+import { loadConfig } from "@/infra/config/index.js";
 
 export interface Draft {
   name: string;
@@ -28,7 +29,7 @@ export class DraftsStore {
   private draftsDir: string;
 
   constructor(opts: DraftsOptions = {}) {
-    const skillsDir = opts.skillsDir ?? process.env.PHUS_SKILLS_DIR ?? "./skills";
+    const skillsDir = opts.skillsDir ?? loadConfig().paths.skillsDir;
     this.draftsDir = path.join(skillsDir, ".drafts");
   }
 

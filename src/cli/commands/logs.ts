@@ -3,6 +3,7 @@
 
 import type { Command } from "commander";
 import { tailLogs } from "@/commands/logs.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 export function registerLogsCommand(program: Command): void {
   program
@@ -15,7 +16,7 @@ export function registerLogsCommand(program: Command): void {
     .option("-n, --limit <n>", "Show last N entries (no -f)", "50")
     .option("--json", "Emit raw JSON lines")
     .action(async (opts: { follow?: boolean; session?: string; level: string; event?: string; limit: string; json?: boolean }) => {
-      const file = process.env.PHUS_LOG_FILE ?? "./logs/phus.jsonl";
+      const file = loadConfig().log.file;
       await tailLogs(file, {
         follow: opts.follow,
         session: opts.session,

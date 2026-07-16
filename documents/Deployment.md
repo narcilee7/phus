@@ -283,6 +283,79 @@ If the process doesn't exit within 10s, the supervisor sends SIGKILL.
 
 ---
 
+## Configuration
+
+Phus's non-secret configuration lives in **one place**: `$PHUS_HOME/phus.config.yaml`. Secrets (API keys, the Telegram token) stay in the environment and are referenced from YAML via `${VAR}` interpolation. The full precedence table:
+
+| Setting | Source precedence |
+|---|---|
+| `paths.home` | `PHUS_HOME` env > YAML `paths.home` > `./.phus` |
+| `paths.tapeDb` | YAML `paths.tapeDb` > `./tape.sqlite` |
+| `paths.skillsDir` | YAML `paths.skillsDir` > `./skills` |
+| `log.file` | `PHUS_LOG_FILE` env > YAML `log.file` > `./logs/phus.jsonl` |
+| `log.level` | `PHUS_LOG_LEVEL` env > YAML `log.level` > `info` |
+| `profileName` | `PHUS_PROFILE` env > YAML `providers.defaultProfile` > `default` |
+| Provider profiles, mesh, plugins, schedules | YAML only |
+
+Every section under `paths`, `log`, `providers`, `plugins`, `schedules` is optional; missing keys fall back to the defaults in the table. Example:
+
+```yaml
+paths:
+  tapeDb: /var/lib/phus/tape.sqlite
+  skillsDir: /var/lib/phus/skills
+log:
+  file: /var/log/phus/phus.jsonl
+  level: info
+providers:
+  defaultProfile: smart
+  profiles:
+    smart:
+      model: anthropic/claude-sonnet-4-20250514
+      thinkingLevel: medium
+plugins:
+  - path: ./plugins/greet-everyone.ts
+schedules:
+  - name: heartbeat
+    cron: "*/15 * * * *"
+    hookName: system_prompt
+```
+
+### Interpolating secrets
+
+Anywhere in YAML you can write `${VAR}` and Phus will substitute the value of `process.env.VAR` at load time. Defaults via `${VAR:-fallback}` are supported. Unset, non-defaulted references are left literal and a `config.interpolate_unset` event is logged once per name.
+
+```yaml
+providers:
+  profiles:
+    volcano:
+      model: deepseek/deepseek-v3-250324
+      baseUrl: https://ark.cn-beijing.volces.com/api/v3
+      apiKeyEnv: VOLCANO_API_KEY   # env-only, never the literal key
+```
+
+### Env vars that still win
+
+For one release, the four env vars below override their YAML counterparts. Setting any of them emits a `config.env_override_used` warn event so you notice:
+
+| Env | Replaces |
+|---|---|
+| `PHUS_HOME` | `paths.home` |
+| `PHUS_LOG_FILE` | `log.file` |
+| `PHUS_LOG_LEVEL` | `log.level` |
+| `PHUS_PROFILE` | `providers.defaultProfile` |
+
+These are deployment overrides (set them in your systemd unit, Docker compose, or k8s manifest). They will become no-ops in a future release — move them into YAML.
+
+### What stays env-only
+
+- Provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `XAI_API_KEY`, `HF_TOKEN`, `ANTHROPIC_OAUTH_TOKEN`)
+- `TELEGRAM_TOKEN`
+- `PHUS_DEBUG_WIRE` — Pi wire-payload debug toggle (off by default)
+
+These never become part of the YAML file — secrets stay out of version control.
+
+---
+
 ## Resource sizing
 
 Phus itself is tiny (~50 MB RSS at idle). The memory ceiling is dominated by:

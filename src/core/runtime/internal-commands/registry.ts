@@ -59,7 +59,7 @@ export class InternalCommandRegistry {
   /** Render a help table for `,help`. */
   renderHelp(): string {
     const cmds = this.list().sort((a, b) => a.name.localeCompare(b.name));
-    const lines = ["internal commands (Bub-style, prefix ,):", ""];
+    const lines = ["internal commands (prefix ,):", ""];
     if (cmds.length === 0) return lines.join("\n") + "  (none registered)";
     const maxName = Math.max(...cmds.map((c) => c.name.length));
     for (const c of cmds) {

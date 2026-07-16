@@ -1,8 +1,8 @@
 // test/tui/state.test.ts
 // Pure-function tests for `appReducer` and `truncate`.
 
-import { describe, expect, it } from "vitest";
-import { appReducer, initialState, truncate, type AppAction } from "../../src/tui/state.js";
+import { describe, expect, it, vi } from "vitest";
+import { appReducer, initialState, truncate, type AppAction, type AppState } from "../../src/tui/state.js";
 
 function action(a: AppAction) {
   return appReducer(initialState, a);
@@ -14,6 +14,9 @@ describe("initialState", () => {
     expect(initialState.busy).toBe(false);
     expect(initialState.showHint).toBe(true);
     expect(initialState.lastOp).toBe("idle");
+    expect(initialState.scroll).toEqual({ offset: 0, hasNew: false });
+    expect(initialState.permissionQueue).toEqual([]);
+    expect(initialState.allowedTools.size).toBe(0);
   });
 });
 
@@ -151,6 +154,118 @@ describe("set_busy / set_last_op / hide_hint", () => {
   it("hide_hint flips the flag to false", () => {
     expect(initialState.showHint).toBe(true);
     expect(appReducer(initialState, { type: "hide_hint" }).showHint).toBe(false);
+  });
+});
+
+describe("scroll", () => {
+  it("scroll_up increases offset", () => {
+    const s = appReducer(initialState, { type: "scroll_up" });
+    expect(s.scroll.offset).toBe(1);
+  });
+
+  it("scroll_up accepts a line count", () => {
+    const s = appReducer(initialState, { type: "scroll_up", lines: 5 });
+    expect(s.scroll.offset).toBe(5);
+  });
+
+  it("scroll_down decreases offset but not below zero", () => {
+    const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
+    const s2 = appReducer(s1, { type: "scroll_down", lines: 2 });
+    expect(s2.scroll.offset).toBe(1);
+    const s3 = appReducer(s2, { type: "scroll_down", lines: 5 });
+    expect(s3.scroll.offset).toBe(0);
+  });
+
+  it("scroll_bottom resets offset and hasNew", () => {
+    const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
+    const s2 = appReducer(s1, { type: "scroll_bottom" });
+    expect(s2.scroll).toEqual({ offset: 0, hasNew: false });
+  });
+
+  it("marks hasNew when content arrives while scrolled up", () => {
+    const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
+    const s2 = appReducer(s1, { type: "add_user", text: "hello" });
+    expect(s2.scroll.hasNew).toBe(true);
+    expect(s2.scroll.offset).toBe(3);
+  });
+
+  it("does not mark hasNew when content arrives at bottom", () => {
+    const s1 = appReducer(initialState, { type: "add_user", text: "hello" });
+    expect(s1.scroll.hasNew).toBe(false);
+  });
+
+  it("clear_items resets scroll", () => {
+    const s1 = appReducer(initialState, { type: "scroll_up", lines: 3 });
+    const s2 = appReducer(s1, { type: "clear_items" });
+    expect(s2.scroll).toEqual({ offset: 0, hasNew: false });
+  });
+});
+
+describe("permission queue", () => {
+  it("push_permission appends a request", () => {
+    const resolve = vi.fn();
+    const s = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: { command: "ls" }, toolCallId: "tc-1", resolve },
+    });
+    expect(s.permissionQueue).toHaveLength(1);
+    expect(s.permissionQueue[0]!.toolName).toBe("bash");
+  });
+
+  it("resolve_permission resolves the first request and removes it", () => {
+    const resolve = vi.fn();
+    const s1 = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
+    });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: true });
+    expect(resolve).toHaveBeenCalledWith(true);
+    expect(s2.permissionQueue).toHaveLength(0);
+  });
+
+  it("resolve_permission with remember='always' adds the tool to allowedTools", () => {
+    const resolve = vi.fn();
+    const s1 = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
+    });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: true, remember: "always" });
+    expect(s2.allowedTools.has("bash")).toBe(true);
+    expect(s2.sessionAllowedTools.has("bash")).toBe(false);
+  });
+
+  it("resolve_permission with remember='session' adds the tool to sessionAllowedTools", () => {
+    const resolve = vi.fn();
+    const s1 = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
+    });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: true, remember: "session" });
+    expect(s2.allowedTools.has("bash")).toBe(false);
+    expect(s2.sessionAllowedTools.has("bash")).toBe(true);
+  });
+
+  it("resolve_permission with deny does not add to allowedTools", () => {
+    const resolve = vi.fn();
+    const s1 = appReducer(initialState, {
+      type: "push_permission",
+      request: { id: "p1", toolName: "bash", args: {}, toolCallId: "tc-1", resolve },
+    });
+    const s2 = appReducer(s1, { type: "resolve_permission", allow: false });
+    expect(resolve).toHaveBeenCalledWith(false);
+    expect(s2.allowedTools.has("bash")).toBe(false);
+    expect(s2.sessionAllowedTools.has("bash")).toBe(false);
+  });
+
+  it("clear_session_allowed_tools only clears session memory", () => {
+    const state: AppState = {
+      ...initialState,
+      allowedTools: new Set(["always-tool"]),
+      sessionAllowedTools: new Set(["session-tool"]),
+    };
+    const s = appReducer(state, { type: "clear_session_allowed_tools" });
+    expect(s.allowedTools.has("always-tool")).toBe(true);
+    expect(s.sessionAllowedTools.has("session-tool")).toBe(false);
   });
 });
 

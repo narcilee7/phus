@@ -20,7 +20,8 @@ describe("profile loader", () => {
   it("returns default profile when no config exists", () => {
     const cfg = loadProviderConfig();
     expect(cfg.profiles.default).toBeDefined();
-    expect(cfg.profiles.default.model).toContain("/");
+    expect(cfg.profiles.default.provider).toBe("anthropic");
+    expect(cfg.profiles.default.modelId).toContain("claude");
   });
 
   it("loads profiles from phus.config.yaml", () => {
@@ -30,10 +31,12 @@ describe("profile loader", () => {
   defaultProfile: fast
   profiles:
     fast:
-      model: openai/gpt-4o-mini
+      provider: openai
+      modelId: gpt-4o-mini
       description: cheap + fast
     smart:
-      model: anthropic/claude-sonnet-4-20250514
+      provider: anthropic
+      modelId: claude-sonnet-4-20250514
       baseUrl: https://api.anthropic.com
       thinkingLevel: high
       description: for hard problems
@@ -41,7 +44,10 @@ describe("profile loader", () => {
     );
     const cfg = loadProviderConfig();
     expect(cfg.defaultProfile).toBe("fast");
-    expect(cfg.profiles.fast?.model).toBe("openai/gpt-4o-mini");
+    expect(cfg.profiles.fast?.provider).toBe("openai");
+    expect(cfg.profiles.fast?.modelId).toBe("gpt-4o-mini");
+    expect(cfg.profiles.smart?.provider).toBe("anthropic");
+    expect(cfg.profiles.smart?.modelId).toBe("claude-sonnet-4-20250514");
     expect(cfg.profiles.smart?.thinkingLevel).toBe("high");
   });
 
@@ -51,13 +57,16 @@ describe("profile loader", () => {
       `providers:
   profiles:
     p1:
-      model: openai/gpt-4o
+      provider: openai
+      modelId: gpt-4o
     p2:
-      model: anthropic/claude-sonnet-4-20250514
+      provider: anthropic
+      modelId: claude-sonnet-4-20250514
 `,
     );
     const p = resolveProfile("p2");
-    expect(p.model).toBe("anthropic/claude-sonnet-4-20250514");
+    expect(p.provider).toBe("anthropic");
+    expect(p.modelId).toBe("claude-sonnet-4-20250514");
   });
 
   it("resolveProfile falls back to defaultProfile", () => {
@@ -67,9 +76,11 @@ describe("profile loader", () => {
   defaultProfile: p1
   profiles:
     p1:
-      model: openai/gpt-4o
+      provider: openai
+      modelId: gpt-4o
     p2:
-      model: anthropic/claude-sonnet-4-20250514
+      provider: anthropic
+      modelId: claude-sonnet-4-20250514
 `,
     );
     const p = resolveProfile();
@@ -82,21 +93,23 @@ describe("profile loader", () => {
       `providers:
   profiles:
     p1:
-      model: openai/gpt-4o
+      provider: openai
+      modelId: gpt-4o
 `,
     );
     expect(() => resolveProfile("nope")).toThrow(/Unknown profile "nope"/);
   });
 
-  it("modelFromProfile applies baseUrl and modelId overrides", () => {
+  it("modelFromProfile applies baseUrl and wireId overrides", () => {
     fs.writeFileSync(
       path.join(dir, "phus.config.yaml"),
       `providers:
   profiles:
     volcano:
-      model: deepseek/deepseek-v3-250324
+      provider: deepseek
+      modelId: deepseek-v3-250324
       baseUrl: https://ark.cn-beijing.volces.com/api/v3
-      modelId: ep-custom-id
+      wireId: ep-custom-id
 `,
     );
     const model = modelFromProfile(resolveProfile("volcano"));
@@ -111,9 +124,11 @@ describe("profile loader", () => {
   defaultProfile: fast
   profiles:
     fast:
-      model: openai/gpt-4o-mini
+      provider: openai
+      modelId: gpt-4o-mini
     smart:
-      model: anthropic/claude-sonnet-4-20250514
+      provider: anthropic
+      modelId: claude-sonnet-4-20250514
 `,
     );
     const out = formatProfiles();

@@ -9,10 +9,10 @@
 import type { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import yaml from "yaml";
 import { PhusAgent } from "@/bridge/pi-agent.js";
 import { bootstrap } from "@/infra/bootstrap.js";
 import { logger } from "@/infra/logging.js";
+import { loadConfig } from "@/infra/config/index.js";
 import { initInternalCommands } from "@/core/runtime/internal-commands/index.js";
 import { collectChannels } from "@/commands/channels.js";
 import type { ChannelAdapter } from "@/channels/base.js";
@@ -27,7 +27,8 @@ export function registerGatewayCommand(program: Command): void {
     .option("--sse <port>", "Enable SSE channel on the given port")
     .action(async (opts: { telegram?: boolean; websocket?: string; sse?: string }) => {
       const mode = bootstrap();
-      const handle = await PhusAgent.create();
+      const config = loadConfig();
+      const handle = await PhusAgent.create({ config });
       const channels = await collectChannels(handle.internals, opts);
 
       if (channels.length === 0) {
@@ -49,7 +50,7 @@ export function registerGatewayCommand(program: Command): void {
       const scheduler = new Scheduler(handle.internals.hooks);
       initInternalCommands({
         agent: handle.agent,
-        home: () => process.env.PHUS_HOME ?? "./.phus",
+        home: () => loadConfig().paths.home,
         mesh: handle.internals.mesh,
         scheduler,
         extraChannels: () => channels,
@@ -86,14 +87,5 @@ export function registerGatewayCommand(program: Command): void {
 }
 
 function loadSchedulesFromConfig(): Schedule[] {
-  try {
-    const home = process.env.PHUS_HOME ?? "./.phus";
-    const cfgPath = path.join(home, "phus.config.yaml");
-    if (!fs.existsSync(cfgPath)) return [];
-    const cfg = yaml.parse(fs.readFileSync(cfgPath, "utf-8")) as { schedules?: Schedule[] };
-    return cfg?.schedules ?? [];
-  } catch (err: any) {
-    logger.error("schedule.config_load_failed", { error: err.message });
-    return [];
-  }
+  return loadConfig().schedules;
 }

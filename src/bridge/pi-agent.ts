@@ -93,6 +93,12 @@ export interface AgentDiagnostics {
  * need is here. The interface IS the public API; the concrete
  * `PhusAgent` class adds lifecycle (constructor, dispose).
  */
+export interface ToolPermissionRequest {
+  toolName: string;
+  args: unknown;
+  toolCallId: string;
+}
+
 export interface PhusAgentFacade {
   // ─── Turn lifecycle ───────────────────────────────────────────
   /** Run one inbound envelope through the Bub hook chain. */
@@ -105,6 +111,9 @@ export interface PhusAgentFacade {
   steer(message: AgentMessage): void;
   /** Queue a follow-up message (runs after current turn finishes). */
   followUp(message: AgentMessage): void;
+  /** Register a callback that decides whether a tool call may proceed.
+   *  Invoked after the static policy check for every tool call. */
+  setToolPermissionHandler(handler: (req: ToolPermissionRequest) => Promise<boolean>): void;
 
   // ─── Session control ───────────────────────────────────────────
   getCurrentSessionId(): SessionId | undefined;
@@ -208,6 +217,7 @@ export class PhusAgent implements PhusAgentFacade {
   readonly extraChannels: ChannelAdapter[];
   private autoCompactCfg: AutoCompactConfig;
   private autoCompactEnabled: boolean;
+  private toolPermissionHandler?: (req: ToolPermissionRequest) => Promise<boolean>;
 
   constructor(deps: PhusAgentDeps) {
     this.tape = deps.tape;
@@ -257,7 +267,8 @@ export class PhusAgent implements PhusAgentFacade {
     const baseModel = modelFromProfile({
       ...this.profile,
       name: this.profile.name,
-      model: `${ep.spec.provider}/${ep.spec.modelId}`,
+      provider: ep.spec.provider,
+      modelId: ep.spec.modelId,
     });
     if (ep.spec.baseUrl) baseModel.baseUrl = ep.spec.baseUrl;
     if (ep.spec.modelId) baseModel.id = ep.spec.modelId;
@@ -505,6 +516,21 @@ export class PhusAgent implements PhusAgentFacade {
       return { block: true, reason: decision.reason };
     }
 
+    if (this.toolPermissionHandler) {
+      const allowed = await this.toolPermissionHandler({
+        toolName: ctx.toolCall.name,
+        args: ctx.args,
+        toolCallId: ctx.toolCall.id,
+      });
+      if (!allowed) {
+        logger.warn("tool.denied_by_user", {
+          sessionId: this.currentSessionId,
+          tool: ctx.toolCall.name,
+        });
+        return { block: true, reason: "denied by user" };
+      }
+    }
+
     logger.debug("tool.call", {
       sessionId: this.currentSessionId,
       tool: ctx.toolCall.name,
@@ -582,6 +608,10 @@ export class PhusAgent implements PhusAgentFacade {
 
   followUp(message: AgentMessage): void {
     this.piAgent.followUp(message);
+  }
+
+  setToolPermissionHandler(handler: (req: ToolPermissionRequest) => Promise<boolean>): void {
+    this.toolPermissionHandler = handler;
   }
 
   getCurrentSessionId(): SessionId | undefined {
@@ -695,9 +725,12 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   async setModel(modelId: string, provider?: string): Promise<void> {
-    const { getModel } = await import("@mariozechner/pi-ai");
-    const p = provider ?? this.profile.model.split("/", 1)[0]!;
-    const m = getModel(p as any, modelId as any);
+    // Provider resolution order: explicit arg > profile's current provider.
+    const p = provider ?? this.profile.provider;
+    // Delegates to the unified resolver — cached + validated at config load.
+    // Custom OpenAI-compatible gateways (modelIds Pi never registered) work.
+    const { resolveAndCache } = await import("@/infra/config/index.js");
+    const { model: m } = resolveAndCache({ provider: p, modelId, overrideId: modelId });
     this.piAgent.state.model = m as any;
     // Refresh API key env var so the new model's transport picks it up.
     resolveApiKey(p);
