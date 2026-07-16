@@ -6,9 +6,14 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { ChatItem } from "@/tui/state.js";
 import { truncate } from "@/tui/state.js";
+import { Markdown } from "@/tui/components/Markdown.js";
 
 const MAX_TOOL_LINES = 6;
 const MAX_TOOL_CHARS = 320;
+
+function looksLikeMarkdown(text: string): boolean {
+  return /(^|\n)(#{1,6}\s|```|\*\s|-\s|\|\s*[-:]+\s*\|)/.test(text);
+}
 
 function formatValue(value: unknown): string {
   if (value === undefined) return "undefined";
@@ -44,12 +49,14 @@ export function ChatItemView({ item }: { item: ChatItem }) {
 
     case "assistant":
       return (
-        <Box marginY={1}>
-          <Text wrap="wrap">
+        <Box flexDirection="column" marginY={1} width="100%">
+          <Box>
             <Text color="cyan">⛰ </Text>
-            {item.text}
             {item.isStreaming && <Text color="cyan">▍</Text>}
-          </Text>
+          </Box>
+          <Box width="100%">
+            <Markdown content={item.text ?? ""} />
+          </Box>
         </Box>
       );
 
@@ -81,8 +88,12 @@ export function ChatItemView({ item }: { item: ChatItem }) {
     }
 
     case "tool_result": {
-      const body = truncateLines(formatValue(item.result), MAX_TOOL_LINES, MAX_TOOL_CHARS);
       const ok = !item.isError;
+      const raw = formatValue(item.result);
+      const renderMarkdown = typeof item.result === "string" && looksLikeMarkdown(item.result);
+      const body = renderMarkdown
+        ? raw
+        : truncateLines(raw, MAX_TOOL_LINES, MAX_TOOL_CHARS);
       return (
         <Box
           flexDirection="column"
@@ -90,6 +101,7 @@ export function ChatItemView({ item }: { item: ChatItem }) {
           borderColor={ok ? "green" : "red"}
           paddingX={1}
           marginY={1}
+          width="100%"
         >
           <Text>
             {ok ? (
@@ -105,9 +117,13 @@ export function ChatItemView({ item }: { item: ChatItem }) {
               {item.durationMs !== undefined ? ` · ${item.durationMs}ms` : ""}
             </Text>
           </Text>
-          <Text dimColor wrap="wrap">
-            {body}
-          </Text>
+          {renderMarkdown ? (
+            <Markdown content={body} />
+          ) : (
+            <Text dimColor wrap="wrap">
+              {body}
+            </Text>
+          )}
         </Box>
       );
     }
