@@ -17,6 +17,7 @@ You can:
 - Read existing skills via skill_read
 - Delete skills via skill_delete
 - Modify your startup behavior via startup_write (only takes effect on next gateway boot)
+- Maintain project memory via memory_read / memory_write (cross-session notes in phus.md)
 - Reflect on your past via self_reflect
 - Check your statistics via tape_stats
 - Run shell commands via bash
@@ -29,6 +30,11 @@ export interface PromptAssemblyDeps {
   hooks: Pick<HookRegistry, "execute">;
   tape: TapeLike;
   skills: SkillRegistryLike;
+  /** Project memory store. Mirrors the SkillRegistry contract — provides
+   *  a `toPromptContext()` that returns a markdown section or "(no
+   *  project memory yet)". May be undefined for legacy callers / tests;
+   *  in that case the memory section is omitted. */
+  memory?: { toPromptContext(): string };
   /** Function returning the model's context window; tests can stub it. */
   getContextWindow: () => number | undefined;
   /** Function returning the current session id (may be undefined pre-session). */
@@ -92,8 +98,10 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
       tapeSummary = "(no session yet)";
     }
     const stats = deps.tape.stats();
+    const memoryCtx = deps.memory?.toPromptContext() ?? "## Project memory\n(no project memory yet)";
     dynamicContext =
       `## Current skills\n${skillsCtx}\n\n` +
+      `## Project memory\n${memoryCtx.replace(/^## Project memory\n?/, "")}\n\n` +
       `## Relevant past turns (B.4.3 smart select)\n${tapeSummary}\n\n` +
       `## Tape statistics\nTotal entries across all sessions: ${stats.totalEntries}\n` +
       `Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;

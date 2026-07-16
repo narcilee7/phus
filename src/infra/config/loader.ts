@@ -198,6 +198,7 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     log,
     providers,
     plugins,
+    channels,
     schedules,
     memory,
     profileName,
@@ -564,6 +565,27 @@ function parseSchedules(raw: unknown): Schedule[] {
       enabled: e.enabled !== false,
       description: e.description,
     });
+  }
+  return out;
+}
+
+function parseChannels(
+  raw: unknown,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+): ChannelConfig[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChannelConfig[] = [];
+  const validTypes = new Set<string>(["websocket", "sse", "telegram"]);
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const type = typeof e.type === "string" ? e.type : "";
+    if (!validTypes.has(type)) {
+      warn("config.channel.invalid_type", { type, valid: Array.from(validTypes) });
+      continue;
+    }
+    if (e.enabled === false) continue;
+    out.push({ ...e, type: type as ChannelConfig["type"] });
   }
   return out;
 }

@@ -37,10 +37,10 @@ function splitSections(raw: string): { headings: string[]; bodies: Record<string
 
   let current = "";
   for (const line of lines) {
-    // Treat only `## ` and `# ` (not `### `) as section boundaries.
-    // We promote both — `## ` matches the most common pattern, `# `
-    // works for single-level files.
-    const m = /^(#{1,2})\s+(.+?)\s*$/.exec(line);
+    // Treat `## ` (and deeper) as section boundaries. `# ` is reserved
+    // for the document title — it's not a section, it goes into the
+    // preamble under the empty key.
+    const m = /^(#{2,})\s+(.+?)\s*$/.exec(line);
     if (m) {
       current = line.trim();
       if (!(current in bodies)) {
@@ -65,9 +65,10 @@ function serialize(headings: string[], bodies: Record<string, string>): string {
 }
 
 function normalizeSection(section: string): string {
-  // Accept "Style" / "## Style" / "# Style"; store as the canonical `## heading` form.
+  // Accept "Style" / "## Style" / "### Style"; store as the canonical `## heading` form.
+  // A bare `# ` is a document title and never a section — we never write it.
   const trimmed = section.trim();
-  const m = /^#{1,2}\s+(.+?)\s*$/.exec(trimmed);
+  const m = /^#{2,}\s+(.+?)\s*$/.exec(trimmed);
   const heading = m ? m[1]! : trimmed;
   return `## ${heading}`;
 }

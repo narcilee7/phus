@@ -34,6 +34,11 @@ export interface PermissionRequest {
   toolName: string;
   args: unknown;
   toolCallId: string;
+  /** Optional human-readable preview shown above the Y/S/A/N buttons.
+   *  Used by `memory_write` to render a diff before approval. */
+  preview?: string;
+  /** Short caption (e.g. "append 'Style' section", "replace memory"). */
+  caption?: string;
   resolve: (allow: boolean) => void;
 }
 
