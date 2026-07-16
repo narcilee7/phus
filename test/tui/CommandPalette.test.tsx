@@ -9,6 +9,16 @@ import type { PhusAgent } from "../../src/bridge/pi-agent.js";
 
 const wait = (ms = 100) => new Promise((r) => setTimeout(r, ms));
 
+const fakeFiles = Array.from({ length: 30 }, (_, i) => `file${String(i).padStart(2, "0")}.ts`);
+
+vi.mock("node:fs/promises", () => ({
+  readdir: vi.fn(async () => fakeFiles),
+  stat: vi.fn(async (path: string) => ({
+    isDirectory: () => false,
+    isFile: () => typeof path === "string" && !path.endsWith("/"),
+  })),
+}));
+
 function makeAgent(): PhusAgent {
   return {
     getAllSkills: () => [],
@@ -63,5 +73,19 @@ describe("CommandPalette", () => {
     stdin.write("\x03");
     await wait(100);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("scrolls the result viewport when navigating past the visible window", async () => {
+    const { stdin, lastFrame } = render(<CommandPalette agent={makeAgent()} onSelect={vi.fn()} onClose={vi.fn()} />);
+    await wait(300);
+    // The first visible items are slash commands; files start after them.
+    let frame = lastFrame()!;
+    expect(frame).toContain("/model");
+    expect(frame).not.toContain("file00.ts");
+    // Move down past the slash commands into the file list.
+    for (let i = 0; i < 30; i++) stdin.write("\x1b[B");
+    await wait(200);
+    frame = lastFrame()!;
+    expect(frame).toContain("file10.ts");
   });
 });
