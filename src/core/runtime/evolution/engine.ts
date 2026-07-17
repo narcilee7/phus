@@ -4,6 +4,7 @@ import { SkillValidator } from "@/core/runtime/skill/validator";
 import type { SkillDraft } from "@/infra/skills/draft";
 import type { TapeEntry } from "@/types/tape/index.js";
 import type { ValidationMetrics } from "@/core/session/plan-store.js";
+import { logger } from "@/infra/logging.js";
 import { EvolutionDeps, Reflection } from "./types";
 
 const PROCEDURE_SECTION = "Procedures";
@@ -58,10 +59,25 @@ export class EvolutionEngine {
             reflection.procedureConfidence >= MIN_PROCEDURE_CONFIDENCE
         ) {
             draft = this.deps.skills.writeDraft(reflection.suggestedSkill);
+            logger.info("evolution.draft_created", {
+                draftName: draft.name,
+                sessionId: plan.sessionId,
+                procedureConfidence: reflection.procedureConfidence,
+            });
             validationOutcome = await this.recordBaselineCandidate(draft, plan);
         }
 
         this.persistReusableProcedure(plan, reflection, draft, validationOutcome);
+
+        logger.info("evolution.plan_reflected", {
+            sessionId: plan.sessionId,
+            planId: plan.id,
+            planStatus: plan.status,
+            outcome: reflection.outcome,
+            procedureConfidence: reflection.procedureConfidence,
+            procedureUsable: !!(reflection.reusableProcedure && reflection.reusableProcedure.length >= MIN_PROCEDURE_LENGTH && reflection.procedureConfidence >= MIN_PROCEDURE_CONFIDENCE),
+            validationOutcome: validationOutcome ?? "candidate",
+        });
 
         return { reflection, draft, validationOutcome };
     }
@@ -97,6 +113,12 @@ export class EvolutionEngine {
                 "baseline recorded from completed plan (no prior baseline)",
                 plan.sessionId,
             );
+            logger.info("evolution.baseline_recorded", {
+                draftName: draft.name,
+                sessionId: plan.sessionId,
+                stepCount: metrics.stepCount,
+                failures: metrics.failures,
+            });
             return "baseline";
         }
 
@@ -110,8 +132,14 @@ export class EvolutionEngine {
                 `improved over baseline: ${metrics.failures} failures/${metrics.stepCount} steps vs ${baseline.failures}/${baseline.stepCount}`,
                 plan.sessionId,
             );
-            // Promote the draft to a verified skill — it just proved itself useful.
             this.deps.skills.promoteDraft(draft.name);
+            logger.info("evolution.skill_promoted", {
+                draftName: draft.name,
+                sessionId: plan.sessionId,
+                stepCount: metrics.stepCount,
+                failures: metrics.failures,
+                baselineFailures: baseline.failures,
+            });
             return "improved";
         }
 
@@ -123,6 +151,13 @@ export class EvolutionEngine {
             plan.sessionId,
         );
         this.deps.skills.archiveDraft(draft.name);
+        logger.info("evolution.skill_archived", {
+            draftName: draft.name,
+            sessionId: plan.sessionId,
+            stepCount: metrics.stepCount,
+            failures: metrics.failures,
+            baselineFailures: baseline.failures,
+        });
         return "failed";
     }
 

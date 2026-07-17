@@ -28,6 +28,7 @@ import { registerHealthCommand } from "./commands/health.js";
 import { registerTuiCommand } from "./commands/tui.js";
 import { registerResumeCommand } from "./commands/resume.js";
 import { registerSetupCommand } from "./commands/setup.js";
+import { registerMetricsCommand } from "./commands/metrics.js";
 
 /** Build the Commander program with every built-in subcommand
  *  registered. Plugin commands are drained later via
@@ -61,6 +62,7 @@ export function buildProgram(): Command {
   registerHealthCommand(program);
   registerSetupCommand(program);
   registerResumeCommand(program);
+  registerMetricsCommand(program);
 
   return program;
 }
