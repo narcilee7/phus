@@ -80,7 +80,15 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const PALETTE_ROWS = paletteOpen ? 14 : 0;
   const bottomRows = INPUT_ROWS + STATUS_ROWS + PLAN_ROWS + TODO_ROWS + PERMISSION_ROWS + PALETTE_ROWS + bottomOverlayRows;
   const chatHeight = Math.max(6, terminalRows - HEADER_ROWS - bottomRows);
-  const sidebarHeight = Math.max(10, terminalRows - HEADER_ROWS - bottomRows);
+  // The sidebar shares the full right-column height, including the bottom UI
+  // (input, status bar, plan/permission/palette). This avoids an empty strip
+  // below the file tree when those panels are open.
+  const sidebarHeight = Math.max(10, terminalRows - HEADER_ROWS);
+  const statusHint = paletteOpen
+    ? "↑↓ navigate · Enter select · Esc close"
+    : state.permissionQueue[0]
+      ? "Y yes · S session · A always · N no · Esc"
+      : undefined;
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
@@ -392,7 +400,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
               onClose={() => setPaletteOpen(false)}
             />
           )}
-          <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} />
+          <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} hint={statusHint} />
           <InputBox
             value={input}
             busy={state.busy}
