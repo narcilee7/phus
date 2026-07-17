@@ -45,6 +45,8 @@ function makeAgent(over: Partial<PhusAgent> = {}): PhusAgent {
     getPolicy: () => [{ toolName: "bash", evaluate: () => ({ allow: true }) } as any],
     getTapeTotalEntries: () => 42,
     getSkillCount: () => 1,
+    getPlanRunner: () => undefined,
+    getPlanStore: () => undefined,
   };
   return { ...defaults, ...over } as any;
 }
@@ -359,6 +361,97 @@ describe("runSlash — /context / /policy / /health / /reload", () => {
     const { dispatched, dispatch } = captureDispatch();
     await runSlash("/reload", agent, initialState, dispatch);
     expect(getSystemText(dispatched)).toContain("permission denied");
+  });
+});
+
+describe("runSlash — /plan", () => {
+  it("/plan create runs a new plan and dispatches result", async () => {
+    const createAndRun = vi.fn(async () => ({
+      id: "p1",
+      status: "completed",
+      steps: [{ id: "s1", description: "step", status: "completed" }],
+    }));
+    const agent = makeAgent({
+      getPlanRunner: () => ({ createAndRun } as any),
+      getPlanStore: () => ({ loadActiveForSession: () => undefined } as any),
+    } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/plan create refactor auth", agent, initialState, dispatch);
+    expect(createAndRun).toHaveBeenCalledWith("refactor auth", "cli:default");
+    expect(getSystemText(dispatched)).toContain("p1");
+    expect(getSystemText(dispatched)).toContain("completed");
+  });
+
+  it("/plan create warns when no goal is provided", async () => {
+    const agent = makeAgent({
+      getPlanRunner: () => ({ createAndRun: vi.fn() } as any),
+    } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/plan create", agent, initialState, dispatch);
+    expect(getSystemText(dispatched)).toContain("usage: /plan create <goal>");
+  });
+
+  it("/plan status shows active plan", async () => {
+    const agent = makeAgent({
+      getPlanStore: () => ({
+        loadActiveForSession: () => ({
+          id: "p1",
+          status: "running",
+          goal: "refactor auth",
+          steps: [
+            { id: "s1", description: "step 1", status: "completed" },
+            { id: "s2", description: "step 2", status: "running" },
+          ],
+        }),
+      } as any),
+    } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/plan status", agent, initialState, dispatch);
+    expect(getSystemText(dispatched)).toContain("p1: running [1/2] refactor auth");
+  });
+
+  it("/plan list shows plans for the session", async () => {
+    const agent = makeAgent({
+      getPlanStore: () => ({
+        loadBySession: () => [
+          { id: "p1", status: "completed", goal: "refactor auth", steps: [{ status: "completed" }] },
+        ],
+      } as any),
+    } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/plan list", agent, initialState, dispatch);
+    expect(getSystemText(dispatched)).toContain("p1");
+    expect(getSystemText(dispatched)).toContain("refactor auth");
+  });
+
+  it("/plan run executes an existing plan", async () => {
+    const runPlan = vi.fn(async () => ({ id: "p1", status: "completed" }));
+    const agent = makeAgent({
+      getPlanRunner: () => ({ runPlan } as any),
+      getPlanStore: () => ({
+        load: (id: string) =>
+          id === "p1"
+            ? { id: "p1", status: "pending", goal: "refactor auth", steps: [] }
+            : undefined,
+      } as any),
+    } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/plan run p1", agent, initialState, dispatch);
+    expect(runPlan).toHaveBeenCalled();
+    expect(getSystemText(dispatched)).toContain("p1");
+  });
+
+  it("/plan resume runs the active plan", async () => {
+    const runPlan = vi.fn(async () => ({ id: "p1", status: "completed" }));
+    const agent = makeAgent({
+      getPlanRunner: () => ({ runPlan } as any),
+      getPlanStore: () => ({
+        loadActiveForSession: () => ({ id: "p1", status: "running", goal: "refactor auth", steps: [] }),
+      } as any),
+    } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/plan resume", agent, initialState, dispatch);
+    expect(runPlan).toHaveBeenCalled();
   });
 });
 

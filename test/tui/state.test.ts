@@ -287,6 +287,57 @@ describe("permission queue", () => {
   });
 });
 
+describe("plan state", () => {
+  it("set_plan stores the active plan", () => {
+    const plan = {
+      id: "p1",
+      goal: "refactor auth",
+      status: "running" as const,
+      steps: [{ id: "s1", description: "step 1", status: "running" as const }],
+      currentStepId: "s1",
+    };
+    const s = appReducer(initialState, { type: "set_plan", plan });
+    expect(s.plan).toEqual(plan);
+  });
+
+  it("update_plan_step updates step status and currentStepId when running", () => {
+    const plan = {
+      id: "p1",
+      goal: "refactor auth",
+      status: "running" as const,
+      steps: [
+        { id: "s1", description: "step 1", status: "running" as const },
+        { id: "s2", description: "step 2", status: "pending" as const },
+      ],
+      currentStepId: "s1",
+    };
+    const s1 = appReducer(initialState, { type: "set_plan", plan });
+    const s2 = appReducer(s1, { type: "update_plan_step", stepId: "s1", status: "completed" });
+    expect(s2.plan?.steps[0]?.status).toBe("completed");
+    expect(s2.plan?.steps[1]?.status).toBe("pending");
+    const s3 = appReducer(s2, { type: "update_plan_step", stepId: "s2", status: "running" });
+    expect(s3.plan?.steps[1]?.status).toBe("running");
+    expect(s3.plan?.currentStepId).toBe("s2");
+  });
+
+  it("update_plan_step is a no-op when no plan exists", () => {
+    const s = appReducer(initialState, { type: "update_plan_step", stepId: "s1", status: "completed" });
+    expect(s.plan).toBeUndefined();
+  });
+
+  it("clear_plan removes the active plan", () => {
+    const plan = {
+      id: "p1",
+      goal: "refactor auth",
+      status: "completed" as const,
+      steps: [{ id: "s1", description: "step 1", status: "completed" as const }],
+    };
+    const s1 = appReducer(initialState, { type: "set_plan", plan });
+    const s2 = appReducer(s1, { type: "clear_plan" });
+    expect(s2.plan).toBeUndefined();
+  });
+});
+
 describe("truncate", () => {
   it("returns short strings unchanged", () => {
     expect(truncate("hello", 10)).toBe("hello");

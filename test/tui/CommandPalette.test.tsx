@@ -5,9 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
 import { CommandPalette } from "../../src/tui/components/CommandPalette.js";
+import { SLASH_COMMANDS } from "../../src/tui/commands.js";
 import type { PhusAgent } from "../../src/bridge/pi-agent.js";
 
 const wait = (ms = 100) => new Promise((r) => setTimeout(r, ms));
+const COMMAND_COUNT = SLASH_COMMANDS.length + 4; // + plan create/status/list/resume
 
 const fakeFiles = Array.from({ length: 30 }, (_, i) => `file${String(i).padStart(2, "0")}.ts`);
 
@@ -83,7 +85,7 @@ describe("CommandPalette", () => {
     expect(frame).toContain("/model");
     expect(frame).not.toContain("file00.ts");
     // Move down past the slash commands into the file list.
-    for (let i = 0; i < 30; i++) stdin.write("\x1b[B");
+    for (let i = 0; i < COMMAND_COUNT + 4; i++) stdin.write("\x1b[B");
     await wait(200);
     frame = lastFrame()!;
     expect(frame).toContain("file04.ts");
@@ -92,8 +94,8 @@ describe("CommandPalette", () => {
   it("pushes the list up one item at a time like Codex", async () => {
     const { stdin, lastFrame } = render(<CommandPalette agent={makeAgent()} onSelect={vi.fn()} onClose={vi.fn()} />);
     await wait(300);
-    // 26 slash commands, then file00 starts at index 26.
-    for (let i = 0; i < 26; i++) stdin.write("\x1b[B");
+    // COMMAND_COUNT slash commands, then file00 starts at index COMMAND_COUNT.
+    for (let i = 0; i < COMMAND_COUNT; i++) stdin.write("\x1b[B");
     await wait(200);
     expect(lastFrame()).toContain("file00.ts");
     // One more down arrow should scroll the window up by exactly one item.
@@ -108,7 +110,7 @@ describe("CommandPalette", () => {
     const { stdin, lastFrame } = render(<CommandPalette agent={makeAgent()} onSelect={onSelect} onClose={vi.fn()} />);
     await wait(300);
     // Navigate far down into the file list.
-    for (let i = 0; i < 30; i++) stdin.write("\x1b[B");
+    for (let i = 0; i < COMMAND_COUNT + 4; i++) stdin.write("\x1b[B");
     await wait(200);
     expect(lastFrame()).toContain("file04.ts");
     // Filter down to one slash command; the old high index must clamp to 0.

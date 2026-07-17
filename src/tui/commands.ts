@@ -129,6 +129,9 @@ export async function runSlash(
     case "health":
       return await cmdHealth(dispatch);
 
+    case "plan":
+      return await cmdPlan(arg, agent, dispatch);
+
     default:
       dispatch({ type: "add_system", text: `unknown command: /${name}. Try /help.`, level: "warn" });
   }
@@ -162,6 +165,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "interrupt", description: "abort the current turn" },
   { name: "undo", description: "restore the last checkpoint for this session" },
   { name: "retry", description: "retry last prompt" },
+  { name: "plan", description: "plan management: create|run|status|list|resume <args>" },
   { name: "new", description: "start a fresh session" },
   { name: "clear", description: "clear chat area" },
   { name: "quit", description: "exit" },
@@ -581,4 +585,160 @@ async function cmdHealth(dispatch: (a: AppAction) => void): Promise<void> {
     text: JSON.stringify(h, null, 2),
     level: h.ok ? "info" : "warn",
   });
+}
+
+async function cmdPlan(
+  arg: string,
+  agent: PhusAgent,
+  dispatch: (a: AppAction) => void,
+): Promise<void> {
+  const [sub, ...rest] = arg.trim().split(/\s+/);
+  const restArg = rest.join(" ").trim();
+
+  const runner = agent.getPlanRunner();
+  const store = agent.getPlanStore();
+
+  switch (sub) {
+    case "create": {
+      if (!runner) {
+        dispatch({ type: "add_system", text: "plan runner not available", level: "error" });
+        return;
+      }
+      const goal = restArg;
+      if (!goal) {
+        dispatch({ type: "add_system", text: "usage: /plan create <goal>", level: "warn" });
+        return;
+      }
+      const sid = agent.getCurrentSessionId();
+      if (!sid) {
+        dispatch({ type: "add_system", text: "no active session", level: "warn" });
+        return;
+      }
+      dispatch({ type: "set_last_op", op: "planning…" });
+      try {
+        const plan = await runner.createAndRun(goal, sid);
+        dispatch({
+          type: "add_system",
+          text: `plan ${plan.id} ${plan.status} (${plan.steps.length} steps)`,
+          level: plan.status === "completed" ? "info" : "warn",
+        });
+      } catch (err: any) {
+        dispatch({ type: "add_system", text: `plan failed: ${err.message ?? err}`, level: "error" });
+      } finally {
+        dispatch({ type: "set_last_op", op: "idle" });
+      }
+      return;
+    }
+    case "run": {
+      if (!runner || !store) {
+        dispatch({ type: "add_system", text: "plan runner not available", level: "error" });
+        return;
+      }
+      const planId = restArg;
+      if (!planId) {
+        dispatch({ type: "add_system", text: "usage: /plan run <planId>", level: "warn" });
+        return;
+      }
+      const plan = store.load(planId);
+      if (!plan) {
+        dispatch({ type: "add_system", text: `plan not found: ${planId}`, level: "warn" });
+        return;
+      }
+      dispatch({ type: "set_last_op", op: "running plan…" });
+      try {
+        const updated = await runner.runPlan(plan);
+        dispatch({
+          type: "add_system",
+          text: `plan ${updated.id} ${updated.status}`,
+          level: updated.status === "completed" ? "info" : "warn",
+        });
+      } catch (err: any) {
+        dispatch({ type: "add_system", text: `plan failed: ${err.message ?? err}`, level: "error" });
+      } finally {
+        dispatch({ type: "set_last_op", op: "idle" });
+      }
+      return;
+    }
+    case "status": {
+      if (!store) {
+        dispatch({ type: "add_system", text: "plan store not available", level: "error" });
+        return;
+      }
+      const sid = agent.getCurrentSessionId();
+      if (!sid) {
+        dispatch({ type: "add_system", text: "no active session", level: "warn" });
+        return;
+      }
+      const active = store.loadActiveForSession(sid);
+      if (!active) {
+        dispatch({ type: "add_system", text: "no active plan", level: "info" });
+        return;
+      }
+      const completed = active.steps.filter((s) => s.status === "completed").length;
+      dispatch({
+        type: "add_system",
+        text: `${active.id}: ${active.status} [${completed}/${active.steps.length}] ${active.goal}`,
+        level: "info",
+      });
+      return;
+    }
+    case "list": {
+      if (!store) {
+        dispatch({ type: "add_system", text: "plan store not available", level: "error" });
+        return;
+      }
+      const sid = agent.getCurrentSessionId();
+      if (!sid) {
+        dispatch({ type: "add_system", text: "no active session", level: "warn" });
+        return;
+      }
+      const plans = store.loadBySession(sid);
+      if (plans.length === 0) {
+        dispatch({ type: "add_system", text: "(no plans)", level: "info" });
+        return;
+      }
+      const lines = plans.map((p) => {
+        const done = p.steps.filter((s) => s.status === "completed").length;
+        return `  ${p.id}  ${p.status}  [${done}/${p.steps.length}]  ${p.goal.slice(0, 60)}`;
+      });
+      dispatch({ type: "add_system", text: lines.join("\n"), level: "info" });
+      return;
+    }
+    case "resume": {
+      if (!runner || !store) {
+        dispatch({ type: "add_system", text: "plan runner not available", level: "error" });
+        return;
+      }
+      const sid = agent.getCurrentSessionId();
+      if (!sid) {
+        dispatch({ type: "add_system", text: "no active session", level: "warn" });
+        return;
+      }
+      const active = store.loadActiveForSession(sid);
+      if (!active) {
+        dispatch({ type: "add_system", text: "no active plan", level: "warn" });
+        return;
+      }
+      dispatch({ type: "set_last_op", op: "running plan…" });
+      try {
+        const updated = await runner.runPlan(active);
+        dispatch({
+          type: "add_system",
+          text: `plan ${updated.id} ${updated.status}`,
+          level: updated.status === "completed" ? "info" : "warn",
+        });
+      } catch (err: any) {
+        dispatch({ type: "add_system", text: `plan failed: ${err.message ?? err}`, level: "error" });
+      } finally {
+        dispatch({ type: "set_last_op", op: "idle" });
+      }
+      return;
+    }
+    default:
+      dispatch({
+        type: "add_system",
+        text: "usage: /plan create|run|status|list|resume ...",
+        level: "warn",
+      });
+  }
 }

@@ -42,6 +42,18 @@ export interface PermissionRequest {
   resolve: (allow: boolean) => void;
 }
 
+export interface PlanState {
+  id: string;
+  goal: string;
+  status: "pending" | "running" | "paused" | "completed" | "failed";
+  steps: Array<{
+    id: string;
+    description: string;
+    status: "pending" | "running" | "completed" | "failed" | "skipped";
+  }>;
+  currentStepId?: string;
+}
+
 export interface AppState {
   items: ChatItem[];
   busy: boolean;
@@ -52,6 +64,8 @@ export interface AppState {
   allowedTools: Set<string>;
   /** Tools allowed for the current session only (cleared on /new). */
   sessionAllowedTools: Set<string>;
+  /** Active plan, if any. Updated from plan_runner hook events. */
+  plan?: PlanState;
 }
 
 export const initialState: AppState = {
@@ -63,6 +77,7 @@ export const initialState: AppState = {
   permissionQueue: [],
   allowedTools: new Set(),
   sessionAllowedTools: new Set(),
+  plan: undefined,
 };
 
 export type AppAction =
@@ -82,7 +97,10 @@ export type AppAction =
   | { type: "scroll_bottom" }
   | { type: "push_permission"; request: PermissionRequest }
   | { type: "resolve_permission"; allow: boolean; remember?: RememberChoice }
-  | { type: "clear_session_allowed_tools" };
+  | { type: "clear_session_allowed_tools" }
+  | { type: "set_plan"; plan: PlanState }
+  | { type: "update_plan_step"; stepId: string; status: PlanState["steps"][number]["status"] }
+  | { type: "clear_plan" };
 
 /** Truncate a string for compact display. */
 export function truncate(s: string, n: number): string {
@@ -263,5 +281,22 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case "clear_session_allowed_tools":
       return { ...state, sessionAllowedTools: new Set() };
+    case "set_plan":
+      return { ...state, plan: action.plan };
+    case "update_plan_step": {
+      if (!state.plan) return state;
+      return {
+        ...state,
+        plan: {
+          ...state.plan,
+          steps: state.plan.steps.map((s) =>
+            s.id === action.stepId ? { ...s, status: action.status } : s,
+          ),
+          currentStepId: action.status === "running" ? action.stepId : state.plan.currentStepId,
+        },
+      };
+    }
+    case "clear_plan":
+      return { ...state, plan: undefined };
   }
 }

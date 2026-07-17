@@ -84,6 +84,17 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
           value: `/${c.name} `,
           icon: "/",
         })),
+        ...[
+          { name: "plan create", args: "", icon: "📋" },
+          { name: "plan status", args: "", icon: "📋" },
+          { name: "plan list", args: "", icon: "📋" },
+          { name: "plan resume", args: "", icon: "📋" },
+        ].map((c) => ({
+          type: "command" as const,
+          label: `/${c.name}`,
+          value: `/${c.name}${c.args ? ` ${c.args}` : ""} `,
+          icon: c.icon,
+        })),
         ...files.slice(0, MAX_FILES).map((f) => ({
           type: "file" as const,
           label: f,

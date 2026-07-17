@@ -12,6 +12,7 @@ import { appReducer, initialState } from "@/tui/state.js";
 import { Header } from "@/tui/components/Header.js";
 import { ChatViewport } from "@/tui/components/ChatViewport.js";
 import { TodoPill } from "@/tui/components/TodoPill.js";
+import { PlanPanel } from "@/tui/components/PlanPanel.js";
 import { InputBox } from "@/tui/components/InputBox.js";
 import { PermissionBar } from "@/tui/components/PermissionBar.js";
 import { CommandPalette, type PaletteAction } from "@/tui/components/CommandPalette.js";
@@ -46,6 +47,8 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   const fileSnapshots = useRef(new Map<string, { path: string; content: string }>());
   const itemsRef = useRef(state.items);
   itemsRef.current = state.items;
+  const planRef = useRef(state.plan);
+  planRef.current = state.plan;
   const { stdout } = useStdout();
   const [terminalRows, setTerminalRows] = React.useState(stdout.rows);
 
@@ -71,6 +74,47 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       }
       const action = eventToAction(event);
       if (action) dispatch(action);
+    });
+    return unsub;
+  }, [agent]);
+
+  // ─── Subscribe to plan runner events ────────────────────────────
+  useEffect(() => {
+    const unsub = agent.subscribeToPlanEvents((event) => {
+      const currentPlan = planRef.current;
+      if (event.type === "plan_completed") {
+        dispatch({
+          type: "set_plan",
+          plan: {
+            id: event.planId,
+            goal: event.goal,
+            status: event.planStatus,
+            steps: currentPlan?.id === event.planId ? currentPlan.steps : [],
+          },
+        });
+        return;
+      }
+      const step = event.step;
+      if (!step) return;
+      if (event.type === "plan_step_started") {
+        if (currentPlan?.id !== event.planId) {
+          dispatch({
+            type: "set_plan",
+            plan: {
+              id: event.planId,
+              goal: event.goal,
+              status: event.planStatus,
+              steps: [{ id: step.id, description: step.description, status: "running" }],
+              currentStepId: step.id,
+            },
+          });
+        } else {
+          dispatch({ type: "update_plan_step", stepId: step.id, status: "running" });
+        }
+      } else {
+        const status = event.type === "plan_step_completed" ? "completed" : "failed";
+        dispatch({ type: "update_plan_step", stepId: step.id, status });
+      }
     });
     return unsub;
   }, [agent]);
@@ -297,6 +341,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
               height={chatHeight}
             />
           </Box>
+          {state.plan && <PlanPanel plan={state.plan} />}
           <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
           {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
             <PermissionBar

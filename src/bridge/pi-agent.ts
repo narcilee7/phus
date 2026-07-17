@@ -17,7 +17,7 @@ import {
 } from "@mariozechner/pi-agent-core";
 import { getModel, type Model } from "@mariozechner/pi-ai";
 import type { Envelope, Outbound } from "@/types/channel/index.js";
-import type { Plan } from "@/core/runtime/plan/types.js";
+import type { Plan, PlanStatus, Step, StepStatus } from "@/core/runtime/plan/types.js";
 import { Planner } from "@/core/runtime/planner.js";
 import { Verifier } from "@/core/runtime/verifier.js";
 import { Executor } from "@/core/runtime/executor.js";
@@ -95,6 +95,19 @@ export interface PhusAgentDeps {
   /** Plan runner orchestrating multi-step plans. If omitted, a default runner is created. */
   planRunner?: PlanRunner;
 }
+
+/** Plan lifecycle event forwarded from the plan runner to TUI observers. */
+export interface PlanEvent {
+  type: "plan_step_started" | "plan_step_completed" | "plan_step_failed" | "plan_completed";
+  planId: string;
+  sessionId: string;
+  goal: string;
+  planStatus: PlanStatus;
+  step?: Step;
+  error?: string;
+}
+
+export type PlanEventHandler = (event: PlanEvent) => void;
 
 /** Diagnostics snapshot returned by `getDiagnostics()`. */
 export interface AgentDiagnostics {
@@ -229,6 +242,9 @@ export interface PhusAgentFacade {
   getPlanRunner(): PlanRunner | undefined;
   /** Get the plan store, if one is configured. */
   getPlanStore(): PlanStore | undefined;
+  /** Subscribe to plan lifecycle events (step started/completed/failed,
+   *  plan completed). Returns an unsubscribe function. */
+  subscribeToPlanEvents(handler: PlanEventHandler): () => void;
   /**
    * Re-load plugins from disk into the live HookRegistry, plus the
    * supplied channels. Returns a summary suitable for `,reload`.
@@ -273,6 +289,7 @@ export class PhusAgent implements PhusAgentFacade {
   private autoCompactCfg: AutoCompactConfig;
   private autoCompactEnabled: boolean;
   private toolPermissionHandler?: (req: ToolPermissionRequest) => Promise<boolean>;
+  private planEventHandlers = new Set<PlanEventHandler>();
 
   constructor(deps: PhusAgentDeps) {
     this.tape = deps.tape;
@@ -353,6 +370,84 @@ export class PhusAgent implements PhusAgentFacade {
       tape: this.tape,
     });
     this.planRunner.setEvolutionEngine(this.evolutionEngine);
+
+    // Forward plan runner hook events to TUI observers.
+    this.hooks.register(
+      "plan_step_started",
+      async (ctx) => {
+        const plan = ctx.extras?.plan as Plan | undefined;
+        const step = ctx.extras?.step as Step | undefined;
+        if (plan && step) {
+          this.emitPlanEvent({
+            type: "plan_step_started",
+            planId: plan.id,
+            sessionId: plan.sessionId,
+            goal: plan.goal,
+            planStatus: plan.status,
+            step,
+          });
+        }
+        return ctx;
+      },
+      { mode: "broadcast", priority: -100 },
+    );
+    this.hooks.register(
+      "plan_step_completed",
+      async (ctx) => {
+        const plan = ctx.extras?.plan as Plan | undefined;
+        const step = ctx.extras?.step as Step | undefined;
+        if (plan && step) {
+          this.emitPlanEvent({
+            type: "plan_step_completed",
+            planId: plan.id,
+            sessionId: plan.sessionId,
+            goal: plan.goal,
+            planStatus: plan.status,
+            step,
+          });
+        }
+        return ctx;
+      },
+      { mode: "broadcast", priority: -100 },
+    );
+    this.hooks.register(
+      "plan_step_failed",
+      async (ctx) => {
+        const plan = ctx.extras?.plan as Plan | undefined;
+        const step = ctx.extras?.step as Step | undefined;
+        const error = ctx.extras?.error;
+        if (plan && step) {
+          this.emitPlanEvent({
+            type: "plan_step_failed",
+            planId: plan.id,
+            sessionId: plan.sessionId,
+            goal: plan.goal,
+            planStatus: plan.status,
+            step,
+            error: typeof error === "string" ? error : undefined,
+          });
+        }
+        return ctx;
+      },
+      { mode: "broadcast", priority: -100 },
+    );
+    this.hooks.register(
+      "plan_completed",
+      async (ctx) => {
+        const plan = ctx.extras?.plan as Plan | undefined;
+        if (plan) {
+          this.emitPlanEvent({
+            type: "plan_completed",
+            planId: plan.id,
+            sessionId: plan.sessionId,
+            goal: plan.goal,
+            planStatus: plan.status,
+          });
+        }
+        return ctx;
+      },
+      { mode: "broadcast", priority: -100 },
+    );
 
     this.piAgent.state.tools = [
       ...createMetaTools(this.skills, this.tape, {
@@ -891,6 +986,25 @@ export class PhusAgent implements PhusAgentFacade {
 
   subscribeToAgentEvents(handler: (event: AgentEvent) => void): () => void {
     return this.piAgent.subscribe(handler);
+  }
+
+  subscribeToPlanEvents(handler: PlanEventHandler): () => void {
+    this.planEventHandlers.add(handler);
+    return () => {
+      this.planEventHandlers.delete(handler);
+    };
+  }
+
+  private emitPlanEvent(event: PlanEvent): void {
+    for (const h of this.planEventHandlers) {
+      try {
+        h(event);
+      } catch (err) {
+        logger.warn("plan_event.handler_failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   }
 
   getModelLabel(): string {
