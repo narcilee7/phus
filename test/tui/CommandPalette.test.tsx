@@ -25,6 +25,14 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       isDirectory: () => false,
       isFile: () => typeof p === "string" && !p.endsWith("/"),
     })),
+    readFile: vi.fn(async (p: string, encoding?: string) => {
+      // Let the real palette-history journal be read/written normally.
+      if (typeof p === "string" && p.endsWith("palette-history.jsonl")) {
+        return actual.readFile(p, encoding as any);
+      }
+      const name = typeof p === "string" ? path.basename(p) : "file";
+      return `preview content of ${name}\nline 2\nline 3`;
+    }),
   };
 });
 
@@ -180,5 +188,19 @@ describe("CommandPalette", () => {
     expect(quitIndex).toBeGreaterThan(-1);
     expect(modelIndex).toBeGreaterThan(-1);
     expect(quitIndex).toBeLessThan(modelIndex);
+  });
+
+  it("shows a file preview when a file item is selected", async () => {
+    const { stdin, lastFrame } = render(
+      <CommandPalette agent={makeAgent()} home={homeDir} onSelect={vi.fn()} onClose={vi.fn()} />,
+    );
+    await wait(300);
+    // Move selection to the first file item.
+    for (let i = 0; i < COMMAND_COUNT; i++) stdin.write("\x1b[B");
+    await wait(200);
+    const frame = lastFrame()!;
+    expect(frame).toContain("file00.ts");
+    expect(frame).toContain("Preview");
+    expect(frame).toContain("preview content of file00.ts");
   });
 });

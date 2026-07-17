@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import Fuse from "fuse.js";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 import { SLASH_COMMANDS } from "@/tui/commands.js";
@@ -88,6 +88,7 @@ export function CommandPalette({ agent, home: homeProp, onSelect, onClose }: Com
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [items, setItems] = useState<PaletteItem[]>([]);
   const [history, setHistory] = useState<PaletteHistoryEntry[]>([]);
+  const [preview, setPreview] = useState<{ title: string; lines: string[] } | null>(null);
 
   const home = useMemo(() => {
     if (homeProp) return homeProp;
@@ -208,6 +209,36 @@ export function CommandPalette({ agent, home: homeProp, onSelect, onClose }: Com
   }, [results.length]);
 
   const safeSelectedIndex = Math.min(selectedIndex, Math.max(0, results.length - 1));
+
+  // Async preview pane: show the first lines of a selected file, or a short
+  // hint for commands/skills/sessions.
+  useEffect(() => {
+    let cancelled = false;
+    const item = results[safeSelectedIndex];
+    async function loadPreview() {
+      if (!item) {
+        setPreview(null);
+        return;
+      }
+      if (item.group === "file") {
+        const filePath = item.value.trim().replace(/^@/, "").trimEnd();
+        try {
+          const text = await readFile(filePath, "utf-8");
+          const lines = text.split("\n").slice(0, 10);
+          if (!cancelled) setPreview({ title: item.label, lines });
+        } catch (err: any) {
+          if (!cancelled) setPreview({ title: item.label, lines: [`(cannot read: ${err.message})`] });
+        }
+        return;
+      }
+      if (!cancelled) setPreview({ title: item.label, lines: [item.value.trim()] });
+    }
+    void loadPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [results, safeSelectedIndex]);
+
   // Codex-style smooth scroll: keep the selected row near the bottom of the
   // visible window so the list pushes up one item at a time.
   const bottomAnchor = VISIBLE_COUNT - 1;
@@ -253,43 +284,64 @@ export function CommandPalette({ agent, home: homeProp, onSelect, onClose }: Com
 
   return (
     <Box
-      flexDirection="column"
+      flexDirection="row"
       borderStyle="double"
       borderColor="cyan"
-      paddingX={1}
       marginY={1}
       height={14}
     >
-      <Box>
-        <Text color="cyan">❯ </Text>
-        <Text color="cyan">{query}</Text>
-        <Text color="cyan">▍</Text>
+      <Box width="60%" flexDirection="column" paddingX={1}>
+        <Box>
+          <Text color="cyan">❯ </Text>
+          <Text color="cyan">{query}</Text>
+          <Text color="cyan">▍</Text>
+        </Box>
+        <Box flexDirection="column" flexGrow={1}>
+          {visibleResults.map((item, idx) => {
+            const actualIndex = visibleStart + idx;
+            const color = GROUP_COLORS[item.group];
+            return (
+              <Box key={`${item.group}-${item.label}-${actualIndex}`} flexDirection="row">
+                {actualIndex === safeSelectedIndex ? (
+                  <Text backgroundColor="cyan" color="black">
+                    {"› "}{item.icon} {item.label}
+                  </Text>
+                ) : (
+                  <Text>
+                    <Text dimColor>{"  "}{item.icon} </Text>
+                    <Text color={color}>{item.label}</Text>
+                  </Text>
+                )}
+              </Box>
+            );
+          })}
+          {results.length === 0 && (
+            <Text dimColor>(no matches)</Text>
+          )}
+        </Box>
+        <Box>
+          <Text dimColor>↑↓ navigate · Enter select · Esc close</Text>
+        </Box>
       </Box>
-      <Box flexDirection="column" flexGrow={1}>
-        {visibleResults.map((item, idx) => {
-          const actualIndex = visibleStart + idx;
-          const color = GROUP_COLORS[item.group];
-          return (
-            <Box key={`${item.group}-${item.label}-${actualIndex}`} flexDirection="row">
-              {actualIndex === safeSelectedIndex ? (
-                <Text backgroundColor="cyan" color="black">
-                  {"› "}{item.icon} {item.label}
-                </Text>
-              ) : (
-                <Text>
-                  <Text dimColor>{"  "}{item.icon} </Text>
-                  <Text color={color}>{item.label}</Text>
-                </Text>
-              )}
-            </Box>
-          );
-        })}
-        {results.length === 0 && (
-          <Text dimColor>(no matches)</Text>
-        )}
+      <Box width="1">
+        <Text color="cyan">│</Text>
       </Box>
-      <Box>
-        <Text dimColor>↑↓ navigate · Enter select · Esc close</Text>
+      <Box width="39%" flexDirection="column" paddingX={1}>
+        <Box>
+          <Text color="cyan" bold>Preview</Text>
+        </Box>
+        <Box>
+          <Text dimColor wrap="truncate-end">{preview?.title ?? ""}</Text>
+        </Box>
+        <Box flexDirection="column" flexGrow={1}>
+          {preview ? (
+            preview.lines.map((line, i) => (
+              <Text key={i} dimColor wrap="truncate-end">{line}</Text>
+            ))
+          ) : (
+            <Text dimColor>(no preview)</Text>
+          )}
+        </Box>
       </Box>
     </Box>
   );
