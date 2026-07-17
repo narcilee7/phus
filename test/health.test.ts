@@ -3,23 +3,44 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import yaml from "yaml";
 import { healthCheck } from "../src/commands/health.js";
+import { resetConfigCache } from "../src/infra/config/index.js";
 
 describe("healthCheck", () => {
   let dir: string;
+  let originalPhusHome: string | undefined;
 
   beforeEach(() => {
+    originalPhusHome = process.env.PHUS_HOME;
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-health-"));
-    process.env.PHUS_TAPE_DB = path.join(dir, "tape.sqlite");
-    process.env.PHUS_SKILLS_DIR = path.join(dir, "skills");
-    process.env.PHUS_LOG_FILE = path.join(dir, "logs", "phus.jsonl");
+    process.env.PHUS_HOME = dir;
+
+    // Write an explicit config so loadConfig() resolves paths inside the temp
+    // directory regardless of defaults or cwd.
+    const cfg = {
+      paths: {
+        tapeDb: path.join(dir, "tape.sqlite"),
+        skillsDir: path.join(dir, "skills"),
+      },
+      log: {
+        file: path.join(dir, "logs", "phus.jsonl"),
+      },
+    };
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "phus.config.yaml"), yaml.stringify(cfg), "utf-8");
+
+    resetConfigCache();
   });
 
   afterEach(() => {
-    delete process.env.PHUS_TAPE_DB;
-    delete process.env.PHUS_SKILLS_DIR;
-    delete process.env.PHUS_LOG_FILE;
+    if (originalPhusHome === undefined) {
+      delete process.env.PHUS_HOME;
+    } else {
+      process.env.PHUS_HOME = originalPhusHome;
+    }
     delete process.env.OPENAI_API_KEY;
+    resetConfigCache();
   });
 
   it("returns ok=false when no provider key is set", () => {
@@ -29,11 +50,16 @@ describe("healthCheck", () => {
   });
 
   it("returns ok=true when all checks pass", () => {
+    const cfg = yaml.parse(fs.readFileSync(path.join(dir, "phus.config.yaml"), "utf-8")) as {
+      paths: { tapeDb: string; skillsDir: string };
+      log: { file: string };
+    };
+
     // Create files so existence checks pass.
-    fs.writeFileSync(process.env.PHUS_TAPE_DB!, "");
-    fs.mkdirSync(process.env.PHUS_SKILLS_DIR!, { recursive: true });
-    fs.mkdirSync(path.dirname(process.env.PHUS_LOG_FILE!), { recursive: true });
-    fs.writeFileSync(process.env.PHUS_LOG_FILE!, "");
+    fs.writeFileSync(cfg.paths.tapeDb, "");
+    fs.mkdirSync(cfg.paths.skillsDir, { recursive: true });
+    fs.mkdirSync(path.dirname(cfg.log.file), { recursive: true });
+    fs.writeFileSync(cfg.log.file, "");
 
     process.env.OPENAI_API_KEY = "test-key";
 
