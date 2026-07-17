@@ -14,6 +14,7 @@ import { ChatViewport } from "@/tui/components/ChatViewport.js";
 import { TodoPill } from "@/tui/components/TodoPill.js";
 import { PlanPanel } from "@/tui/components/PlanPanel.js";
 import { InputBox } from "@/tui/components/InputBox.js";
+import { TuiLayoutProvider, useTuiLayout } from "@/tui/layout-context.js";
 import { PermissionBar } from "@/tui/components/PermissionBar.js";
 import { CommandPalette, type PaletteAction } from "@/tui/components/CommandPalette.js";
 import { StatusBar } from "@/tui/components/StatusBar.js";
@@ -32,8 +33,17 @@ interface AppProps {
 }
 
 export function App({ agent, sessionId, modelLabel }: AppProps) {
+  return (
+    <TuiLayoutProvider>
+      <AppInner agent={agent} sessionId={sessionId} modelLabel={modelLabel} />
+    </TuiLayoutProvider>
+  );
+}
+
+function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const { exit } = useApp();
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const { bottomOverlayRows } = useTuiLayout();
   const [input, setInput] = React.useState("");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
@@ -56,6 +66,21 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     () => new Set(["bash", "file_write", "startup_write", "skill_write", "skill_delete", "memory_write"]),
     [],
   );
+
+  // ─── Layout heights ────────────────────────────────────────────
+  // Reserve rows for every bottom UI element so that dynamic overlays
+  // (suggestion/mention dropdowns) can expand without covering the chat.
+  const HEADER_ROWS = 4;
+  const INPUT_ROWS = 3;
+  const STATUS_ROWS = 1;
+  const PLAN_ROWS = state.plan ? 6 : 0;
+  const TODO_ROWS =
+    state.busy || state.items.some((it) => it.kind === "tool_call" && it.isError === undefined) ? 1 : 0;
+  const PERMISSION_ROWS = state.permissionQueue[0] ? 4 : 0;
+  const PALETTE_ROWS = paletteOpen ? 14 : 0;
+  const bottomRows = INPUT_ROWS + STATUS_ROWS + PLAN_ROWS + TODO_ROWS + PERMISSION_ROWS + PALETTE_ROWS + bottomOverlayRows;
+  const chatHeight = Math.max(6, terminalRows - HEADER_ROWS - bottomRows);
+  const sidebarHeight = Math.max(10, terminalRows - HEADER_ROWS - bottomRows);
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
@@ -305,15 +330,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   // Chat fills all remaining space between the header and the bottom UI.
   // We compute an explicit height for ChatViewport so overflow is clipped
   // correctly when the plan panel, permission bar or command palette is open.
-  const HEADER_ROWS = 4;
-  const INPUT_ROWS = 3;
-  const STATUS_ROWS = 1;
-  const PLAN_ROWS = state.plan ? 6 : 0;
-  const PERMISSION_ROWS = state.permissionQueue[0] ? 4 : 0;
-  const PALETTE_ROWS = paletteOpen ? 14 : 0;
-  const bottomRows = INPUT_ROWS + STATUS_ROWS + PLAN_ROWS + PERMISSION_ROWS + PALETTE_ROWS;
-  const chatHeight = Math.max(6, terminalRows - HEADER_ROWS - bottomRows);
-  const sidebarHeight = Math.max(10, terminalRows - HEADER_ROWS - bottomRows);
+
 
   return (
     <Box flexDirection="column" height={terminalRows} overflow="hidden">

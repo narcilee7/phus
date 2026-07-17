@@ -10,6 +10,7 @@ import {
   findCursorDisplayRow,
   wrapLineToRows,
 } from "@/tui/components/terminal-width.js";
+import { useBottomOverlay } from "@/tui/layout-context.js";
 
 export interface MultiLineInputProps {
   value: string;
@@ -29,6 +30,9 @@ interface Cursor {
   line: number;
   col: number;
 }
+
+const VISIBLE_SUGGESTIONS = 4;
+const VISIBLE_MENTIONS = 4;
 
 function clampCursor(value: string, cursor: Cursor): Cursor {
   const lines = value.split("\n");
@@ -109,18 +113,30 @@ export function MultiLineInput({
     ? suggestions
         .filter((s) => s.startsWith(query) && !s.includes(" "))
         .sort((a, b) => a.localeCompare(b))
-        .slice(0, 8)
     : [];
   const showSuggestions = isActive && suggestionsOpen && isSlashMode && matches.length > 0;
+  const suggestionStart =
+    showSuggestions && matches.length > VISIBLE_SUGGESTIONS
+      ? Math.max(0, Math.min(selectedSuggestion, matches.length - VISIBLE_SUGGESTIONS))
+      : 0;
+  const visibleSuggestions = matches.slice(suggestionStart, suggestionStart + VISIBLE_SUGGESTIONS);
 
   const mentionState = findMentionState(value, cursor);
   const mentionMatches = mentionState && mentionSuggestions.length > 0
     ? new Fuse(mentionSuggestions, { threshold: 0.4 })
         .search(mentionState.query)
         .map((r) => r.item)
-        .slice(0, 8)
     : [];
   const showMentions = isActive && mentionsOpen && !!mentionState && mentionMatches.length > 0;
+  const mentionStart =
+    showMentions && mentionMatches.length > VISIBLE_MENTIONS
+      ? Math.max(0, Math.min(selectedMention, mentionMatches.length - VISIBLE_MENTIONS))
+      : 0;
+  const visibleMentions = mentionMatches.slice(mentionStart, mentionStart + VISIBLE_MENTIONS);
+
+  const suggestionRows = showSuggestions ? Math.min(matches.length, VISIBLE_SUGGESTIONS) + 2 : 0;
+  const mentionRows = showMentions ? Math.min(mentionMatches.length, VISIBLE_MENTIONS) + 2 : 0;
+  useBottomOverlay(suggestionRows + mentionRows, showSuggestions || showMentions);
 
   useEffect(() => {
     setSelectedSuggestion(0);
@@ -448,33 +464,39 @@ export function MultiLineInput({
       )}
       {showSuggestions && (
         <Box flexDirection="column" marginTop={1}>
-          {matches.map((m, idx) => (
-            <Text key={m} wrap="wrap">
-              {idx === selectedSuggestion ? (
-                <Text backgroundColor="cyan" color="black">
-                  › /{m}
-                </Text>
-              ) : (
-                <Text dimColor>  /{m}</Text>
-              )}
-            </Text>
-          ))}
+          {visibleSuggestions.map((m, idx) => {
+            const actualIndex = suggestionStart + idx;
+            return (
+              <Text key={m} wrap="wrap">
+                {actualIndex === selectedSuggestion ? (
+                  <Text backgroundColor="cyan" color="black">
+                    › /{m}
+                  </Text>
+                ) : (
+                  <Text dimColor>  /{m}</Text>
+                )}
+              </Text>
+            );
+          })}
           <Text dimColor>↑↓ navigate · Tab complete · Enter submit · Esc close</Text>
         </Box>
       )}
       {showMentions && (
         <Box flexDirection="column" marginTop={1}>
-          {mentionMatches.map((m, idx) => (
-            <Text key={m} wrap="wrap">
-              {idx === selectedMention ? (
-                <Text backgroundColor="cyan" color="black">
-                  › @{m}
-                </Text>
-              ) : (
-                <Text dimColor>  @{m}</Text>
-              )}
-            </Text>
-          ))}
+          {visibleMentions.map((m, idx) => {
+            const actualIndex = mentionStart + idx;
+            return (
+              <Text key={m} wrap="wrap">
+                {actualIndex === selectedMention ? (
+                  <Text backgroundColor="cyan" color="black">
+                    › @{m}
+                  </Text>
+                ) : (
+                  <Text dimColor>  @{m}</Text>
+                )}
+              </Text>
+            );
+          })}
           <Text dimColor>↑↓ navigate · Tab complete · Enter submit · Esc close</Text>
         </Box>
       )}
