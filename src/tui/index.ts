@@ -8,6 +8,17 @@ import { PhusAgent } from "@/bridge/pi-agent.js";
 import { logger } from "@/infra/logging.js";
 import { loadConfig, resetConfigCache, configPath } from "@/infra/config/index.js";
 import { BootstrapWizard } from "@/tui/components/BootstrapWizard.js";
+import { resolveProfile, apiKeyForProfile } from "@/infra/profile.js";
+
+function profileHasKey(): boolean {
+  try {
+    const config = loadConfig();
+    const profile = resolveProfile(config.profileName, config.providers);
+    return !!apiKeyForProfile(profile);
+  } catch {
+    return false;
+  }
+}
 
 async function runBootstrapWizard(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -24,6 +35,8 @@ async function runBootstrapWizard(): Promise<boolean> {
 
 export async function startTui(): Promise<void> {
   let config = loadConfig();
+
+  // No config file yet → run the bootstrap wizard to create one.
   if (!config.source.present) {
     const configured = await runBootstrapWizard();
     if (!configured) {
@@ -33,6 +46,23 @@ export async function startTui(): Promise<void> {
     }
     resetConfigCache();
     config = loadConfig();
+  }
+
+  // Config exists but no API key → prompt the user to set one. We do not
+  // re-run the bootstrap wizard here because it is designed for first-run
+  // config creation; editing an existing profile is a different flow.
+  if (!profileHasKey()) {
+    const profile = resolveProfile(config.profileName, config.providers);
+    const envVar = profile.apiKeyEnv
+      ? profile.apiKeyEnv
+      : `${profile.provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+    // eslint-disable-next-line no-console
+    console.log("[phus] no API key configured.");
+    // eslint-disable-next-line no-console
+    console.log(`       Add apiKey to ${configPath()} or set:`);
+    // eslint-disable-next-line no-console
+    console.log(`         export ${envVar}=<your-key>`);
+    return;
   }
 
   const handle = await PhusAgent.create({ config });

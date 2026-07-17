@@ -83,10 +83,24 @@ export async function registerPluginCliCommands(program: Command, config: Resolv
 
   // 2. Run the register_cli_commands hook (plugins that prefer the hook).
   //    Throwaway PhusAgent uses the pre-loaded config — no re-parse.
+  //    If the agent cannot be created (e.g. no API key), log a warning and
+  //    continue so help/setup/version commands still work.
   const { PhusAgent } = await import("@/bridge/pi-agent.js");
   const { makeCtx } = await import("@/core/runtime/hook.js");
   const { initInternalCommands } = await import("@/core/runtime/internal-commands/index.js");
-  const tempHandle = await PhusAgent.create({ config, profileName: config.profileName });
+
+  let tempHandle;
+  try {
+    tempHandle = await PhusAgent.create({ config, profileName: config.profileName });
+  } catch (err: any) {
+    const { logger } = await import("@/infra/logging.js");
+    logger.warn("plugin.agent_creation_skipped", {
+      reason: err.message,
+      hint: "run `phus setup` to configure an API key",
+    });
+    return;
+  }
+
   initInternalCommands({
     agent: tempHandle.agent,
     home: () => config.paths.home,
