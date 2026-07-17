@@ -4,7 +4,71 @@ Three production paths, ordered by robustness:
 
 1. **Docker Compose + runtime provider mesh** (recommended) — fallback across providers, **no proxy process needed**
 2. **Docker Compose standalone** — Phus alone, multi-provider via profiles (no cross-provider fallback)
-3. **systemd** — bare-metal / VPS, single process
+3. **systemd / launchd** — bare-metal / VPS, single process
+
+You can also install Phus with the one-click script, then run the setup wizard.
+
+---
+
+## Quick install
+
+The fastest way to install Phus on macOS, Linux, or WSL:
+
+```bash
+curl -fsSL https://phus.dev/install.sh | bash
+```
+
+This will:
+
+- Install Node.js 20+ if missing (via fnm/nvm, Homebrew, or official tarball).
+- Install pnpm if missing.
+- Clone `https://github.com/phus/phus.git` into `$PHUS_HOME/repo` (default `$HOME/.phus/repo`).
+- Run `pnpm install` and `pnpm build`.
+- Create `$PHUS_HOME/skills`, `$PHUS_HOME/plugins`, and `$PHUS_HOME/logs`.
+- Symlink `phus` to a directory on your PATH when possible.
+
+On Windows, use PowerShell:
+
+```powershell
+Invoke-WebRequest -Uri https://phus.dev/install.ps1 | Invoke-Expression
+```
+
+After installing, run the setup wizard:
+
+```bash
+phus setup
+```
+
+The wizard asks for a provider, model, API key env var, and which channels to enable, then writes `$PHUS_HOME/phus.config.yaml`.
+
+---
+
+## Gateway daemon
+
+When running Phus as a long-lived gateway you can install it as a user service. Phus supports **systemd user units** on Linux and **launchd agents** on macOS.
+
+```bash
+# Install the service file and reload the daemon
+phus gateway install
+
+# Start / stop / restart
+phus gateway start
+phus gateway stop
+phus gateway restart
+
+# Show status
+phus gateway status
+
+# Remove the service
+phus gateway uninstall
+```
+
+- Linux: writes `~/.config/systemd/user/phus.service` and runs `systemctl --user daemon-reload`.
+- macOS: writes `~/Library/LaunchAgents/dev.phus.gateway.plist`.
+
+The service preserves the current working directory and runs `phus gateway`. Set `PHUS_EXECUTABLE` to override the executable path used in the unit file, and `PHUS_DAEMON_CWD` to override the working directory.
+
+---
 
 Phus now ships its own runtime **provider mesh** (Phase C). You define multiple endpoints per profile in `phus.config.yaml`, and Phus picks the best one at runtime with failover, circuit breaker, and cost/latency awareness. No LiteLLM, no separate process — same resilience, zero ops.
 
@@ -384,6 +448,64 @@ docker compose up -d
 ```
 
 After updating, the Tape and skills survive (they live in `/var/lib/phus` / `phus-home` volume). Plugin code is loaded from `$PHUS_HOME/plugins/` — re-edit and restart to pick up changes.
+
+---
+
+## Slack channel setup
+
+1. Create a Slack app at https://api.slack.com/apps with **Socket Mode** enabled.
+2. Add the `chat:write` and `im:history` bot scopes (plus `app_mentions:read` for mentions).
+3. Generate a **Bot User OAuth Token** (`xoxb-...`) and an **App-Level Token** (`xapp-...`).
+4. Set environment variables and start the gateway:
+
+```bash
+export SLACK_BOT_TOKEN=xoxb-...
+export SLACK_APP_TOKEN=xapp-...
+phus gateway --slack
+```
+
+Or declare the channel in `phus.config.yaml`:
+
+```yaml
+channels:
+  - type: slack
+    botToken: ${SLACK_BOT_TOKEN}
+    appToken: ${SLACK_APP_TOKEN}
+```
+
+The bot responds to direct messages and mentions.
+
+---
+
+## Email channel setup
+
+The Email channel polls an IMAP inbox and sends replies via SMTP.
+
+```bash
+export EMAIL_HOST=imap.example.com
+export EMAIL_USER=phus@example.com
+export EMAIL_PASSWORD=...
+# Optional SMTP override
+export EMAIL_SMTP_HOST=smtp.example.com
+phus gateway --email
+```
+
+Or declare it in `phus.config.yaml`:
+
+```yaml
+channels:
+  - type: email
+    host: ${EMAIL_HOST}
+    user: ${EMAIL_USER}
+    password: ${EMAIL_PASSWORD}
+    imapPort: 993
+    tls: true
+    smtpHost: ${EMAIL_SMTP_HOST}
+    smtpPort: 587
+    pollIntervalSeconds: 60
+```
+
+The channel tracks seen UIDs in memory, so restarts will re-process recent messages. Use a dedicated inbox for Phus to avoid loops.
 
 ---
 

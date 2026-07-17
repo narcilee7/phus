@@ -35,7 +35,12 @@ export type HookName =
   | "admit_message"
   | "provide_channels"
   | "register_cli_commands"
-  | "provide_steering_inbox";
+  | "provide_steering_inbox"
+  | "plan_created"
+  | "plan_step_started"
+  | "plan_step_completed"
+  | "plan_step_failed"
+  | "plan_completed";
 
 export type HookMode = "first_result" | "chain" | "broadcast";
 

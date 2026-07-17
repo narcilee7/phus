@@ -7,6 +7,7 @@ import type { MetaTool } from "@/types/tool.js";
 import type { SessionId } from "@/types/brand.js";
 import { asSessionId } from "@/types/brand.js";
 import { loadConfig } from "@/infra/config/index.js";
+import { StartupAdvisor } from "@/core/runtime/startup-advisor.js";
 
 export function defineSystemMetaTools(deps: {
   tape: { replay: (sessionId?: string) => Generator<unknown>; stats: () => unknown };
@@ -78,6 +79,18 @@ export function defineSystemMetaTools(deps: {
         const keepRecent = args.keepRecent ? Number(args.keepRecent) : 10;
         const result = await deps.compactSession(deps.tapeConcrete, sessionId, { keepRecent });
         return { ok: true, ...result };
+      },
+    },
+    {
+      name: "startup_suggest",
+      description:
+        "Analyze recent tape and plans and suggest additions to startup.sh. " +
+        "Returns a proposed script but does NOT write it — use startup_write to apply.",
+      parameters: Type.Object({}),
+      execute: async () => {
+        const advisor = new StartupAdvisor();
+        const script = await advisor.suggestStartup(deps.tapeConcrete as unknown as import("@/types/hooks/index.js").TapeLike);
+        return { ok: true, script };
       },
     },
   ];

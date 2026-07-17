@@ -7,23 +7,27 @@ import type {
   InternalCommand,
   InternalCommandServices,
 } from "../types.js";
+import { defineEvolutionCommands } from "./evolution.js";
 import { defineFilesystemCommands } from "./filesystem.js";
 import { defineMaintenanceCommands } from "./maintenance.js";
 import { defineMeshCommands } from "./mesh.js";
 import { defineScheduleCommands } from "./schedule.js";
 import { defineSkillCommands } from "./skills.js";
 import { defineTapeCommands } from "./tape.js";
+import { definePlanCommands } from "./plan.js";
 
 /** All built-in command clusters. */
 export function defineAllBuiltinCommands(
   services: InternalCommandServices,
 ): InternalCommand[] {
   return [
+    ...defineEvolutionCommands(services),
     ...defineSkillCommands(services),
     ...defineTapeCommands(services),
     ...defineFilesystemCommands(services),
     ...defineMaintenanceCommands(services),
     ...defineMeshCommands(services),
     ...defineScheduleCommands(services),
+    ...definePlanCommands(services),
   ];
 }

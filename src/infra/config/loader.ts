@@ -575,7 +575,7 @@ function parseChannels(
 ): ChannelConfig[] {
   if (!Array.isArray(raw)) return [];
   const out: ChannelConfig[] = [];
-  const validTypes = new Set<string>(["websocket", "sse", "telegram"]);
+  const validTypes = new Set<string>(["websocket", "sse", "telegram", "slack", "email", "whatsapp"]);
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
     const e = entry as Record<string, unknown>;

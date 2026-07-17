@@ -21,18 +21,6 @@ export function defineSkillCommands(
       },
     },
     {
-      name: "skill",
-      description: "print a skill's body",
-      usage: "name=<skill-name>",
-      handler: async ({ args }) => {
-        const name = args.name;
-        if (!name) return "usage: ,skill name=<name>";
-        const skill = services.agent.getSkill(name);
-        if (!skill) return `skill not found: ${name}`;
-        return `${skill.name} (v${skill.metadata.version ?? "?"})\n${skill.description}\n\n${skill.body}`;
-      },
-    },
-    {
       name: "skill-review",
       description: "list skill drafts awaiting human approval (B.4.4)",
       handler: async () => {
