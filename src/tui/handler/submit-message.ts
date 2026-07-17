@@ -20,10 +20,14 @@ export interface SubmitContext {
   state: AppState;
   dispatch: (action: AppAction) => void;
   setInput: (updater: (prev: string) => string) => void;
-  /** Adapter factory — called per-turn so dispatch stays fresh. */
-  channel: (dispatch: (action: AppAction) => void) => ChannelAdapter;
-  /** Live reader — currently unused by the submit pipeline, kept in the
-   *  contract so future flows (e.g. /retry) can pull fresh items. */
+  /** Adapter factory — called per-turn with both the dispatch and a live
+   *  reader so the channel can reconcile its final send against the
+   *  items the streaming events already produced. */
+  channel: (
+    dispatch: (action: AppAction) => void,
+    getItems: () => AppState["items"],
+  ) => ChannelAdapter;
+  /** Live reader — passed back into the channel factory above. */
   getItems: () => AppState["items"];
   clearChat: () => void;
 }
@@ -60,7 +64,7 @@ export async function submitMessage(text: string, ctx: SubmitContext): Promise<S
         metadata: { chatId: "tui" },
         ts: Date.now(),
       },
-      ctx.channel(ctx.dispatch),
+      ctx.channel(ctx.dispatch, ctx.getItems),
     );
   } catch (err) {
     ctx.dispatch({

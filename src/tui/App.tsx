@@ -47,6 +47,7 @@ import { useUndoHint } from "@/tui/hooks/useUndoHint.js";
 import { useSidebarRequest } from "@/tui/hooks/useSidebarRequest.js";
 import { useToolPermissionGate } from "@/tui/hooks/useToolPermissionGate.js";
 import { useAppShortcuts } from "@/tui/hooks/useAppShortcuts.js";
+import { useQuitOnRequest } from "@/tui/hooks/useQuitOnRequest.js";
 import { computeStatusHint } from "@/tui/handler/status-hint.js";
 import { planActions } from "@/tui/handler/plan-actions.js";
 import { useCodeActionHandler } from "@/tui/handler/code-actions-runtime.js";
@@ -110,6 +111,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   usePlanEvents(agent, dispatch, planRef);
   useSidebarRequest(state.sidebarRequest, dispatch, setSidebarView, setSidebarOpen);
   useToolPermissionGate(agent, state, dispatch);
+  useQuitOnRequest(state.quitRequested, dispatch, exit);
 
   // ─── Bound handlers ──────────────────────────────────────────────
   const planHandlers = useMemo(
@@ -127,11 +129,17 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
         state,
         dispatch,
         setInput: setInputUpdater,
-        channel: tuiChannel,
+        channel: (d, getItems) =>
+          tuiChannel(d, () => ({ items: getItems() })),
         getItems: () => itemsRef.current,
         clearChat: () => dispatch({ type: "clear_items" }),
       });
-      if (result === "quit") exit();
+      if (result === "quit") {
+        // Don't call exit() from inside an async chain — ink's cleanup
+        // may not flush. Instead dispatch a state flag and let
+        // useQuitOnRequest invoke exit() during the next commit.
+        dispatch({ type: "request_quit" });
+      }
     },
     [agent, state, dispatch, setInputUpdater, exit],
   );

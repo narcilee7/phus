@@ -455,6 +455,20 @@ describe("sidebar request", () => {
   });
 });
 
+describe("quit request lifecycle", () => {
+  it("request_quit sets the flag, consume_quit_request clears it", () => {
+    const s1 = appReducer(initialState, { type: "request_quit" });
+    expect(s1.quitRequested).toBe(true);
+    const s2 = appReducer(s1, { type: "consume_quit_request" });
+    expect(s2.quitRequested).toBeUndefined();
+  });
+
+  it("consume_quit_request is a no-op when no request was made", () => {
+    const s = appReducer(initialState, { type: "consume_quit_request" });
+    expect(s).toEqual(initialState);
+  });
+});
+
 describe("truncate", () => {
   it("returns short strings unchanged", () => {
     expect(truncate("hello", 10)).toBe("hello");

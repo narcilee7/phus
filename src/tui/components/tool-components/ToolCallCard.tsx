@@ -10,6 +10,7 @@ import { ToolPill } from "@/tui/components/tool-components/ToolPill.js";
 import { DiffReview } from "@/tui/components/diff-components/DiffReview.js";
 import { TuiFocusContext } from "@/tui/context/tui-focus-context.js";
 import type { FileSnapshot } from "@/tui/components/tool-components/ToolResultCard.js";
+import { formatToolResult } from "@/tui/components/tool-components/format-result";
 
 export type { FileSnapshot };
 
@@ -33,23 +34,6 @@ function summarizeArgs(toolName: string | undefined, args: unknown): string {
         .join(", ")
         .slice(0, 80);
   }
-}
-
-function summarizeResult(toolName: string | undefined, result: unknown): string {
-  if (result === undefined || result === null) return "";
-  if (typeof result === "string") return result;
-  if (typeof result === "object") {
-    const obj = result as Record<string, unknown>;
-    if (typeof obj.stdout === "string" && obj.stdout.length > 0) return obj.stdout;
-    if (typeof obj.stderr === "string" && obj.stderr.length > 0) return obj.stderr;
-    if (typeof obj.content === "string") return obj.content;
-    try {
-      return JSON.stringify(result, null, 2);
-    } catch {
-      return String(result);
-    }
-  }
-  return String(result);
 }
 
 export interface ToolCallCardProps {
@@ -86,7 +70,7 @@ export function ToolCallCard({ item, fileSnapshots, id: idProp }: ToolCallCardPr
 
   const status = item.isError === undefined ? "running" : item.isError ? "error" : "success";
   const argsSummary = summarizeArgs(item.toolName, item.args);
-  const resultText = summarizeResult(item.toolName, item.result);
+  const resultText = formatToolResult(item.result);
   const hasResult = item.result !== undefined;
   const isFileWrite = item.toolName === "file_write";
   const snapshot = isFileWrite ? fileSnapshots?.get(item.toolCallId || "") : undefined;
@@ -127,12 +111,10 @@ export function ToolCallCard({ item, fileSnapshots, id: idProp }: ToolCallCardPr
         <Box marginTop={1} flexDirection="column" width="100%">
           <Text dimColor wrap="wrap">
             {expanded ? resultText : truncate(resultText, MAX_RESULT_CHARS)}
+            {resultText.length > MAX_RESULT_CHARS
+              ? `\n${expanded ? "Enter/Space collapse" : "… Enter/Space expand"}`
+              : ""}
           </Text>
-          {resultText.length > MAX_RESULT_CHARS && (
-            <Box marginTop={1}>
-              <Text dimColor>{expanded ? "Enter/Space collapse" : "… Enter/Space expand"}</Text>
-            </Box>
-          )}
         </Box>
       )}
       {isFileWrite && snapshot && newContent !== undefined && (

@@ -79,8 +79,8 @@ function renderTable(token: Tokens.Table, key: string): React.ReactNode {
     }
   }
 
-  const renderRow = (row: string[], isHeader: boolean) => (
-    <Box key={`${key}-row`} flexDirection="row">
+  const renderRow = (row: string[], isHeader: boolean, idx: number) => (
+    <Box key={`${key}-row-${idx}`} flexDirection="row">
       <Text dimColor>│ </Text>
       {row.map((cell, idx) => {
         const pad = " ".repeat(Math.max(0, widths[idx]! - cell.length));
@@ -101,7 +101,7 @@ function renderTable(token: Tokens.Table, key: string): React.ReactNode {
 
   return (
     <Box key={key} flexDirection="column" marginY={1}>
-      {renderRow(rows[0]!, true)}
+      {renderRow(rows[0]!, true, 0)}
       <Box flexDirection="row">
         <Text dimColor>├</Text>
         {widths.map((w, idx) => (
@@ -112,7 +112,7 @@ function renderTable(token: Tokens.Table, key: string): React.ReactNode {
         ))}
         <Text dimColor>┤</Text>
       </Box>
-      {rows.slice(1).map((row, idx) => renderRow(row, false))}
+      {rows.slice(1).map((row, idx) => renderRow(row, false, idx + 1))}
     </Box>
   );
 }

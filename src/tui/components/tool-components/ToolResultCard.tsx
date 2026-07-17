@@ -7,8 +7,8 @@ import type { ChatItem } from "@/tui/state/state.js";
 import { truncate } from "@/tui/state/state.js";
 import { Markdown } from "@/tui/components/rich-text-components/Markdown.js";
 import { ToolPill } from "@/tui/components/tool-components/ToolPill.js";
-import { DiffView } from "@/tui/components/diff-components/DiffView.js";
 import { DiffReview } from "@/tui/components/diff-components/DiffReview.js";
+import { formatToolResult } from "@/tui/components/tool-components/format-result.js";
 
 export interface FileSnapshot {
   path: string;
@@ -20,30 +20,6 @@ const MAX_TOOL_CHARS = 320;
 
 function looksLikeMarkdown(text: string): boolean {
   return /(^|\n)(#{1,6}\s|```|\*\s|-\s|\|\s*[-:]+\s*\|)/.test(text);
-}
-
-function formatValue(value: unknown): string {
-  if (value === undefined) return "undefined";
-  if (value === null) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value !== null) {
-    const obj = value as Record<string, unknown>;
-    if (Array.isArray(obj.content)) {
-      const texts = obj.content
-        .map((c) =>
-          typeof c === "object" && c !== null ? (c as Record<string, unknown>).text : undefined,
-        )
-        .filter((t): t is string => typeof t === "string");
-      if (texts.length > 0) return texts.join("");
-    }
-    if (typeof obj.stdout === "string") return obj.stdout;
-    if (typeof obj.stderr === "string" && obj.stderr.length > 0) return obj.stderr;
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
 }
 
 function truncateLines(text: string, maxLines: number, maxChars: number): string {
@@ -61,7 +37,7 @@ function ExpandableResult({ result }: { result: unknown }) {
     }
   });
 
-  const raw = formatValue(result);
+  const raw = formatToolResult(result);
   const renderMarkdown = typeof result === "string" && looksLikeMarkdown(result);
   const body = renderMarkdown
     ? raw
@@ -74,12 +50,8 @@ function ExpandableResult({ result }: { result: unknown }) {
       ) : (
         <Text dimColor wrap="wrap">
           {body}
+          {!expanded && raw.length > MAX_TOOL_CHARS ? "\n… Enter/Space to expand" : ""}
         </Text>
-      )}
-      {!expanded && raw.length > MAX_TOOL_CHARS && (
-        <Box marginTop={1}>
-          <Text dimColor>… Enter/Space to expand</Text>
-        </Box>
       )}
     </Box>
   );

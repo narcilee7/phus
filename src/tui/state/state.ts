@@ -108,6 +108,10 @@ export interface AppState {
   sidebarRequest?: "files" | "sessions";
   /** Plan timeline expand toggle. */
   planExpanded?: boolean;
+  /** Set when a slash command (e.g. /quit) requests an exit. The
+   *  consume_quit_request handler runs useEffect → exit() so the
+   *  unmount path runs cleanly outside the async submit chain. */
+  quitRequested?: boolean;
 }
 
 export const initialState: AppState = {
@@ -150,7 +154,9 @@ export type AppAction =
   | { type: "remove_plan_subagent"; sessionId: string }
   | { type: "request_sidebar"; view: "files" | "sessions" }
   | { type: "consume_sidebar_request" }
-  | { type: "clear_plan" };
+  | { type: "clear_plan" }
+  | { type: "request_quit" }
+  | { type: "consume_quit_request" };
 
 /** Truncate a string for compact display. */
 export function truncate(s: string, n: number): string {
@@ -407,5 +413,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     }
     case "clear_plan":
       return { ...state, plan: undefined };
+    case "request_quit":
+      return { ...state, quitRequested: true };
+    case "consume_quit_request": {
+      if (!state.quitRequested) return state;
+      const next: AppState = { ...state };
+      delete next.quitRequested;
+      return next;
+    }
   }
 }

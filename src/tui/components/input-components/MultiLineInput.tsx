@@ -394,6 +394,12 @@ export function MultiLineInput({
     // Ignore lone control keys without printable input.
     if (!input || (input.length === 1 && input.charCodeAt(0) < 32)) return;
 
+    // Skip Ctrl / Meta combos that other consumers (palette, app
+    // shortcuts) own. Without this, the keystroke leaks into the
+    // input box even when it's not logically focused (e.g. Ctrl+K
+    // opens the palette but also types "k" into the input underneath).
+    if (key.ctrl || key.meta) return;
+
     const { value: next, cursor: nextCursor } = setValueAtCursor(value, cur, input);
     commit(next, nextCursor);
   }, { isActive });
