@@ -8,7 +8,10 @@
 FROM node:20-alpine AS builder
 
 # Install pnpm globally via corepack (shipped with Node 20).
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Pin pnpm to 9.x: pnpm 10+ requires `node:sqlite` (Node 22.5+) which isn't
+# in the Node 20 base image, so the in-Docker `pnpm install` would fail with
+# ERR_UNKNOWN_BUILTIN_MODULE before the build ever starts.
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 WORKDIR /app
 
@@ -25,7 +28,8 @@ RUN pnpm build
 FROM node:20-alpine AS runtime
 
 # Install pnpm for runtime dependency installation.
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Same version pin as the builder stage — see note above.
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 WORKDIR /app
 
