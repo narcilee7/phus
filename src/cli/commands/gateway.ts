@@ -25,7 +25,10 @@ export function registerGatewayCommand(program: Command): void {
     .option("--telegram", "Enable Telegram channel (requires TELEGRAM_TOKEN env)")
     .option("--websocket <port>", "Enable WebSocket channel on the given port")
     .option("--sse <port>", "Enable SSE channel on the given port")
-    .action(async (opts: { telegram?: boolean; websocket?: string; sse?: string }) => {
+    .option("--slack", "Enable Slack channel (requires SLACK_BOT_TOKEN and SLACK_APP_TOKEN env)")
+    .option("--email", "Enable Email channel (requires EMAIL_HOST/USER/PASSWORD env)")
+    .option("--whatsapp", "Enable WhatsApp channel (placeholder)")
+    .action(async (opts: { telegram?: boolean; websocket?: string; sse?: string; slack?: boolean; email?: boolean; whatsapp?: boolean }) => {
       const mode = bootstrap();
       const config = loadConfig();
       const handle = await PhusAgent.create({ config });

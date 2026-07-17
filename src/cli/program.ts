@@ -13,6 +13,7 @@ import { registerDefaultCommand } from "./commands/default.js";
 import { registerChatCommand } from "./commands/chat.js";
 import { registerRunCommand } from "./commands/run.js";
 import { registerGatewayCommand } from "./commands/gateway.js";
+import { registerGatewayDaemonCommands } from "@/commands/gateway-daemon.js";
 import { registerHooksCommand } from "./commands/hooks.js";
 import { registerSkillsCommand } from "./commands/skills.js";
 import { registerTapeCommand } from "./commands/tape.js";
@@ -26,6 +27,7 @@ import { registerCompactCommand } from "./commands/compact.js";
 import { registerHealthCommand } from "./commands/health.js";
 import { registerTuiCommand } from "./commands/tui.js";
 import { registerResumeCommand } from "./commands/resume.js";
+import { registerSetupCommand } from "./commands/setup.js";
 
 /** Build the Commander program with every built-in subcommand
  *  registered. Plugin commands are drained later via
@@ -45,6 +47,7 @@ export function buildProgram(): Command {
   registerTuiCommand(program);
   registerRunCommand(program);
   registerGatewayCommand(program);
+  registerGatewayDaemonCommands(program);
   registerHooksCommand(program);
   registerSkillsCommand(program);
   registerTapeCommand(program);
@@ -56,6 +59,7 @@ export function buildProgram(): Command {
   registerLogsCommand(program);
   registerCompactCommand(program);
   registerHealthCommand(program);
+  registerSetupCommand(program);
   registerResumeCommand(program);
 
   return program;

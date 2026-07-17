@@ -2,7 +2,10 @@
 // ,reload / ,plugins / ,policy / ,context / ,clear / ,quit —
 // runtime introspection and REPL control.
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { InternalCommand, InternalCommandServices } from "../types.js";
+import { healthCheck } from "@/commands/health.js";
 
 export function defineMaintenanceCommands(
   services: InternalCommandServices,
@@ -76,6 +79,30 @@ export function defineMaintenanceCommands(
       description: "exit the REPL",
       handler: async ({ surface }) => {
         return surface === "tui" ? "__QUIT_TUI__" : null;
+      },
+    },
+    {
+      name: "health",
+      description: "run health check",
+      handler: async () => {
+        const status = healthCheck();
+        const lines = Object.entries(status.checks).map(
+          ([k, v]) => `${v.ok ? "✅" : "❌"} ${k}: ${v.detail ?? ""}`,
+        );
+        return [status.ok ? "✓ healthy" : "✗ unhealthy", ...lines].join("\n");
+      },
+    },
+    {
+      name: "version",
+      description: "show Phus version",
+      handler: async () => {
+        try {
+          const pkgPath = path.join(process.cwd(), "package.json");
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { version?: string };
+          return `phus ${pkg.version ?? "(unknown version)"}`;
+        } catch {
+          return "phus (unknown version)";
+        }
       },
     },
   ];

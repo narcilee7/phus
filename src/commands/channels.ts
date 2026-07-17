@@ -16,6 +16,9 @@ export interface ChannelOpts {
   telegram?: boolean;
   websocket?: string;
   sse?: string;
+  slack?: boolean;
+  email?: boolean;
+  whatsapp?: boolean;
 }
 
 /** Build a built-in channel from its YAML config entry. */
@@ -44,6 +47,33 @@ export async function buildChannelFromConfig(cfg: ChannelConfig): Promise<Channe
         allowedUsers: cfg.allowedUsers,
         allowedChats: cfg.allowedChats,
       });
+    }
+    case "slack": {
+      const { SlackChannel } = await import("@/channels/slack.js");
+      return new SlackChannel({
+        botToken: cfg.botToken,
+        appToken: cfg.appToken,
+        allowedUsers: cfg.allowedUsers,
+      });
+    }
+    case "email": {
+      const { EmailChannel } = await import("@/channels/email.js");
+      return new EmailChannel({
+        host: cfg.host,
+        user: cfg.user,
+        password: cfg.password,
+        imapPort: cfg.imapPort,
+        tls: cfg.tls,
+        smtpHost: cfg.smtpHost,
+        smtpPort: cfg.smtpPort,
+        smtpSecure: cfg.smtpSecure,
+        pollIntervalSeconds: cfg.pollIntervalSeconds,
+        mailbox: cfg.mailbox,
+      });
+    }
+    case "whatsapp": {
+      const { WhatsAppChannel } = await import("@/channels/whatsapp.js");
+      return new WhatsAppChannel();
     }
     default:
       return undefined;
@@ -79,6 +109,31 @@ export async function collectChannels(
     const { SSEChannel } = await import("@/channels/sse.js");
     channels.push(new SSEChannel({ port: parseInt(opts.sse, 10) }));
     fromCli.add("sse");
+  }
+  if (opts.slack) {
+    const { SlackChannel } = await import("@/channels/slack.js");
+    const botToken = process.env.SLACK_BOT_TOKEN;
+    const appToken = process.env.SLACK_APP_TOKEN;
+    if (!botToken || !appToken) {
+      console.error("[phus] SLACK_BOT_TOKEN and SLACK_APP_TOKEN must be set");
+      process.exit(1);
+    }
+    channels.push(new SlackChannel({ botToken, appToken }));
+    fromCli.add("slack");
+  }
+  if (opts.email) {
+    const { EmailChannel } = await import("@/channels/email.js");
+    if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+      console.error("[phus] EMAIL_HOST, EMAIL_USER and EMAIL_PASSWORD must be set");
+      process.exit(1);
+    }
+    channels.push(new EmailChannel());
+    fromCli.add("email");
+  }
+  if (opts.whatsapp) {
+    const { WhatsAppChannel } = await import("@/channels/whatsapp.js");
+    channels.push(new WhatsAppChannel());
+    fromCli.add("whatsapp");
   }
 
   // YAML config channels (skip names already provided by CLI flags)

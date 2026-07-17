@@ -64,12 +64,23 @@ export interface PluginSpec {
  * remaining fields are passed through to the channel constructor.
  */
 export interface ChannelConfig {
-  type: "websocket" | "sse" | "telegram";
+  type: "websocket" | "sse" | "telegram" | "slack" | "email" | "whatsapp";
   enabled?: boolean;
   port?: number;
   host?: string;
   path?: string;
   token?: string;
+  botToken?: string;
+  appToken?: string;
+  user?: string;
+  password?: string;
+  imapPort?: number;
+  tls?: boolean;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  pollIntervalSeconds?: number;
+  mailbox?: string;
   allowedUsers?: string[] | string;
   allowedChats?: string[] | string;
   [key: string]: unknown;

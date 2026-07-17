@@ -15,6 +15,8 @@ export interface Outbound {
   type: OutboundType;
   channel: string;
   replyTo?: string;
+  /** Channel-specific extras (threadTs, subject, etc.). */
+  metadata?: Record<string, unknown>;
 }
 
 /** A message inbound from any channel. */

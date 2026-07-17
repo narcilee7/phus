@@ -231,7 +231,7 @@ schedules:
 # Declare channels here instead of (or in addition to) CLI flags.
 # CLI flags override YAML entries of the same type.
 #
-# Supported types: websocket, sse, telegram.
+# Supported types: websocket, sse, telegram, slack, email, whatsapp.
 #
 # channels:
 #   - type: websocket
@@ -242,6 +242,16 @@ schedules:
 #     token: ${TELEGRAM_TOKEN}
 #     allowedUsers: []
 #     allowedChats: []
+#   - type: slack
+#     botToken: ${SLACK_BOT_TOKEN}
+#     appToken: ${SLACK_APP_TOKEN}
+#   - type: email
+#     host: ${EMAIL_HOST}
+#     user: ${EMAIL_USER}
+#     password: ${EMAIL_PASSWORD}
+#     smtpHost: ${EMAIL_SMTP_HOST}
+#     smtpPort: 587
+#     pollIntervalSeconds: 60
 
 
 # ─────────────────────────────────────────────────────────────────────
