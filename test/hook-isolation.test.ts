@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { HookRegistry, makeCtx } from "../src/core/runtime/hook.js";
+import { HookRegistry } from "../src/core/runtime/hook/registry.js";
+import { makeCtx } from "../src/core/runtime/hook/ctx-builder.js";
 import { Tape } from "../src/core/session/tape.js";
 import { SkillRegistry } from "../src/infra/skills/registry.js";
 

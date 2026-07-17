@@ -1,7 +1,8 @@
 // test/scheduler.test.ts
 import { describe, expect, it, beforeEach } from "vitest";
-import { Scheduler, nextFires, type Schedule } from "../src/core/runtime/scheduler.js";
-import { HookRegistry, makeCtx } from "../src/core/runtime/hook.js";
+import { Scheduler, nextFires, type Schedule } from "../src/core/runtime/scheduler/index.js";
+import { HookRegistry } from "../src/core/runtime/hook/registry.js";
+import { makeCtx } from "../src/core/runtime/hook/ctx-builder.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";

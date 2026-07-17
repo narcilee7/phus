@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Learner } from "@/core/runtime/learner.js";
+import { Learner } from "@/core/runtime/evolution/learner.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import { asSessionId } from "@/types/brand.js";
 import type { TapeLike } from "@/types/hooks/index.js";

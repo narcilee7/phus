@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import { Verifier } from "@/core/runtime/verifier.js";
+import { Verifier } from "@/core/runtime/verifier/index.js";
 import type { Step } from "@/core/runtime/plan/types.js";
 
 function makeStep(expectedOutput?: string): Step {

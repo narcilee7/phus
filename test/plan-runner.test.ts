@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { PlanRunner } from "@/core/runtime/plan-runner.js";
-import { Planner } from "@/core/runtime/planner.js";
-import { Executor } from "@/core/runtime/executor.js";
+import { PlanRunner } from "@/core/runtime/plan/plan-runner.js";
+import { Planner } from "@/core/runtime/plan/planner.js";
+import { Executor } from "@/core/runtime/executor/index.js";
 import { PlanStore } from "@/core/session/plan-store.js";
-import { HookRegistry } from "@/core/runtime/hook/ctx-builder";
+import { HookRegistry } from "@/core/runtime/hook/registry.js";
 import type { Plan, Step } from "@/core/runtime/plan/types.js";
 import { asSessionId } from "@/types/brand.js";
 
