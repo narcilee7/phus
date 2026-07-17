@@ -4,8 +4,8 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { ChatViewport } from "../../src/tui/components/ChatViewport.js";
-import type { ChatItem } from "../../src/tui/state.js";
+import { ChatViewport } from "../../src/tui/components/chat-components/ChatViewport.js";
+import type { ChatItem } from "../../src/tui/state/state.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

@@ -4,13 +4,13 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { CodeBlock } from "../../src/tui/components/CodeBlock.js";
+import { CodeBlock } from "../../src/tui/components/rich-text-components/CodeBlock.js";
 import {
   CodeActionContext,
   type CodeBlockAction,
-} from "../../src/tui/components/CodeActionContext.js";
-import { TuiFocusContext } from "../../src/tui/components/TuiFocusContext.js";
-import { detectInterpreter, runCode } from "../../src/tui/code-actions.js";
+} from "../../src/tui/components/rich-text-components/CodeActionContext.js";
+import { TuiFocusContext } from "../../src/tui/context/tui-focus-context.js";
+import { detectInterpreter, runCode } from "../../src/tui/handler/code/code-actions.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

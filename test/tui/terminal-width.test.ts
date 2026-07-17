@@ -5,7 +5,7 @@ import {
   displayWidth,
   findCursorDisplayRow,
   wrapLineToRows,
-} from "../../src/tui/components/terminal-width.js";
+} from "../../src/tui/utils/terminal.js";
 
 describe("displayWidth", () => {
   it("counts ASCII characters as one column", () => {

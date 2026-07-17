@@ -6,7 +6,7 @@
 // final outbound text with the streaming message.
 
 import type { ChannelAdapter } from "@/channels/base.js";
-import type { AppAction } from "@/tui/state.js";
+import type { AppAction } from "@/tui/state/state.js";
 
 export function tuiChannel(
   dispatch: (action: AppAction) => void,

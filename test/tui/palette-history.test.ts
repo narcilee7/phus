@@ -9,7 +9,7 @@ import {
   recordPaletteUse,
   score,
   type PaletteHistoryEntry,
-} from "../../src/tui/palette-history.js";
+} from "../../src/tui/handler/history/palette-history.js";
 
 let homeDir: string;
 

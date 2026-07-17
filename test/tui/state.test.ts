@@ -2,7 +2,7 @@
 // Pure-function tests for `appReducer` and `truncate`.
 
 import { describe, expect, it, vi } from "vitest";
-import { appReducer, initialState, truncate, type AppAction, type AppState } from "../../src/tui/state.js";
+import { appReducer, initialState, truncate, type AppAction, type AppState } from "../../src/tui/state/state.js";
 
 function action(a: AppAction) {
   return appReducer(initialState, a);

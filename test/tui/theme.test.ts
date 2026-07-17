@@ -5,7 +5,7 @@ vi.mock("../../src/infra/config/index.js", () => ({
   loadConfig: () => ({ theme: "high-contrast" }),
 }));
 
-import { getTheme, resolveThemeName, animationDisabled } from "../../src/tui/theme.js";
+import { getTheme, resolveThemeName, animationDisabled } from "../../src/tui/theme/theme.js";
 
 describe("theme", () => {
   it("respects PHUS_THEME env var", () => {

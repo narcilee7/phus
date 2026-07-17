@@ -4,8 +4,8 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { PermissionBar } from "../../src/tui/components/PermissionBar.js";
-import type { PermissionRequest, RememberChoice } from "../../src/tui/state.js";
+import { PermissionBar } from "../../src/tui/components/permission-components/PermissionBar.js";
+import type { PermissionRequest, RememberChoice } from "../../src/tui/state/state.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

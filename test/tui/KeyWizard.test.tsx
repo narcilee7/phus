@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { KeyWizard } from "../../src/tui/components/KeyWizard.js";
+import { KeyWizard } from "../../src/tui/components/boot-strap-components/KeyWizard.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

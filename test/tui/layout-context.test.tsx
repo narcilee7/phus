@@ -6,12 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 import React, { useState } from "react";
 import { Text } from "ink";
 import { render } from "ink-testing-library";
-import { TuiLayoutProvider, useTuiLayout } from "../../src/tui/layout-context.js";
+import { TuiLayoutProvider, useTuiLayout } from "../../src/tui/context/tui-layout-context.js";
 import {
   MultiLineInput,
   type SuggestionItem,
   type MentionItem,
-} from "../../src/tui/components/MultiLineInput.js";
+} from "../../src/tui/components/input-components/MultiLineInput.js";
 
 const SUGGESTIONS: SuggestionItem[] = [
   { name: "help", description: "show commands" },

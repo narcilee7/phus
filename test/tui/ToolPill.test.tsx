@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { ToolPill } from "../../src/tui/components/ToolPill.js";
+import { ToolPill } from "../../src/tui/components/tool-components/ToolPill.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

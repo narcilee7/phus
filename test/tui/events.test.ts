@@ -2,7 +2,7 @@
 // Verify the Pi Agent event → AppAction mapping.
 
 import { describe, expect, it } from "vitest";
-import { eventToAction } from "../../src/tui/events.js";
+import { eventToAction } from "../../src/tui/transform/events.js";
 
 describe("eventToAction", () => {
   it("maps message_update + text_delta → append_delta", () => {

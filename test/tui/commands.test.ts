@@ -3,8 +3,8 @@
 // command and returns the right SlashResult for /quit / /clear.
 
 import { describe, expect, it, vi } from "vitest";
-import { runSlash } from "../../src/tui/commands.js";
-import { initialState, type AppAction, type AppState } from "../../src/tui/state.js";
+import { runSlash } from "../../src/tui/handler/commands/commands.js";
+import { initialState, type AppAction, type AppState } from "../../src/tui/state/state.js";
 import type { PhusAgent } from "../../src/bridge/pi-agent.js";
 
 // ─── Mock agent ─────────────────────────────────────────────────

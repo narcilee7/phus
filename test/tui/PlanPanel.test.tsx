@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { PlanPanel } from "../../src/tui/components/PlanPanel.js";
+import { PlanPanel } from "../../src/tui/components/agent-components/PlanPanel.js";
 
 function makePlan(status: "pending" | "running" | "paused" | "completed" | "failed") {
   return {

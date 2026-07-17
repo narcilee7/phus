@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { DiffView } from "../../src/tui/components/DiffView.js";
+import { DiffView } from "../../src/tui/components/diff-components/DiffView.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

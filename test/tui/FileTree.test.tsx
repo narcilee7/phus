@@ -4,15 +4,15 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { FileTree } from "../../src/tui/components/FileTree.js";
+import { FileTree } from "../../src/tui/components/file-components/FileTree.js";
 
 const wait = (ms = 100) => new Promise((r) => setTimeout(r, ms));
 
-vi.mock("../../src/tui/components/CommandPalette.js", () => ({
+vi.mock("../../src/tui/components/command-components/CommandPalette.js", () => ({
   scanFiles: vi.fn(async () => ["src/index.ts", "src/lib/foo.ts", "README.md"]),
 }));
 
-vi.mock("../../src/tui/git-status.js", () => ({
+vi.mock("../../src/tui/handler/git/git-status.js", () => ({
   loadGitStatus: vi.fn(async () => ({ "README.md": "M", "src/index.ts": "?" })),
 }));
 

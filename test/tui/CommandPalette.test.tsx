@@ -7,8 +7,8 @@ import { render } from "ink-testing-library";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { CommandPalette } from "../../src/tui/components/CommandPalette.js";
-import { SLASH_COMMANDS } from "../../src/tui/commands.js";
+import { CommandPalette } from "../../src/tui/components/command-components/CommandPalette.js";
+import { SLASH_COMMANDS } from "../../src/tui/handler/commands/commands.js";
 import type { PhusAgent } from "../../src/bridge/pi-agent.js";
 
 const wait = (ms = 100) => new Promise((r) => setTimeout(r, ms));
