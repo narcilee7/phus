@@ -48,20 +48,21 @@ export async function startTui(): Promise<void> {
     config = loadConfig();
   }
 
-  // Config exists but no API key → run setup wizard to add one.
+  // Config exists but no API key → prompt the user to set one. We do not
+  // re-run the bootstrap wizard here because it is designed for first-run
+  // config creation; editing an existing profile is a different flow.
   if (!profileHasKey()) {
+    const profile = resolveProfile(config.profileName, config.providers);
+    const envVar = profile.apiKeyEnv
+      ? profile.apiKeyEnv
+      : `${profile.provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
     // eslint-disable-next-line no-console
-    console.log("[phus] no API key configured; starting setup wizard...");
-    const configured = await runBootstrapWizard();
-    if (!configured) {
-      // eslint-disable-next-line no-console
-      console.log("[phus] setup cancelled. Set an API key to use Phus:");
-      // eslint-disable-next-line no-console
-      console.log("  export ANTHROPIC_API_KEY=<your-key>");
-      return;
-    }
-    resetConfigCache();
-    config = loadConfig();
+    console.log("[phus] no API key configured.");
+    // eslint-disable-next-line no-console
+    console.log(`       Add apiKey to ${configPath()} or set:`);
+    // eslint-disable-next-line no-console
+    console.log(`         export ${envVar}=<your-key>`);
+    return;
   }
 
   const handle = await PhusAgent.create({ config });

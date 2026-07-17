@@ -26,17 +26,6 @@ interface BootstrapWizardProps {
   onDone: (success: boolean) => void;
 }
 
-const DEFAULT_API_KEY_ENVS: Record<string, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-  google: "GEMINI_API_KEY",
-  groq: "GROQ_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  xai: "XAI_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-};
-
 interface PickerProps<T> {
   title: string;
   items: T[];
@@ -136,7 +125,7 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
   const [modelsByProvider, setModelsByProvider] = useState<Map<string, string[]>>(new Map());
   const [providerIndex, setProviderIndex] = useState(0);
   const [modelIndex, setModelIndex] = useState(0);
-  const [apiKeyEnv, setApiKeyEnv] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [profileName, setProfileName] = useState("default");
   const [error, setError] = useState<string | undefined>();
 
@@ -190,8 +179,7 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
       if (key.upArrow) setProviderIndex((i) => Math.max(0, i - 1));
       if (key.downArrow) setProviderIndex((i) => Math.min(providers.length - 1, i + 1));
       if (key.return) {
-        const p = providers[providerIndex];
-        if (p) setApiKeyEnv(DEFAULT_API_KEY_ENVS[p] ?? "");
+        setApiKey("");
         setStep("model");
       }
       if (key.escape) setStep("welcome");
@@ -207,7 +195,12 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
     }
 
     if (step === "apiKey") {
-      if (key.return) setStep("profile");
+      if (key.return) {
+        if (apiKey.trim().length > 0) {
+          setStep("profile");
+        }
+        return;
+      }
       if (key.escape) {
         setStep("model");
         return;
@@ -265,7 +258,7 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
           [name]: {
             provider,
             modelId,
-            ...(apiKeyEnv.trim() ? { apiKeyEnv: apiKeyEnv.trim() } : {}),
+            ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
             thinkingLevel: "medium",
           },
         },
@@ -325,11 +318,11 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
 
       {step === "apiKey" && (
         <TextStep
-          title="API key environment variable"
-          value={apiKeyEnv}
-          onChange={setApiKeyEnv}
-          placeholder="OPENAI_API_KEY"
-          hint={"Name of the env var that holds your API key (e.g. DEEPSEEK_API_KEY). Leave blank only if the key is already exported in your shell. Phus will fail at runtime otherwise."}
+          title="API key"
+          value={apiKey}
+          onChange={setApiKey}
+          placeholder="sk-..."
+          hint="Your API key for the selected provider. It will be written to phus.config.yaml so Phus can use it right away. You can switch to an env var later."
         />
       )}
 
@@ -355,7 +348,7 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
                     [profileName.trim() || "default"]: {
                       provider: providers[providerIndex],
                       modelId: models[modelIndex],
-                      ...(apiKeyEnv.trim() ? { apiKeyEnv: apiKeyEnv.trim() } : {}),
+                      apiKey: apiKey.trim() ? "***" : "(missing)",
                       thinkingLevel: "medium",
                     },
                   },

@@ -66,8 +66,9 @@ Error: Profile "default" has no API key. Set the environment variable:
 文件：`src/tui/index.ts`
 
 - `startTui()` 启动前检查当前 profile 是否配置了有效 key。
-- 如果没有，启动 `BootstrapWizard` 引导用户配置 provider/model/key。
-- setup 完成后重新加载配置并启动 TUI。
+- 如果没有配置文件，启动 `BootstrapWizard` 引导用户配置 provider/model/key。
+- BootstrapWizard 会把用户输入的 API key 直接写入 `phus.config.yaml` 的 `apiKey` 字段，确保第一次运行即可使用。
+- 若配置已存在但 key 仍缺失，给出明确的 env var / 编辑配置提示，不再重复启动 wizard 造成循环。
 
 ### 3.5 run/gateway 友好错误
 

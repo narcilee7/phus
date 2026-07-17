@@ -59,10 +59,10 @@ describe("BootstrapWizard", () => {
     // Model → apiKey
     stdin.write("\r");
     await wait(100);
-    expect(lastFrame()).toContain("API key environment variable");
+    expect(lastFrame()).toContain("API key");
 
-    // Type api key env var and confirm
-    stdin.write("ANTHROPIC_API_KEY");
+    // Type api key and confirm
+    stdin.write("sk-ant-api03-test");
     await wait(50);
     stdin.write("\r");
     await wait(100);
@@ -78,7 +78,7 @@ describe("BootstrapWizard", () => {
     await wait(200);
 
     expect(written.path).toBe("/tmp/.phus/phus.config.yaml");
-    expect(written.content).toContain("ANTHROPIC_API_KEY");
+    expect(written.content).toContain("apiKey: sk-ant-api03-test");
     expect(written.content).toContain("claude-sonnet-4-20250514");
   });
 
@@ -105,7 +105,7 @@ describe("BootstrapWizard", () => {
     await wait(100);
     stdin.write("\r"); // model → apiKey
     await wait(100);
-    stdin.write("ANTHROPIC_API_KEY");
+    stdin.write("sk-ant-api03-test");
     await wait(50);
     stdin.write("\r"); // apiKey → profile
     await wait(100);
