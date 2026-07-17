@@ -67,7 +67,29 @@ describe("eventToAction", () => {
     expect(a).toEqual({ type: "add_system", text: "error: boom", level: "error" });
   });
 
-  it("ignores turn_end without errorMessage", () => {
+  it("maps turn_end usage → set_assistant_metadata", () => {
+    const a = eventToAction({
+      type: "turn_end",
+      message: {
+        model: "claude-sonnet-4",
+        usage: {
+          input: 10,
+          output: 20,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 30,
+          cost: { input: 0.0003, output: 0.0009, cacheRead: 0, cacheWrite: 0, total: 0.0012 },
+        },
+      },
+    });
+    expect(a).toEqual({
+      type: "set_assistant_metadata",
+      model: "claude-sonnet-4",
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, cost: 0.0012 },
+    });
+  });
+
+  it("ignores turn_end without errorMessage or usage", () => {
     expect(eventToAction({ type: "turn_end", message: {} })).toBeNull();
   });
 

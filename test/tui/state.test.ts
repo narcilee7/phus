@@ -137,6 +137,31 @@ describe("finalize_streaming", () => {
   });
 });
 
+describe("set_assistant_metadata", () => {
+  it("attaches model and usage to the last assistant message", () => {
+    const s1 = action({ type: "append_delta", delta: "hello" });
+    const s2 = appReducer(s1, {
+      type: "set_assistant_metadata",
+      model: "claude-sonnet-4",
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, cost: 0.0012 },
+    });
+    const last = s2.items[s2.items.length - 1]!;
+    expect(last.kind).toBe("assistant");
+    expect(last.model).toBe("claude-sonnet-4");
+    expect(last.usage).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 30, cost: 0.0012 });
+  });
+
+  it("is a no-op when there is no assistant message", () => {
+    const s1 = action({ type: "add_user", text: "hi" });
+    const s2 = appReducer(s1, {
+      type: "set_assistant_metadata",
+      model: "gpt-4o",
+      usage: { totalTokens: 100 },
+    });
+    expect(s2.items).toEqual(s1.items);
+  });
+});
+
 describe("add_user / add_system / clear_items", () => {
   it("add_user appends a user item", () => {
     const s1 = action({ type: "add_user", text: "hello" });

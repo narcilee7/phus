@@ -106,4 +106,20 @@ describe("ChatItemView", () => {
     expect(lastFrame()).toContain("bash");
     expect(lastFrame()).toContain("command not found");
   });
+
+  it("renders assistant metadata when available", async () => {
+    const item: ChatItem = {
+      id: "a4",
+      kind: "assistant",
+      ts: 0,
+      text: "hello",
+      model: "claude-sonnet-4",
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, cost: 0.00123 },
+    };
+    const { lastFrame } = render(<ChatItemView item={item} />);
+    await wait();
+    expect(lastFrame()).toContain("claude-sonnet-4");
+    expect(lastFrame()).toContain("150 tokens");
+    expect(lastFrame()).toContain("$0.0012");
+  });
 });

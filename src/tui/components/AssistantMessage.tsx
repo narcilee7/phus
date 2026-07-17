@@ -7,6 +7,37 @@ import type { ChatItem } from "@/tui/state.js";
 import { truncate } from "@/tui/state.js";
 import { Markdown } from "@/tui/components/Markdown.js";
 
+function formatTokens(n: number | undefined): string | undefined {
+  if (n === undefined || Number.isNaN(n)) return undefined;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+function formatCost(n: number | undefined): string | undefined {
+  if (n === undefined || Number.isNaN(n)) return undefined;
+  if (n === 0) return "$0";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(3)}`;
+}
+
+function buildMetadataLine(item: ChatItem): string | undefined {
+  const parts: string[] = [];
+  if (item.model) parts.push(item.model);
+  if (item.usage?.totalTokens !== undefined) {
+    const tokens = formatTokens(item.usage.totalTokens);
+    parts.push(`${tokens} tokens`);
+  } else if (item.usage?.inputTokens !== undefined || item.usage?.outputTokens !== undefined) {
+    const input = formatTokens(item.usage.inputTokens) ?? "?";
+    const output = formatTokens(item.usage.outputTokens) ?? "?";
+    parts.push(`${input} / ${output} tokens`);
+  }
+  const cost = formatCost(item.usage?.cost);
+  if (cost) parts.push(cost);
+  if (parts.length === 0) return undefined;
+  return parts.join(" · ");
+}
+
 export function AssistantMessage({ item }: { item: ChatItem }) {
   const hasContent =
     (item.text ?? "").trim().length > 0 || (item.reasoning ?? "").length > 0;
@@ -31,6 +62,15 @@ export function AssistantMessage({ item }: { item: ChatItem }) {
       <Box width="100%">
         <Markdown content={item.text ?? ""} />
       </Box>
+      {(() => {
+        const meta = buildMetadataLine(item);
+        if (!meta) return null;
+        return (
+          <Box width="100%" marginTop={1}>
+            <Text dimColor>{meta}</Text>
+          </Box>
+        );
+      })()}
     </Box>
   );
 }

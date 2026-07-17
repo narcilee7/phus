@@ -6,6 +6,13 @@ export type ChatItemKind = "user" | "assistant" | "tool_call" | "tool_result" | 
 export type SystemLevel = "info" | "warn" | "error";
 export type RememberChoice = "once" | "session" | "always";
 
+export interface UsageMetadata {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cost?: number;
+}
+
 export interface ChatItem {
   id: string;
   kind: ChatItemKind;
@@ -20,6 +27,10 @@ export interface ChatItem {
   isError?: boolean;
   durationMs?: number;
   level?: SystemLevel;
+  /** Model that produced this assistant message, if known. */
+  model?: string;
+  /** Token usage / cost for this assistant message, if reported. */
+  usage?: UsageMetadata;
 }
 
 export interface ScrollState {
@@ -86,6 +97,7 @@ export type AppAction =
   | { type: "upsert_tool_call"; toolCallId: string; toolName: string; args: unknown }
   | { type: "complete_tool_call"; toolCallId: string; result: unknown; isError: boolean }
   | { type: "finalize_streaming" }
+  | { type: "set_assistant_metadata"; model?: string; usage?: UsageMetadata }
   | { type: "add_user"; text: string }
   | { type: "add_system"; text: string; level: SystemLevel }
   | { type: "set_busy"; busy: boolean }
@@ -221,6 +233,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           it.kind === "assistant" && it.isStreaming ? { ...it, isStreaming: false } : it,
         ),
       };
+    case "set_assistant_metadata": {
+      const idx = state.items.map((it) => it.kind).lastIndexOf("assistant");
+      if (idx === -1) return state;
+      const updated = [...state.items];
+      updated[idx] = { ...updated[idx]!, model: action.model, usage: action.usage };
+      return { ...state, items: updated };
+    }
     case "add_user":
       return withScrollOnNewContent({
         ...state,
