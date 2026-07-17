@@ -14,21 +14,42 @@ import tailwindcss from "@tailwindcss/vite";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const rootSrc = resolve(__dirname, "../../src");
 
+/** Vite/Rollup's `alias` option does not understand the `prefix/*` glob form
+ *  that tsconfig `paths` uses. We register the same prefixes as regex matchers
+ *  so `@root/foo` resolves to `<repo>/src/foo`. */
+function makeRootAlias(): { find: RegExp; replacement: string } {
+  return { find: /^@root\/(.*)$/, replacement: `${rootSrc}/$1` };
+}
+function makeAtAlias(abs: string): { find: RegExp; replacement: string } {
+  return { find: /^@\/(.*)$/, replacement: `${abs}/$1` };
+}
+function makeSharedAlias(): { find: RegExp; replacement: string } {
+  return { find: /^@shared\/(.*)$/, replacement: `${resolve(__dirname, "src/shared")}/$1` };
+}
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     resolve: {
-      alias: {
-        "@": resolve(__dirname, "src/main"),
-        "@shared": resolve(__dirname, "src/shared"),
-        // The Phus runtime lives in ../../src at the repo root. Main-process
-        // modules import it through this alias.
-        "@root/*": rootSrc + "/*",
-      },
+      alias: [
+        // Note: GUI main/preload code uses `@root/*` for the Phus runtime
+        // and relative paths for its own files, so no `@/` alias is needed
+        // for the GUI tree. But the Phus runtime itself (../../src/**)
+        // uses `@/...` per its tsconfig, so we register that here pointing
+        // at the repo root's src/ to keep the alias chain working.
+        makeAtAlias(rootSrc),
+        makeSharedAlias(),
+        makeRootAlias(),
+      ],
     },
     build: {
       outDir: "out/main",
+      // Main runs under Node, so all node_modules deps should be required
+      // at runtime — never bundled. This also dodges rollup chasing
+      // transitive optional peer deps (e.g. @opentelemetry/api pulled in
+      // by @mistralai/mistralai even when the user is on Anthropic).
       rollupOptions: {
+        external: [/node_modules/],
         input: { index: resolve(__dirname, "src/main/index.ts") },
       },
     },
@@ -36,9 +57,7 @@ export default defineConfig({
   preload: {
     plugins: [externalizeDepsPlugin()],
     resolve: {
-      alias: {
-        "@shared": resolve(__dirname, "src/shared"),
-      },
+      alias: [makeSharedAlias()],
     },
     build: {
       outDir: "out/preload",
@@ -50,10 +69,10 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, "src/renderer"),
     resolve: {
-      alias: {
-        "@": resolve(__dirname, "src/renderer/src"),
-        "@shared": resolve(__dirname, "src/shared"),
-      },
+      alias: [
+        makeAtAlias(resolve(__dirname, "src/renderer/src")),
+        makeSharedAlias(),
+      ],
     },
     plugins: [react(), tailwindcss()],
     build: {

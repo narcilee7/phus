@@ -15,7 +15,7 @@
     "verbatimModuleSyntax": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/main/*"],
+      "@/*": ["../../src/*"],
       "@shared/*": ["./src/shared/*"],
       "@root/*": ["../../src/*"]
     }
@@ -25,5 +25,11 @@
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
     "electron.vite.config.ts"
+  ],
+  "exclude": [
+    "../../src/tui",
+    "../../src/tui.ts",
+    "../../src/tui.tsx",
+    "../../src/**/*.test.ts"
   ]
 }
