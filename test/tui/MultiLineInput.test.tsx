@@ -6,12 +6,20 @@ import React, { useState } from "react";
 import { render } from "ink-testing-library";
 import { MultiLineInput } from "../../src/tui/components/MultiLineInput.js";
 
-const SUGGESTIONS = ["help", "clear", "quit", "models", "profiles"];
+import type { SuggestionItem } from "../../src/tui/components/MultiLineInput.js";
+
+const SUGGESTIONS: SuggestionItem[] = [
+  { name: "help", description: "show available commands" },
+  { name: "clear", description: "clear chat area" },
+  { name: "quit", description: "exit" },
+  { name: "models", description: "list known models" },
+  { name: "profiles", description: "list provider profiles" },
+];
 const MENTION_SUGGESTIONS = ["src/foo.ts", "src/bar.ts", "README.md"];
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 
 function ControlledInput(props: {
-  suggestions?: string[];
+  suggestions?: SuggestionItem[];
   mentionSuggestions?: string[];
   onSubmit?: (text: string) => void;
 }) {

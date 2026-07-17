@@ -70,7 +70,7 @@ export function InputBox({
             showHint={showHint}
             placeholder={showHint ? "type a message, Shift+Enter for newline, /help for commands, @file" : ""}
             isActive={isActive}
-            suggestions={SLASH_COMMANDS.map((c) => c.name)}
+            suggestions={SLASH_COMMANDS}
             mentionSuggestions={fileSuggestions}
           />
         </Box>

@@ -12,6 +12,11 @@ import {
 } from "@/tui/components/terminal-width.js";
 import { useBottomOverlay } from "@/tui/layout-context.js";
 
+export interface SuggestionItem {
+  name: string;
+  description?: string;
+}
+
 export interface MultiLineInputProps {
   value: string;
   onChange: (next: string) => void;
@@ -20,8 +25,8 @@ export interface MultiLineInputProps {
   showHint?: boolean;
   placeholder?: string;
   isActive?: boolean;
-  /** Command names (without leading slash) to suggest when user types "/". */
-  suggestions?: string[];
+  /** Slash commands to suggest when user types "/". */
+  suggestions?: SuggestionItem[];
   /** File paths to suggest when user types "@". */
   mentionSuggestions?: string[];
 }
@@ -110,9 +115,14 @@ export function MultiLineInput({
   const isSlashMode = value.startsWith("/") && !value.includes("\n");
   const query = isSlashMode ? value.slice(1) : "";
   const matches = isSlashMode
-    ? suggestions
-        .filter((s) => s.startsWith(query) && !s.includes(" "))
-        .sort((a, b) => a.localeCompare(b))
+    ? (() => {
+        if (!query) return suggestions;
+        const prefixMatches = suggestions.filter((s) => s.name.startsWith(query));
+        if (prefixMatches.length > 0) return prefixMatches;
+        return new Fuse(suggestions, { keys: ["name", "description"], threshold: 0.3 })
+          .search(query)
+          .map((r) => r.item);
+      })()
     : [];
   const showSuggestions = isActive && suggestionsOpen && isSlashMode && matches.length > 0;
   const suggestionStart =
@@ -254,7 +264,7 @@ export function MultiLineInput({
       }
       if (key.tab) {
         const chosen = matches[selectedSuggestion]!;
-        commitValue(`/${chosen} `);
+        commitValue(`/${chosen.name} `);
         return;
       }
       if (key.downArrow) {
@@ -271,10 +281,10 @@ export function MultiLineInput({
       }
       if (key.return) {
         const chosen = matches[selectedSuggestion]!;
-        if (chosen === query) {
+        if (chosen.name === query) {
           submit();
         } else {
-          commitValue(`/${chosen} `);
+          commitValue(`/${chosen.name} `);
         }
         return;
       }
@@ -466,14 +476,21 @@ export function MultiLineInput({
         <Box flexDirection="column" marginTop={1}>
           {visibleSuggestions.map((m, idx) => {
             const actualIndex = suggestionStart + idx;
+            const selected = actualIndex === selectedSuggestion;
+            const desc = m.description ? ` — ${m.description}` : "";
             return (
-              <Text key={m} wrap="wrap">
-                {actualIndex === selectedSuggestion ? (
+              <Text key={m.name} wrap="wrap">
+                {selected ? (
                   <Text backgroundColor="cyan" color="black">
-                    › /{m}
+                    › /{m.name}
+                    {desc}
                   </Text>
                 ) : (
-                  <Text dimColor>  /{m}</Text>
+                  <Text>
+                    <Text dimColor>  /</Text>
+                    <Text color="cyan">{m.name}</Text>
+                    <Text dimColor>{desc}</Text>
+                  </Text>
                 )}
               </Text>
             );
