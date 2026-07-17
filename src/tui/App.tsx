@@ -408,6 +408,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
             onChange={setInput}
             onSubmit={submit}
             isActive={state.permissionQueue.length === 0 && !paletteOpen && !sidebarOpen}
+            agent={agent}
             mentions={extractMentions(input)
               .filter((m) => m.type === "file")
               .map((m) => ({ path: m.target, size: 0 }))}

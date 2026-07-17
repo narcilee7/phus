@@ -15,12 +15,18 @@ const SUGGESTIONS: SuggestionItem[] = [
   { name: "models", description: "list known models" },
   { name: "profiles", description: "list provider profiles" },
 ];
-const MENTION_SUGGESTIONS = ["src/foo.ts", "src/bar.ts", "README.md"];
+import type { MentionItem } from "../../src/tui/components/MultiLineInput.js";
+
+const MENTION_SUGGESTIONS: MentionItem[] = [
+  { target: "src/foo.ts", type: "file" },
+  { target: "src/bar.ts", type: "file" },
+  { target: "README.md", type: "file" },
+];
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 
 function ControlledInput(props: {
   suggestions?: SuggestionItem[];
-  mentionSuggestions?: string[];
+  mentionSuggestions?: MentionItem[];
   onSubmit?: (text: string) => void;
 }) {
   const [value, setValue] = useState("");

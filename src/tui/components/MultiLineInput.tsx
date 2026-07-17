@@ -17,6 +17,12 @@ export interface SuggestionItem {
   description?: string;
 }
 
+export interface MentionItem {
+  target: string;
+  type: "file" | "skill" | "session";
+  label?: string;
+}
+
 export interface MultiLineInputProps {
   value: string;
   onChange: (next: string) => void;
@@ -27,8 +33,8 @@ export interface MultiLineInputProps {
   isActive?: boolean;
   /** Slash commands to suggest when user types "/". */
   suggestions?: SuggestionItem[];
-  /** File paths to suggest when user types "@". */
-  mentionSuggestions?: string[];
+  /** Items to suggest when user types "@". */
+  mentionSuggestions?: MentionItem[];
 }
 
 interface Cursor {
@@ -133,7 +139,7 @@ export function MultiLineInput({
 
   const mentionState = findMentionState(value, cursor);
   const mentionMatches = mentionState && mentionSuggestions.length > 0
-    ? new Fuse(mentionSuggestions, { threshold: 0.4 })
+    ? new Fuse(mentionSuggestions, { keys: ["target", "label"], threshold: 0.4 })
         .search(mentionState.query)
         .map((r) => r.item)
     : [];
@@ -243,8 +249,11 @@ export function MultiLineInput({
         const line = lines[mentionState.lineIndex]!;
         const before = line.slice(0, mentionState.atIndex);
         const after = line.slice(cursor.col);
-        lines[mentionState.lineIndex] = `${before}@${chosen} ${after}`;
-        commit(lines.join("\n"), { line: mentionState.lineIndex, col: before.length + chosen.length + 2 });
+        lines[mentionState.lineIndex] = `${before}@${chosen.target} ${after}`;
+        commit(lines.join("\n"), {
+          line: mentionState.lineIndex,
+          col: before.length + chosen.target.length + 2,
+        });
         return;
       }
       if (key.downArrow) {
@@ -502,14 +511,21 @@ export function MultiLineInput({
         <Box flexDirection="column" marginTop={1}>
           {visibleMentions.map((m, idx) => {
             const actualIndex = mentionStart + idx;
+            const selected = actualIndex === selectedMention;
+            const icon = m.type === "file" ? "📄" : m.type === "skill" ? "🔧" : "💬";
+            const label = m.label ?? m.target;
+            const prefix = m.type === "skill" ? "@skill/" : m.type === "session" ? "@session/" : "@";
             return (
-              <Text key={m} wrap="wrap">
-                {actualIndex === selectedMention ? (
+              <Text key={`${m.type}-${m.target}`} wrap="wrap">
+                {selected ? (
                   <Text backgroundColor="cyan" color="black">
-                    › @{m}
+                    › {icon} {prefix}{label}
                   </Text>
                 ) : (
-                  <Text dimColor>  @{m}</Text>
+                  <Text>
+                    <Text dimColor>  {icon} </Text>
+                    <Text color="cyan">{prefix}{label}</Text>
+                  </Text>
                 )}
               </Text>
             );
