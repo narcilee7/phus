@@ -10,18 +10,27 @@ import { Type } from "@mariozechner/pi-ai";
 import type { MetaTool } from "@/types/tool.js";
 import { asSessionId, type SessionId } from "@/types/brand.js";
 import type { Tape } from "@/core/session/tape.js";
-import type { MemoryStore, MemoryAction } from "@/infra/memory/index.js";
+import {
+  MEMORY_CATEGORIES,
+  MEMORY_AUTHORITIES,
+  type MemoryStore,
+  type MemoryAction,
+} from "@/infra/memory/index.js";
 
 const actionSchema = Type.Union([
   Type.Object({
     kind: Type.Literal("append"),
     section: Type.String({ description: "Section heading, e.g. 'Style' or '## Style'. Created if missing." }),
     body: Type.String({ description: "Markdown body to append under the section." }),
+    category: Type.Optional(Type.String({ description: "§A Memory category: facts|preferences|decisions|failures|procedures|tools|style|notes. Inferred from heading when omitted." })),
+    authority: Type.Optional(Type.String({ description: "Who asserted this: user|system|agent|tape. Defaults to agent." })),
   }),
   Type.Object({
     kind: Type.Literal("replace"),
     section: Type.String({ description: "Section heading to replace in full." }),
     body: Type.String({ description: "New body for the section." }),
+    category: Type.Optional(Type.String()),
+    authority: Type.Optional(Type.String()),
   }),
   Type.Object({
     kind: Type.Literal("delete"),
@@ -50,18 +59,38 @@ export function parseMemoryAction(raw: unknown): MemoryAction {
   const kind = a.kind;
   const section = typeof a.section === "string" ? a.section.trim() : "";
   if (!section) throw new Error("memory_write: action.section is required");
+  const category = parseEnumField(a.category, "category", MEMORY_CATEGORIES);
+  const authority = parseEnumField(a.authority, "authority", MEMORY_AUTHORITIES);
   switch (kind) {
     case "append":
     case "replace": {
       const body = typeof a.body === "string" ? a.body : "";
       if (!body.trim()) throw new Error(`memory_write: action.body is required for ${kind}`);
-      return { kind, section, body };
+      return {
+        kind,
+        section,
+        body,
+        ...(category ? { category } : {}),
+        ...(authority ? { authority } : {}),
+      };
     }
     case "delete":
       return { kind, section };
     default:
       throw new Error(`memory_write: unknown action.kind "${String(kind)}"`);
   }
+}
+
+function parseEnumField<T extends string>(
+  raw: unknown,
+  field: string,
+  allowed: ReadonlyArray<T>,
+): T | undefined {
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  if (!(allowed as readonly string[]).includes(raw)) {
+    throw new Error(`memory_write: invalid ${field} "${raw}" — expected one of: ${allowed.join(", ")}`);
+  }
+  return raw as T;
 }
 
 export function defineMemoryMetaTools(deps: {
@@ -129,6 +158,8 @@ export function defineMemoryMetaTools(deps: {
           // is responsible for the user-facing approve/deny gate, and at the
           // point this executes the user already said yes (or the gate is yolo).
           autonomyDecision: "auto" as const,
+          category: action.kind === "delete" ? undefined : action.category,
+          authority: action.kind === "delete" ? undefined : action.authority,
           ts: Date.now(),
         };
         try {

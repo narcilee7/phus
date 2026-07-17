@@ -75,7 +75,9 @@ export type MemoryWriteAction = {
 
 /** Emitted every time the agent mutates project memory. The `diff` is
  *  a short unified-diff so `phus logs` / self-reflection can replay
- *  the change without re-reading phus.md. */
+ *  the change without re-reading phus.md. `category` and `authority`
+ *  are §A Memory OS provenance fields — when present they let
+ *  `phus trace` show "who asserted this and how" without re-parsing. */
 export type TapeMemoryWriteEntry = {
   kind: "memory_write";
   sessionId: SessionId;
@@ -83,6 +85,8 @@ export type TapeMemoryWriteEntry = {
   reason: string;
   diff: string;
   autonomyDecision: "auto" | "approve";
+  category?: string;
+  authority?: string;
   ts: number;
 };
 
