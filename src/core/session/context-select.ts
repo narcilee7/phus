@@ -8,6 +8,7 @@
 
 import type { Tape } from "@/core/session/tape.js";
 import type { Turn } from "@/types/tape/index.js";
+import { type RepoFileIndex, type ScoredFile } from "./repo-file-index.js";
 
 export interface SelectOptions {
   /** Max turns to include in result. Default 10. */
@@ -105,4 +106,22 @@ export function selectRelevantTurns(
   });
 
   return scored.slice(0, opts.budget).map((s) => s.turn);
+}
+
+export interface FileSelectOptions {
+  /** Max files to return. Default 10. */
+  budget: number;
+}
+
+/**
+ * Pick the most relevant files for a query against an indexed repo.
+ * Thin wrapper over `RepoFileIndex.search` that keeps the context-select
+ * surface narrow and easy to mock in tests.
+ */
+export function selectRelevantFiles(
+  index: RepoFileIndex,
+  query: string,
+  opts: FileSelectOptions = { budget: 10 },
+): ScoredFile[] {
+  return index.search(query, opts.budget);
 }

@@ -52,6 +52,7 @@ import { extractText } from "@/bridge/text.js";
 import { resolveApiKey } from "@/bridge/model-resolver.js";
 import { registerDefaultHooks } from "@/bridge/default-hooks.js";
 import { buildContextBlock } from "@/bridge/prompt-assembly.js";
+import { RepoFileIndex } from "@/core/session/repo-file-index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
 import { HookRegistry } from "@/core/runtime/hook/registry";
 import { Executor } from "@/core/runtime/executor";
@@ -85,6 +86,9 @@ export interface PhusAgentDeps {
   memoryStore: MemoryStore;
   /** Autonomy gate consulted by the TUI permission handler. */
   autonomyGate: AutonomyGate;
+  /** Optional repo file index — when wired, the system prompt lists the
+   *  most relevant files for the current query. Defaults to cwd when omitted. */
+  repoIndex?: RepoFileIndex;
   /** Override for the auto-compaction threshold. */
   autoCompact?: AutoCompactConfig;
   /** SQLite-backed plan store. If omitted, an in-memory store is used. */
@@ -308,6 +312,7 @@ export class PhusAgent implements PhusAgentFacade {
   readonly skills: SkillRegistry;
   readonly memoryStore: MemoryStore;
   readonly autonomyGate: AutonomyGate;
+  readonly repoIndex?: RepoFileIndex;
   readonly policy: readonly PolicyRule[];
   readonly profile: ProviderProfile;
   readonly mesh: MeshLike;
@@ -334,6 +339,7 @@ export class PhusAgent implements PhusAgentFacade {
     this.skills = deps.skills;
     this.memoryStore = deps.memoryStore;
     this.autonomyGate = deps.autonomyGate;
+    this.repoIndex = deps.repoIndex;
     this.policy = deps.policy;
     this.profile = deps.profile;
     this.mesh = deps.mesh;
@@ -407,6 +413,7 @@ export class PhusAgent implements PhusAgentFacade {
       skills: this.skills,
       memoryStore: this.memoryStore,
       tape: this.tape,
+      planStore: this.planStore,
     });
     this.planRunner.setEvolutionEngine(this.evolutionEngine);
 
@@ -541,6 +548,7 @@ export class PhusAgent implements PhusAgentFacade {
       getContextWindow: () => this.piAgent.state.model.contextWindow,
       getCurrentSessionId: () => this.currentSessionId,
       setSystemPrompt: (prompt) => { this.piAgent.state.systemPrompt = prompt; },
+      repoIndex: this.repoIndex,
     });
   }
 

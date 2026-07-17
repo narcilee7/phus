@@ -87,4 +87,68 @@ describe("PlanStore", () => {
     store.delete(plan.id);
     expect(store.load(plan.id)).toBeUndefined();
   });
+
+  describe("validation_attempts", () => {
+    function metrics(over: Partial<{ failures: number; stepCount: number; status: "completed" | "failed" }> = {}) {
+      return {
+        stepCount: over.stepCount ?? 3,
+        failures: over.failures ?? 0,
+        durationMs: 10,
+        status: over.status ?? "completed",
+        recordedAt: Date.now(),
+      };
+    }
+
+    it("records attempts and returns history newest first", () => {
+      store = new PlanStore(":memory:");
+      store.recordValidationAttempt("draft-a", "baseline", metrics(), "first", "session-1");
+      store.recordValidationAttempt("draft-a", "improved", metrics({ failures: 0, stepCount: 2 }), "second", "session-2");
+
+      const history = store.getValidationHistory("draft-a");
+      expect(history).toHaveLength(2);
+      expect(history[0]?.outcome).toBe("improved");
+      expect(history[1]?.outcome).toBe("baseline");
+      expect(history[0]?.sessionId).toBe("session-2");
+    });
+
+    it("aggregates stats and tracks last improvement timestamp", () => {
+      store = new PlanStore(":memory:");
+      store.recordValidationAttempt("draft-b", "baseline", metrics(), "b", "s");
+      store.recordValidationAttempt("draft-b", "failed", metrics({ failures: 2 }), "f", "s");
+      store.recordValidationAttempt("draft-b", "improved", metrics({ failures: 0 }), "i", "s");
+      store.recordValidationAttempt("draft-b", "pending", metrics(), "p", "s");
+
+      const stats = store.getValidationStats("draft-b");
+      expect(stats.total).toBe(4);
+      expect(stats.improved).toBe(1);
+      expect(stats.failed).toBe(1);
+      expect(stats.baseline).toBe(1);
+      expect(stats.pending).toBe(1);
+      expect(typeof stats.lastImprovedAt).toBe("number");
+    });
+
+    it("hasImprovedAtLeastOnce returns true after enough improvements", () => {
+      store = new PlanStore(":memory:");
+      store.recordValidationAttempt("draft-c", "improved", metrics(), "i", "s");
+
+      expect(store.hasImprovedAtLeastOnce("draft-c", 1)).toBe(true);
+      expect(store.hasImprovedAtLeastOnce("draft-c", 2)).toBe(false);
+      expect(store.hasImprovedAtLeastOnce("draft-missing")).toBe(false);
+    });
+
+    it("ignores malformed rows when reading history", () => {
+      store = new PlanStore(":memory:");
+      store.recordValidationAttempt("draft-d", "failed", metrics(), "ok", "s");
+      // Inject a row with a broken metrics payload to exercise the parse path.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (store as any).db.prepare(
+        "INSERT INTO validation_attempts (draft_name, outcome, metrics, reason, session_id, ts) VALUES (?, ?, ?, ?, ?, ?)",
+      ).run("draft-d", "failed", "{not-json", "bad", "s", Date.now());
+
+      const history = store.getValidationHistory("draft-d");
+      // Only the well-formed rows survive the filter.
+      expect(history.length).toBeGreaterThanOrEqual(1);
+      expect(history.every((h) => h.metrics.stepCount >= 0)).toBe(true);
+    });
+  });
 });
