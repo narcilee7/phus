@@ -1,13 +1,69 @@
 #Requires -Version 5.1
-# Invoke-WebRequest -Uri https://phus.dev/install.ps1 | Invoke-Expression
+# Install Phus from GitHub Releases or source.
+# Usage:
+#   Invoke-WebRequest -Uri https://phus.dev/install.ps1 | Invoke-Expression
+#   $env:PHUS_VERSION="0.2.0"; Invoke-WebRequest -Uri https://phus.dev/install.ps1 | Invoke-Expression
+#   $env:PHUS_SOURCE="1"; Invoke-WebRequest -Uri https://phus.dev/install.ps1 | Invoke-Expression
+
 $ErrorActionPreference = "Stop"
 
-$PhusVersion = $env:PHUS_VERSION, "main" | Select-Object -First 1
+$PhusVersion = $env:PHUS_VERSION, "latest" | Select-Object -First 1
 $PhusHome = $env:PHUS_HOME, (Join-Path $env:LOCALAPPDATA "phus") | Select-Object -First 1
+$PhusSource = $env:PHUS_SOURCE, "0" | Select-Object -First 1
 $RepoUrl = $env:PHUS_REPO, "https://github.com/phus/phus.git" | Select-Object -First 1
+$GitHubRepo = $env:PHUS_GITHUB_REPO, "phus/phus" | Select-Object -First 1
 
 function Log { param([string]$Message) Write-Host "[phus-install] $Message" }
 function Warn { param([string]$Message) Write-Warning "[phus-install] $Message" }
+
+function Resolve-Version {
+  param([string]$Version)
+  if ($Version -eq "latest") {
+    $url = "https://api.github.com/repos/$GitHubRepo/releases/latest"
+    try {
+      $release = Invoke-RestMethod -Uri $url -UseBasicParsing
+      return $release.tag_name -replace '^v',''
+    } catch {
+      Warn "Could not resolve latest release"
+      return $null
+    }
+  }
+  return $Version
+}
+
+function Install-FromRelease {
+  param([string]$Version)
+  $resolved = Resolve-Version $Version
+  if (-not $resolved) { return $false }
+
+  $tag = "v$resolved"
+  $asset = "phus-$resolved.tar.gz"
+  $url = "https://github.com/$GitHubRepo/releases/download/$tag/$asset"
+  $tarball = Join-Path $PhusHome "phus.tar.gz"
+
+  Log "Downloading Phus $tag from GitHub Releases..."
+  New-Item -ItemType Directory -Force -Path $PhusHome | Out-Null
+  Invoke-WebRequest -Uri $url -OutFile $tarball -UseBasicParsing
+
+  Log "Extracting..."
+  Remove-Item -Recurse -Force (Join-Path $PhusHome "dist") -ErrorAction SilentlyContinue
+  Remove-Item -Force (Join-Path $PhusHome "package.json") -ErrorAction SilentlyContinue
+  Remove-Item -Force (Join-Path $PhusHome "pnpm-lock.yaml") -ErrorAction SilentlyContinue
+
+  tar -xzf $tarball -C $PhusHome --strip-components=1
+  Remove-Item $tarball -ErrorAction SilentlyContinue
+
+  if (Test-Path (Join-Path $PhusHome "package.json")) {
+    Ensure-Node
+    Ensure-pnpm
+    Log "Installing native dependencies..."
+    Push-Location $PhusHome
+    try { pnpm install --frozen-lockfile --prod } finally { Pop-Location }
+  }
+
+  Log "Phus $tag installed at $PhusHome"
+  return $true
+}
 
 function Ensure-Node {
   $node = Get-Command node -ErrorAction SilentlyContinue
@@ -29,7 +85,7 @@ function Ensure-Node {
   } else {
     $arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
     $installer = "$env:TEMP\node-v20.18.0-$arch.msi"
-    Invoke-WebRequest -Uri "https://nodejs.org/dist/v20.18.0/node-v20.18.0-$arch.msi" -OutFile $installer
+    Invoke-WebRequest -Uri "https://nodejs.org/dist/v20.18.0/node-v20.18.0-$arch.msi" -OutFile $installer -UseBasicParsing
     Start-Process msiexec.exe -ArgumentList "/i","`"$installer`"","/quiet","/norestart" -Wait
     Remove-Item $installer -ErrorAction SilentlyContinue
   }
@@ -58,17 +114,20 @@ function Ensure-pnpm {
   }
 }
 
-function Install-Phus {
+function Install-FromSource {
   param([string]$InstallDir)
+  Ensure-Node
+  Ensure-pnpm
+
   if (Test-Path (Join-Path $InstallDir ".git")) {
-    Log "Existing repo at $InstallDir; pulling $PhusVersion..."
+    Log "Existing repo at $InstallDir; pulling..."
     git -C $InstallDir fetch origin
-    git -C $InstallDir checkout $PhusVersion
-    git -C $InstallDir pull origin $PhusVersion
+    git -C $InstallDir checkout main
+    git -C $InstallDir pull origin main
   } else {
     Log "Cloning Phus into $InstallDir..."
     if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
-    git clone --depth 1 --branch $PhusVersion $RepoUrl $InstallDir
+    git clone --depth 1 $RepoUrl $InstallDir
   }
 
   Log "Installing dependencies..."
@@ -78,6 +137,16 @@ function Install-Phus {
   Log "Building..."
   Push-Location $InstallDir
   try { pnpm build } finally { Pop-Location }
+
+  # Link dist to PHUS_HOME for consistency with release install.
+  $distLink = Join-Path $PhusHome "dist"
+  $pkgLink = Join-Path $PhusHome "package.json"
+  if (Test-Path $distLink) { Remove-Item $distLink -Force }
+  if (Test-Path $pkgLink) { Remove-Item $pkgLink -Force }
+  New-Item -ItemType SymbolicLink -Path $distLink -Target (Join-Path $InstallDir "dist") | Out-Null
+  New-Item -ItemType SymbolicLink -Path $pkgLink -Target (Join-Path $InstallDir "package.json") | Out-Null
+
+  Log "Phus (source) installed at $InstallDir"
 }
 
 function Add-ToPath {
@@ -91,16 +160,21 @@ function Add-ToPath {
 }
 
 Log "PHUS_HOME=$PhusHome"
-Ensure-Node
-Ensure-pnpm
+Log "Requested version: $PhusVersion"
 
-$InstallDir = Join-Path $PhusHome "repo"
-Install-Phus -InstallDir $InstallDir
-
-Log "Creating Phus home directories..."
 New-Item -ItemType Directory -Force -Path (Join-Path $PhusHome "skills") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $PhusHome "plugins") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $PhusHome "logs") | Out-Null
+
+if ($PhusSource -eq "1") {
+  Install-FromSource -InstallDir (Join-Path $PhusHome "repo")
+} else {
+  $ok = Install-FromRelease -Version $PhusVersion
+  if (-not $ok) {
+    Log "Falling back to source install..."
+    Install-FromSource -InstallDir (Join-Path $PhusHome "repo")
+  }
+}
 
 $BinDir = Join-Path $PhusHome "dist"
 Add-ToPath -Dir $BinDir

@@ -1,10 +1,22 @@
 {
   "name": "phus",
   "version": "0.1.0",
-  "description": "",
+  "description": "Self-evolving agent runtime. Push the stone up the mountain.",
   "main": "dist/phus.mjs",
   "directories": {
     "doc": "docs"
+  },
+  "files": [
+    "dist",
+    "scripts/install.sh",
+    "scripts/install.ps1",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+    "phus.config.example.yaml"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown && tsc --emitDeclarationOnly --declaration --outDir dist",

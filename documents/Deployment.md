@@ -20,12 +20,17 @@ curl -fsSL https://phus.dev/install.sh | bash
 
 This will:
 
-- Install Node.js 20+ if missing (via fnm/nvm, Homebrew, or official tarball).
-- Install pnpm if missing.
-- Clone `https://github.com/phus/phus.git` into `$PHUS_HOME/repo` (default `$HOME/.phus/repo`).
-- Run `pnpm install` and `pnpm build`.
+- Download the latest Phus release from GitHub Releases (or build from source if unavailable).
+- Install Node.js 20+ and pnpm only when a source build is needed.
+- Extract the release into `$PHUS_HOME` (default `$HOME/.phus`).
 - Create `$PHUS_HOME/skills`, `$PHUS_HOME/plugins`, and `$PHUS_HOME/logs`.
 - Symlink `phus` to a directory on your PATH when possible.
+
+To force a source build instead, set `PHUS_SOURCE=1`:
+
+```bash
+PHUS_SOURCE=1 curl -fsSL https://phus.dev/install.sh | bash
+```
 
 On Windows, use PowerShell:
 
@@ -506,6 +511,49 @@ channels:
 ```
 
 The channel tracks seen UIDs in memory, so restarts will re-process recent messages. Use a dedicated inbox for Phus to avoid loops.
+
+---
+
+## Release process
+
+Phus releases are automated via GitHub Actions. To publish a new release:
+
+```bash
+# Bump patch version, update CHANGELOG, commit, tag, and push
+./scripts/release.sh patch
+
+# Or bump minor/major, or specify an exact version
+./scripts/release.sh minor
+./scripts/release.sh 0.3.0
+```
+
+This creates a git tag like `v0.1.1`. The `release` workflow then:
+
+1. Runs the full CI suite.
+2. Publishes `phus` to npm with the appropriate dist-tag (`latest`, `beta`, or `alpha`).
+3. Creates a GitHub Release with auto-generated notes and a pre-built tarball.
+4. Builds and pushes Docker images to `ghcr.io/phus/phus`.
+
+### Release channels
+
+| Tag pattern | npm dist-tag | Docker tag |
+|---|---|---|
+| `v0.1.0` | `latest` | `latest`, `0.1.0` |
+| `v0.2.0-beta.1` | `beta` | `beta` |
+| `v0.2.0-alpha.1` | `alpha` | `alpha` |
+
+### Required secrets
+
+Configure these in the GitHub repository settings:
+
+- `NPM_TOKEN` — npm publish token
+- `GITHUB_TOKEN` — provided automatically; used for GitHub Releases and GHCR login
+
+### Installing a specific release
+
+```bash
+PHUS_VERSION=0.1.0 curl -fsSL https://phus.dev/install.sh | bash
+```
 
 ---
 

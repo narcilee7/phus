@@ -1,12 +1,20 @@
 #!/bin/bash
-# curl -fsSL https://phus.dev/install.sh | bash
+# Install Phus from GitHub Releases or source.
+# Usage:
+#   curl -fsSL https://phus.dev/install.sh | bash
+#   PHUS_VERSION=0.2.0 curl -fsSL https://phus.dev/install.sh | bash
+#   PHUS_SOURCE=1 curl -fsSL https://phus.dev/install.sh | bash
+
 set -e
 
-PHUS_VERSION="${PHUS_VERSION:-main}"
+PHUS_VERSION="${PHUS_VERSION:-latest}"
 PHUS_HOME="${PHUS_HOME:-$HOME/.phus}"
+PHUS_SOURCE="${PHUS_SOURCE:-0}"
 REPO_URL="${PHUS_REPO:-https://github.com/phus/phus.git}"
+GITHUB_REPO="${PHUS_GITHUB_REPO:-phus/phus}"
 
 OS="unknown"
+ARCH="$(uname -m)"
 case "$(uname -s)" in
   Linux*)     OS="linux";;
   Darwin*)    OS="macos";;
@@ -14,11 +22,101 @@ case "$(uname -s)" in
 esac
 
 if [[ "$OS" == "linux" ]] && grep -qi microsoft /proc/version 2>/dev/null; then
-  OS="wsl"
+  OS="linux"
 fi
 
 log() { echo "[phus-install] $*"; }
 warn() { echo "[phus-install] WARNING: $*" >&2; }
+
+# Resolve "latest" to an actual version via GitHub Releases API.
+resolve_version() {
+  local version="$1"
+  if [ "$version" = "latest" ]; then
+    local url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+    local resolved
+    resolved=$(curl -fsSL "$url" | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
+    if [ -z "$resolved" ]; then
+      warn "Could not resolve latest release; falling back to source install"
+      echo ""
+      return 1
+    fi
+    echo "$resolved"
+  else
+    echo "$version"
+  fi
+}
+
+# Download pre-built release tarball from GitHub Releases.
+install_from_release() {
+  local version="$1"
+  local resolved
+  resolved=$(resolve_version "$version") || return 1
+
+  local tag="v${resolved}"
+  local asset="phus-${resolved}.tar.gz"
+  local url="https://github.com/${GITHUB_REPO}/releases/download/${tag}/${asset}"
+  local install_dir="$PHUS_HOME"
+
+  log "Downloading Phus $tag from GitHub Releases..."
+  mkdir -p "$install_dir"
+  curl -fsSL "$url" -o "$install_dir/phus.tar.gz"
+
+  log "Extracting..."
+  rm -rf "$install_dir/dist" "$install_dir/package.json" "$install_dir/pnpm-lock.yaml"
+  tar -xzf "$install_dir/phus.tar.gz" -C "$install_dir" --strip-components=1
+  rm -f "$install_dir/phus.tar.gz"
+
+  # Rebuild native deps if needed (better-sqlite3).
+  if [ -f "$install_dir/package.json" ]; then
+    ensure_node
+    ensure_pnpm
+    log "Installing native dependencies..."
+    (
+      cd "$install_dir"
+      pnpm install --frozen-lockfile --prod
+    )
+  fi
+
+  log "Phus $tag installed at $install_dir"
+  return 0
+}
+
+# Fallback: clone from source and build.
+install_from_source() {
+  local install_dir="$PHUS_HOME/repo"
+
+  ensure_node
+  ensure_pnpm
+
+  if [ -d "$install_dir/.git" ]; then
+    log "Existing repo at $install_dir; pulling..."
+    git -C "$install_dir" fetch origin
+    git -C "$install_dir" checkout main
+    git -C "$install_dir" pull origin main || true
+  else
+    log "Cloning Phus into $install_dir..."
+    rm -rf "$install_dir"
+    git clone --depth 1 "$REPO_URL" "$install_dir"
+  fi
+
+  log "Installing dependencies..."
+  (
+    cd "$install_dir"
+    pnpm install
+  )
+
+  log "Building..."
+  (
+    cd "$install_dir"
+    pnpm build
+  )
+
+  # Link dist to PHUS_HOME for consistency with release install.
+  ln -sfn "$install_dir/dist" "$PHUS_HOME/dist"
+  ln -sfn "$install_dir/package.json" "$PHUS_HOME/package.json"
+
+  log "Phus (source) installed at $install_dir"
+}
 
 ensure_node() {
   if command -v node >/dev/null 2>&1; then
@@ -46,9 +144,7 @@ ensure_node() {
       export PATH="/usr/local/opt/node@20/bin:$PATH"
     fi
   else
-    local arch
-    arch="$(uname -m)"
-    local node_tar="node-v20.18.0-${OS}-${arch}.tar.xz"
+    local node_tar="node-v20.18.0-${OS}-${ARCH}.tar.xz"
     local node_url="https://nodejs.org/dist/v20.18.0/${node_tar}"
     local tmpdir
     tmpdir="$(mktemp -d)"
@@ -86,32 +182,6 @@ ensure_pnpm() {
   fi
 }
 
-install_phus() {
-  local install_dir="$1"
-  if [ -d "$install_dir/.git" ]; then
-    log "Existing repo at $install_dir; pulling $PHUS_VERSION..."
-    git -C "$install_dir" fetch origin
-    git -C "$install_dir" checkout "$PHUS_VERSION"
-    git -C "$install_dir" pull origin "$PHUS_VERSION" || true
-  else
-    log "Cloning Phus into $install_dir..."
-    rm -rf "$install_dir"
-    git clone --depth 1 --branch "$PHUS_VERSION" "$REPO_URL" "$install_dir"
-  fi
-
-  log "Installing dependencies..."
-  (
-    cd "$install_dir"
-    pnpm install
-  )
-
-  log "Building..."
-  (
-    cd "$install_dir"
-    pnpm build
-  )
-}
-
 symlink_bin() {
   local target="$PHUS_HOME/dist/phus.mjs"
   if [ ! -f "$target" ]; then
@@ -138,16 +208,18 @@ symlink_bin() {
 main() {
   log "Detected OS: $OS"
   log "PHUS_HOME=$PHUS_HOME"
+  log "Requested version: $PHUS_VERSION"
 
-  ensure_node
-  ensure_pnpm
-
-  local install_dir
-  install_dir="$PHUS_HOME/repo"
-  install_phus "$install_dir"
-
-  log "Creating Phus home directories..."
   mkdir -p "$PHUS_HOME/skills" "$PHUS_HOME/plugins" "$PHUS_HOME/logs"
+
+  if [ "$PHUS_SOURCE" = "1" ]; then
+    install_from_source
+  else
+    if ! install_from_release "$PHUS_VERSION"; then
+      log "Falling back to source install..."
+      install_from_source
+    fi
+  fi
 
   if ! symlink_bin; then
     echo ""

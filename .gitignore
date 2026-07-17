@@ -146,6 +146,8 @@ vite.config.ts.timestamp-*
 docs
 
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
 # Test/coverage
 coverage
