@@ -13,6 +13,11 @@ FROM node:20-alpine AS builder
 # ERR_UNKNOWN_BUILTIN_MODULE before the build ever starts.
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
+# better-sqlite3 v12 has no prebuilt that matches Alpine's musl libc, so
+# pnpm falls back to compiling from source via node-gyp. Alpine ships
+# without python / make / g++ by default, hence `apk add` before install.
+RUN apk add --no-cache python3 make g++ musl-dev
+
 WORKDIR /app
 
 # Install all deps (including dev) so we can build.
@@ -30,6 +35,11 @@ FROM node:20-alpine AS runtime
 # Install pnpm for runtime dependency installation.
 # Same version pin as the builder stage — see note above.
 RUN corepack enable && corepack prepare pnpm@9 --activate
+
+# Runtime also needs to compile better-sqlite3 from source (no musl prebuild
+# for the alpine image). Keep the toolchain available so the prod install
+# doesn't fail with `Could not find any Python installation to use`.
+RUN apk add --no-cache python3 make g++ musl-dev
 
 WORKDIR /app
 
