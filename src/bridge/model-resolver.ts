@@ -9,9 +9,17 @@ function providerApiKeyEnvVar(provider: string): string {
   return `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
 }
 
+export interface ModelResolution {
+  model: Model<any>;
+  /** If set, the API key could not be found; value is the env var the user should set. */
+  missingKey?: string;
+}
+
 /** Build a Pi-compatible `Model` from the active profile, also setting
- *  any `<PROVIDER>_API_KEY` env var so Pi's transport picks it up. */
-export function resolveModel(): Model<any> {
+ *  any `<PROVIDER>_API_KEY` env var so Pi's transport picks it up.
+ *  Does NOT throw when the key is missing; callers that need a hard
+ *  failure should check `missingKey` or use `resolveModel()`. */
+export function resolveModelSafe(): ModelResolution {
   const profileName = loadConfig().profileName;
   const profile = resolveProfile(profileName);
   const model = modelFromProfile(profile);
@@ -22,12 +30,26 @@ export function resolveModel(): Model<any> {
     if (provider) {
       process.env[providerApiKeyEnvVar(provider)] ??= key;
     }
-    return model;
+    return { model };
   }
 
-  // No key found: build a helpful message based on how the profile is configured.
   const provider = profile.provider;
-  const envVar = provider ? providerApiKeyEnvVar(provider) : "<PROVIDER>_API_KEY";
+  const missingKey = profile.apiKeyEnv
+    ? profile.apiKeyEnv
+    : provider
+      ? providerApiKeyEnvVar(provider)
+      : "<PROVIDER>_API_KEY";
+  return { model, missingKey };
+}
+
+/** Build a Pi-compatible `Model` from the active profile. Throws a
+ *  helpful error if no API key is configured. */
+export function resolveModel(): Model<any> {
+  const { model, missingKey } = resolveModelSafe();
+  if (!missingKey) return model;
+
+  const profileName = loadConfig().profileName;
+  const profile = resolveProfile(profileName);
   if (profile.apiKeyEnv) {
     throw new Error(
       `Profile "${profileName}" reads its API key from the environment variable "${profile.apiKeyEnv}", ` +
@@ -39,7 +61,7 @@ export function resolveModel(): Model<any> {
   }
   throw new Error(
     `Profile "${profileName}" has no API key. Set the environment variable:\n` +
-      `  export ${envVar}=<your-key>\n` +
+      `  export ${missingKey}=<your-key>\n` +
       `or write the key directly in phus.config.yaml (less secure):\n` +
       `  apiKey: <your-key>`,
   );

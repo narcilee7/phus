@@ -17,6 +17,7 @@ import { initInternalCommands } from "@/core/runtime/internal-commands/index.js"
 import { channelStatuses, collectChannels } from "@/commands/channels.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import type { Schedule } from "@/types/scheduler/index.js";
+import { resolveProfile, apiKeyForProfile } from "@/infra/profile.js";
 
 export function registerGatewayCommand(program: Command): void {
   program
@@ -31,6 +32,22 @@ export function registerGatewayCommand(program: Command): void {
     .action(async (opts: { telegram?: boolean; websocket?: string; sse?: string; slack?: boolean; email?: boolean; whatsapp?: boolean }) => {
       const mode = bootstrap();
       const config = loadConfig();
+
+      const profileName = config.profileName;
+      const profile = resolveProfile(profileName, config.providers);
+      if (!apiKeyForProfile(profile)) {
+        const envVar = profile.apiKeyEnv
+          ? profile.apiKeyEnv
+          : `${profile.provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+        // eslint-disable-next-line no-console
+        console.error(
+          `No API key configured for profile "${profileName}".\n` +
+            `Run \`phus setup\` to configure a provider and key, or set:\n` +
+            `  export ${envVar}=<your-key>`,
+        );
+        process.exit(1);
+      }
+
       const handle = await PhusAgent.create({ config });
       const channels = await collectChannels(handle.internals, opts, config.channels);
 

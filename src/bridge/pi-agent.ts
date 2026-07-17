@@ -433,8 +433,24 @@ export class PhusAgent implements PhusAgentFacade {
     }
   }
 
+  /** Throw a friendly error if the active profile has no API key. */
+  assertModelReady(): void {
+    const key = apiKeyForProfile(this.profile);
+    if (key) return;
+
+    const envVar = this.profile.apiKeyEnv
+      ? this.profile.apiKeyEnv
+      : `${this.profile.provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+    throw new Error(
+      `No API key configured for profile "${this.profile.name}".\n` +
+        `Run \`phus setup\` to configure a provider and key, or set:\n` +
+        `  export ${envVar}=<your-key>`,
+    );
+  }
+
   /** Run one inbound envelope through the Bub hook chain. */
   async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
+    this.assertModelReady();
     const startedAt = Date.now();
     let sessionId: SessionId | undefined;
 
@@ -1005,7 +1021,10 @@ export class PhusAgent implements PhusAgentFacade {
    *  a `PhusAgentHandle` containing the agent plus a `dispose()`
    *  for clean shutdown. Replaces `new PhusAgent()` for all new code. */
   static async create(opts: import("@/bridge/default-deps.js").DefaultDepsOptions = {}): Promise<import("@/bridge/lifecycle.js").PhusAgentHandle> {
-    const deps = (await import("@/bridge/default-deps.js")).buildDefaultPhusAgentDeps(opts);
+    const deps = (await import("@/bridge/default-deps.js")).buildDefaultPhusAgentDeps({
+      allowMissingKey: true,
+      ...opts,
+    });
     return (await import("@/bridge/lifecycle.js")).createPhusAgent(deps);
   }
 }

@@ -17,14 +17,13 @@ import { PiSteeringInbox } from "@/core/runtime/steering.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
 import { buildMesh } from "@/core/llm/provider-mesh/index.js";
 import { logger } from "@/infra/logging.js";
-import { resolveModel } from "@/bridge/model-resolver.js";
+import { resolveModelSafe } from "@/bridge/model-resolver.js";
 import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
 import { loadConfig, type ResolvedConfig } from "@/infra/config/index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
 import { PlanStore } from "@/core/session/plan-store.js";
 import { Planner } from "@/core/runtime/planner.js";
 import { createPlannerModel } from "@/core/runtime/planner-model.js";
-import { modelFromProfile } from "@/infra/profile.js";
 import * as path from "node:path";
 
 export interface DefaultDepsOptions {
@@ -32,6 +31,8 @@ export interface DefaultDepsOptions {
   profileName?: string;
   /** Pre-loaded config; falls back to `loadConfig()` if not passed. */
   config?: ResolvedConfig;
+  /** If true, allow creating deps even when no API key is configured. */
+  allowMissingKey?: boolean;
 }
 
 /** Build the `PhusAgentDeps` from the active profile and config.
@@ -71,16 +72,24 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
   const meshPolicy: MeshPolicy = { strategy: profile.meshStrategy ?? "failover" };
   const mesh: MeshLike = buildMesh(endpoints, meshPolicy);
 
-  // Warm the API-key env var the first time we have a profile.
-  // resolveModel() is the canonical place — keeps behavior consistent.
-  resolveModel();
+  // Warm the API-key env var when available. We use the safe variant so
+  // the CLI/TUI can boot without a key and prompt the user later.
+  const { model: resolvedModel, missingKey } = resolveModelSafe();
+  if (missingKey && !opts.allowMissingKey) {
+    const envVar = profile.apiKeyEnv ?? `${profile.provider?.toUpperCase().replace(/-/g, "_") ?? "PROVIDER"}_API_KEY`;
+    throw new Error(
+      `No API key configured for profile "${profileName}".\n` +
+        `Run \`phus setup\` to configure a provider and key, or set:\n` +
+        `  export ${envVar}=<your-key>`,
+    );
+  }
 
   const steeringInbox: SteeringInbox = new PiSteeringInbox();
 
   const planStore = new PlanStore(path.join(config.paths.home, "plans.sqlite"));
   const planner = new Planner({
     skills,
-    model: createPlannerModel(modelFromProfile(profile)),
+    model: createPlannerModel(resolvedModel),
     hooks,
   });
 
