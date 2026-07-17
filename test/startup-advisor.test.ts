@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { StartupAdvisor } from "@/core/runtime/startup-advisor.js";
+import { StartupAdvisor } from "@/core/runtime/startup/advisor.js";
 import type { TapeLike } from "@/types/hooks/index.js";
 import { asSessionId } from "@/types/brand.js";
 

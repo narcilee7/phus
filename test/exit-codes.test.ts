@@ -1,6 +1,6 @@
 // test/exit-codes.test.ts
 import { describe, expect, it } from "vitest";
-import { ExitCode, CliExit } from "../src/core/runtime/exit-codes.js";
+import { ExitCode, CliExit } from "../src/core/runtime/executor/exit-code.js";
 
 describe("ExitCode", () => {
   it("has distinct values for each category", () => {

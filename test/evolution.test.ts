@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { EvolutionEngine } from "@/core/runtime/evolution/engine";
-import { Learner } from "@/core/runtime/learner.js";
-import { SkillValidator } from "@/core/runtime/skill/validator";
+import { EvolutionEngine } from "@/core/runtime/evolution/engine.js";
+import { Learner } from "@/core/runtime/evolution/learner.js";
+import { SkillValidator } from "@/core/runtime/skill/validator.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import { PlanStore } from "@/core/session/plan-store.js";
 import { asSessionId } from "@/types/brand.js";
 import type { Plan, Step } from "@/core/runtime/plan/types.js";
-import type { PlanRunner } from "@/core/runtime/plan-runner.js";
+import type { PlanRunner } from "@/core/runtime/plan/plan-runner.js";
 import type { TapeLike } from "@/types/hooks/index.js";
 
 function makeTape(): TapeLike {

@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { HookRegistry } from "../src/core/runtime/hook.js";
+import { HookRegistry } from "../src/core/runtime/hook/registry.js";
 
 describe("plugin loader", () => {
   let dir: string;

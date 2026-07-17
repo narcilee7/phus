@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { SkillValidator } from "@/core/runtime/skill-validator.js";
+import { SkillValidator } from "@/core/runtime/skill/validator.js";
 import { PlanStore } from "@/core/session/plan-store.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import { asSessionId } from "@/types/brand.js";
 import type { Plan, Step } from "@/core/runtime/plan/types.js";
-import type { PlanRunner } from "@/core/runtime/plan-runner.js";
+import type { PlanRunner } from "@/core/runtime/plan/plan-runner.js";
 
 function makePlan(status: "completed" | "failed", steps: Step[]): Plan {
   return {
