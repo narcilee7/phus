@@ -405,6 +405,7 @@ export class PhusAgent implements PhusAgentFacade {
       learner: this.learner,
       skillValidator,
       skills: this.skills,
+      memoryStore: this.memoryStore,
       tape: this.tape,
     });
     this.planRunner.setEvolutionEngine(this.evolutionEngine);

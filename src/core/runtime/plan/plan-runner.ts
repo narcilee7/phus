@@ -3,6 +3,7 @@ import { EvolutionEngine } from "../evolution/engine";
 import { Plan, PlanRunnerDeps, Step } from "./types";
 import { logger } from "@/infra/logging";
 import { makeCtx } from "@/core/runtime/hook/ctx-builder";
+import { ReplanNeededError } from "@/core/runtime/executor/error";
 
 export class PlanRunner {
   constructor(private deps: PlanRunnerDeps) {}
@@ -23,18 +24,33 @@ export class PlanRunner {
     this.deps.store.save(plan);
 
     const steps = this.sortSteps(plan.steps);
-    const completed = new Set<string>();
+    const completed = new Set(
+      steps.filter((step) => step.status === "completed").map((step) => step.id),
+    );
     const failed = new Set<string>();
+    let replanRequested = false;
 
     for (const step of steps) {
+      if (step.status === "completed") {
+        step.error = undefined;
+        continue;
+      }
+
+      if (step.status === "running") {
+        step.status = "pending";
+      }
+
+      step.error = undefined;
+
       const deps = step.dependsOn ?? [];
       const depFailed = deps.some((id) => failed.has(id));
       const depMissing = deps.some((id) => !completed.has(id));
 
       if (depFailed || depMissing) {
         step.status = "skipped";
+        step.error = depFailed ? "dependency failed" : "dependency not ready";
         this.emitStep("plan_step_failed", plan, step, {
-          reason: depFailed ? "dependency failed" : "dependency not ready",
+          reason: step.error,
         });
         failed.add(step.id);
         plan.updatedAt = Date.now();
@@ -47,19 +63,30 @@ export class PlanRunner {
 
       try {
         const { verification } = await this.deps.executor.executeStep(step, plan);
-        if (step.status === "completed") {
+        if (verification.action === "proceed") {
+          step.status = "completed";
+          step.error = undefined;
           completed.add(step.id);
           this.emitStep("plan_step_completed", plan, step, { verification });
         } else {
+          step.status = "failed";
+          step.error = verification.reason;
           failed.add(step.id);
           this.emitStep("plan_step_failed", plan, step, { verification });
         }
       } catch (err) {
         failed.add(step.id);
         step.status = "failed";
+        step.error = err instanceof Error ? err.message : String(err);
         this.emitStep("plan_step_failed", plan, step, {
-          error: err instanceof Error ? err.message : String(err),
+          error: step.error,
         });
+        if (err instanceof ReplanNeededError) {
+          replanRequested = true;
+          plan.updatedAt = Date.now();
+          this.deps.store.save(plan);
+          break;
+        }
       }
 
       plan.updatedAt = Date.now();
@@ -67,7 +94,7 @@ export class PlanRunner {
     }
 
     const allCompleted = plan.steps.every((s) => s.status === "completed");
-    plan.status = allCompleted ? "completed" : "failed";
+    plan.status = replanRequested ? "paused" : allCompleted ? "completed" : "failed";
     plan.updatedAt = Date.now();
     this.deps.store.save(plan);
 
