@@ -1,9 +1,10 @@
 // src/tui/components/CodeBlock.tsx
 // Syntax-highlighted code block using Prism.js. Maps token scopes to terminal
-// colors and renders line numbers optionally.
+// colors and renders line numbers optionally. Focused blocks expose Copy,
+// Run and Insert actions via the CodeActionContext.
 
 import React from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useFocus, useInput } from "ink";
 import Prism from "prismjs";
 import "prismjs/components/prism-typescript.js";
 import "prismjs/components/prism-javascript.js";
@@ -12,6 +13,7 @@ import "prismjs/components/prism-bash.js";
 import "prismjs/components/prism-python.js";
 import "prismjs/components/prism-yaml.js";
 import "prismjs/components/prism-markdown.js";
+import { CodeActionContext } from "@/tui/components/CodeActionContext.js";
 
 const ALIASES: Record<string, string> = {
   ts: "typescript",
@@ -113,9 +115,39 @@ export interface CodeBlockProps {
   code: string;
   language?: string;
   showLineNumbers?: boolean;
+  /** Optional stable id, useful in tests. Falls back to React.useId(). */
+  id?: string;
 }
 
-export function CodeBlock({ code, language, showLineNumbers = true }: CodeBlockProps) {
+export function CodeBlock({ code, language, showLineNumbers = true, id: idProp }: CodeBlockProps) {
+  const generatedId = React.useId();
+  const id = idProp ?? generatedId;
+  const ctx = React.useContext(CodeActionContext);
+  const { isFocused } = useFocus({ isActive: true, id, autoFocus: false });
+
+  React.useEffect(() => {
+    if (!ctx) return;
+    if (isFocused) {
+      ctx.setFocusedId(id);
+    } else if (ctx.focusedId === id) {
+      ctx.setFocusedId(null);
+    }
+  }, [isFocused, id, ctx]);
+
+  const active = ctx?.focusedId === id;
+
+  useInput((input, key) => {
+    if (!active || !ctx) return;
+    if (key.ctrl || key.meta) return;
+    if (input === "c") {
+      ctx.onAction({ type: "copy", code });
+    } else if (input === "r") {
+      ctx.onAction({ type: "run", language: language || "text", code });
+    } else if (input === "i") {
+      ctx.onAction({ type: "insert", code });
+    }
+  });
+
   const lang = resolveLanguage(language || "text");
   const grammar = Prism.languages[lang] ?? Prism.languages.plaintext ?? {};
   const tokens = Prism.tokenize(code, grammar);
@@ -123,10 +155,21 @@ export function CodeBlock({ code, language, showLineNumbers = true }: CodeBlockP
   const maxLineNum = Math.max(1, String(lines.length).length);
 
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor="gray" marginY={1}>
+    <Box
+      flexDirection="column"
+      borderStyle="single"
+      borderColor={active ? "cyan" : "gray"}
+      marginY={1}
+    >
       <Box paddingX={1} paddingY={0} justifyContent="space-between">
         <Text dimColor>{language || "text"}</Text>
-        <Text dimColor>copy</Text>
+        <Box flexDirection="row">
+          <Text color={active ? "green" : "gray"}>copy(c)</Text>
+          <Text dimColor> · </Text>
+          <Text color={active ? "green" : "gray"}>run(r)</Text>
+          <Text dimColor> · </Text>
+          <Text color={active ? "green" : "gray"}>insert(i)</Text>
+        </Box>
       </Box>
       <Box paddingX={1} paddingY={0} flexDirection="column">
         {lines.map((line, idx) => (

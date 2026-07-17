@@ -25,6 +25,11 @@ import { tuiChannel } from "@/tui/channel.js";
 import type { RememberChoice } from "@/tui/state.js";
 import { extractMentions, readFileMention, buildContextBlock } from "@/tui/mentions.js";
 import { parseMemoryAction } from "@/infra/meta/memory-tools.js";
+import {
+  CodeActionContext,
+  type CodeBlockAction,
+} from "@/tui/components/CodeActionContext.js";
+import { copyToClipboard, runCode } from "@/tui/code-actions.js";
 
 interface AppProps {
   agent: PhusAgent;
@@ -47,6 +52,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const [input, setInput] = React.useState("");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [focusedCodeBlockId, setFocusedCodeBlockId] = React.useState<string | null>(null);
   const [stats, setStats] = React.useState({
     entries: 0,
     skills: 0,
@@ -65,6 +71,54 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const DANGEROUS_TOOLS = React.useMemo(
     () => new Set(["bash", "file_write", "startup_write", "skill_write", "skill_delete", "memory_write"]),
     [],
+  );
+
+  // ─── Code block actions ────────────────────────────────────────
+  const handleCodeAction = React.useCallback(
+    async (action: CodeBlockAction) => {
+      if (action.type === "copy") {
+        try {
+          await copyToClipboard(action.code);
+          dispatch({ type: "add_system", text: "✓ copied to clipboard", level: "info" });
+        } catch (err: any) {
+          dispatch({
+            type: "add_system",
+            text: `copy failed: ${err.message ?? err}`,
+            level: "error",
+          });
+        }
+      } else if (action.type === "run") {
+        dispatch({ type: "add_system", text: `running ${action.language}…`, level: "info" });
+        try {
+          const { output, exitCode } = await runCode(action.language, action.code);
+          const status = exitCode === 0 ? "✓" : `✗ exit ${exitCode}`;
+          dispatch({
+            type: "add_system",
+            text: `${status} ${action.language}\n${output}`,
+            level: exitCode === 0 ? "info" : "warn",
+          });
+        } catch (err: any) {
+          dispatch({
+            type: "add_system",
+            text: `run failed: ${err.message ?? err}`,
+            level: "error",
+          });
+        }
+      } else if (action.type === "insert") {
+        setInput((prev) => prev + action.code);
+        dispatch({ type: "add_system", text: "✓ code inserted into input", level: "info" });
+      }
+    },
+    [dispatch],
+  );
+
+  const codeActionValue = React.useMemo(
+    () => ({
+      onAction: handleCodeAction,
+      focusedId: focusedCodeBlockId,
+      setFocusedId: setFocusedCodeBlockId,
+    }),
+    [handleCodeAction, focusedCodeBlockId],
   );
 
   // ─── Layout heights ────────────────────────────────────────────
@@ -86,9 +140,11 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const sidebarHeight = Math.max(10, terminalRows - HEADER_ROWS);
   const statusHint = paletteOpen
     ? "↑↓ navigate · Enter select · Esc close"
-    : state.permissionQueue[0]
-      ? "Y yes · S session · A always · N no · Esc"
-      : undefined;
+    : focusedCodeBlockId
+      ? "c copy · r run · i insert · Esc input"
+      : state.permissionQueue[0]
+        ? "Y yes · S session · A always · N no · Esc"
+        : undefined;
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
@@ -300,6 +356,11 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
       return;
     }
     if (sidebarOpen) return;
+    if (focusedCodeBlockId && key.escape) {
+      setFocusedCodeBlockId(null);
+      return;
+    }
+    if (focusedCodeBlockId && !key.ctrl && !key.meta) return;
     if ((key.ctrl || key.meta) && input === "k" && state.permissionQueue.length === 0) {
       setPaletteOpen(true);
       return;
@@ -341,81 +402,83 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
 
 
   return (
-    <Box flexDirection="column" height={terminalRows} overflow="hidden">
-      <Header
-        model={modelLabel}
-        session={sessionId}
-        stats={stats}
-        lastOp={state.lastOp}
-      />
-      <Box flexDirection="row" flexGrow={1} overflow="hidden">
-        {sidebarOpen && (
-          <Box width={34}>
-            <FileTree
-              height={sidebarHeight}
-              onInsert={(value: string) => {
-                setInput((prev) => prev + value);
-                setSidebarOpen(false);
-              }}
-              onPreview={(text: string) =>
-                dispatch({ type: "add_system", text, level: "info" })
-              }
-              onClose={() => setSidebarOpen(false)}
-            />
-          </Box>
-        )}
-        <Box flexDirection="column" flexGrow={1} overflow="hidden">
-          <Box flexGrow={1} overflow="hidden">
-            <ChatViewport
-              items={state.items}
-              busy={state.busy}
-              scrollOffset={state.scroll.offset}
-              hasNew={state.scroll.hasNew}
-              lastOp={state.lastOp}
-              fileSnapshots={fileSnapshots.current}
-              height={chatHeight}
-            />
-          </Box>
-          {state.plan && <PlanPanel plan={state.plan} />}
-          <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
-          {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
-            <PermissionBar
-              request={state.permissionQueue[0]}
-              onResolve={(allow: boolean, remember: RememberChoice) =>
-                dispatch({ type: "resolve_permission", allow, remember })
-              }
-            />
-          )}
-          {paletteOpen && (
-            <CommandPalette
-              agent={agent}
-              onSelect={(value: string, action: PaletteAction) => {
-                setPaletteOpen(false);
-                if (action === "insert") {
+    <CodeActionContext.Provider value={codeActionValue}>
+      <Box flexDirection="column" height={terminalRows} overflow="hidden">
+        <Header
+          model={modelLabel}
+          session={sessionId}
+          stats={stats}
+          lastOp={state.lastOp}
+        />
+        <Box flexDirection="row" flexGrow={1} overflow="hidden">
+          {sidebarOpen && (
+            <Box width={34}>
+              <FileTree
+                height={sidebarHeight}
+                onInsert={(value: string) => {
                   setInput((prev) => prev + value);
-                } else {
-                  void submit(value);
+                  setSidebarOpen(false);
+                }}
+                onPreview={(text: string) =>
+                  dispatch({ type: "add_system", text, level: "info" })
                 }
-              }}
-              onClose={() => setPaletteOpen(false)}
-            />
+                onClose={() => setSidebarOpen(false)}
+              />
+            </Box>
           )}
-          <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} hint={statusHint} />
-          <InputBox
-            value={input}
-            busy={state.busy}
-            showHint={state.showHint}
-            onChange={setInput}
-            onSubmit={submit}
-            isActive={state.permissionQueue.length === 0 && !paletteOpen && !sidebarOpen}
-            agent={agent}
-            mentions={extractMentions(input)
-              .filter((m) => m.type === "file")
+          <Box flexDirection="column" flexGrow={1} overflow="hidden">
+            <Box flexGrow={1} overflow="hidden">
+              <ChatViewport
+                items={state.items}
+                busy={state.busy}
+                scrollOffset={state.scroll.offset}
+                hasNew={state.scroll.hasNew}
+                lastOp={state.lastOp}
+                fileSnapshots={fileSnapshots.current}
+                height={chatHeight}
+              />
+            </Box>
+            {state.plan && <PlanPanel plan={state.plan} />}
+            <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
+            {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
+              <PermissionBar
+                request={state.permissionQueue[0]}
+                onResolve={(allow: boolean, remember: RememberChoice) =>
+                  dispatch({ type: "resolve_permission", allow, remember })
+                }
+              />
+            )}
+            {paletteOpen && (
+              <CommandPalette
+                agent={agent}
+                onSelect={(value: string, action: PaletteAction) => {
+                  setPaletteOpen(false);
+                  if (action === "insert") {
+                    setInput((prev) => prev + value);
+                  } else {
+                    void submit(value);
+                  }
+                }}
+                onClose={() => setPaletteOpen(false)}
+              />
+            )}
+            <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} hint={statusHint} />
+            <InputBox
+              value={input}
+              busy={state.busy}
+              showHint={state.showHint}
+              onChange={setInput}
+              onSubmit={submit}
+              isActive={state.permissionQueue.length === 0 && !paletteOpen && !sidebarOpen && !focusedCodeBlockId}
+              agent={agent}
+              mentions={extractMentions(input)
+                .filter((m) => m.type === "file")
               .map((m) => ({ path: m.target, size: 0 }))}
           />
         </Box>
       </Box>
     </Box>
+  </CodeActionContext.Provider>
   );
 }
 
