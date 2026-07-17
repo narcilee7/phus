@@ -67,6 +67,13 @@ export class SkillValidator {
     const baseline = this.deps.planStore.getValidationBaseline(draftName);
     if (!baseline) {
       this.deps.planStore.recordValidationBaseline(draftName, metrics);
+      this.deps.planStore.recordValidationAttempt(
+        draftName,
+        "pending",
+        metrics,
+        "pending_validation: baseline recorded",
+        sessionId,
+      );
       this.demoteDraft(draft, backupDir);
       return { improved: false, reason: "pending_validation: baseline recorded" };
     }
@@ -74,6 +81,13 @@ export class SkillValidator {
     const improved = this.isImproved(metrics, baseline);
     if (improved) {
       this.deps.planStore.recordValidationBaseline(draftName, metrics);
+      this.deps.planStore.recordValidationAttempt(
+        draftName,
+        "improved",
+        metrics,
+        `improved over baseline: ${metrics.failures} failures/${metrics.stepCount} steps vs ${baseline.failures}/${baseline.stepCount}`,
+        sessionId,
+      );
       // Leave the skill promoted — the draft is now a validated skill.
       this.removeBackup(backupDir);
       return {
@@ -82,6 +96,14 @@ export class SkillValidator {
       };
     }
 
+    this.deps.planStore.recordValidationAttempt(
+      draftName,
+      "failed",
+      metrics,
+      `no improvement over baseline: ${metrics.failures} failures/${metrics.stepCount} steps vs ${baseline.failures}/${baseline.stepCount}`,
+      sessionId,
+    );
+    this.deps.skills.archiveDraft(draftName);
     this.demoteDraft(draft, backupDir);
     return {
       improved: false,

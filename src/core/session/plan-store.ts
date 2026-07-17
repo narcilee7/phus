@@ -11,6 +11,17 @@ export interface ValidationMetrics {
   recordedAt: number;
 }
 
+export type ValidationOutcome = "improved" | "baseline" | "pending" | "failed";
+
+export interface ValidationAttempt {
+  draftName: string;
+  outcome: ValidationOutcome;
+  metrics: ValidationMetrics;
+  reason: string;
+  sessionId: string | undefined;
+  ts: number;
+}
+
 export class PlanStore {
   private db: Database.Database;
 
@@ -41,6 +52,18 @@ export class PlanStore {
         metrics TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS validation_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        draft_name TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        metrics TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        session_id TEXT,
+        ts INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_validation_attempts_draft
+        ON validation_attempts(draft_name, ts DESC);
     `);
   }
 
@@ -122,6 +145,99 @@ export class PlanStore {
     } catch {
       return undefined;
     }
+  }
+
+  // ─── Validation attempt history ───────────────────────────────────
+
+  recordValidationAttempt(
+    draftName: string,
+    outcome: ValidationAttempt["outcome"],
+    metrics: ValidationMetrics,
+    reason: string,
+    sessionId?: string,
+  ): ValidationAttempt {
+    const ts = Date.now();
+    const stmt = this.db.prepare(
+      "INSERT INTO validation_attempts (draft_name, outcome, metrics, reason, session_id, ts) VALUES (?, ?, ?, ?, ?, ?)",
+    );
+    stmt.run(draftName, outcome, JSON.stringify(metrics), reason, sessionId ?? null, ts);
+    return { draftName, outcome, metrics, reason, sessionId, ts };
+  }
+
+  getValidationHistory(draftName: string, limit = 20): ValidationAttempt[] {
+    const rows = this.db
+      .prepare(
+        "SELECT draft_name, outcome, metrics, reason, session_id, ts FROM validation_attempts WHERE draft_name = ? ORDER BY ts DESC, id DESC LIMIT ?",
+      )
+      .all(draftName, limit) as Array<{
+      draft_name: string;
+      outcome: string;
+      metrics: string;
+      reason: string;
+      session_id: string | null;
+      ts: number;
+    }>;
+    return rows
+      .map((r) => {
+        try {
+          return {
+            draftName: r.draft_name,
+            outcome: this.normalizeOutcome(r.outcome),
+            metrics: JSON.parse(r.metrics) as ValidationMetrics,
+            reason: r.reason,
+            sessionId: r.session_id ?? undefined,
+            ts: r.ts,
+          };
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((a): a is ValidationAttempt => a !== undefined);
+  }
+
+  getValidationStats(draftName: string): {
+    total: number;
+    improved: number;
+    failed: number;
+    pending: number;
+    baseline: number;
+    lastImprovedAt?: number;
+  } {
+    const rows = this.db
+      .prepare(
+        "SELECT outcome, ts FROM validation_attempts WHERE draft_name = ? ORDER BY ts DESC, id DESC",
+      )
+      .all(draftName) as Array<{ outcome: string; ts: number }>;
+    const stats = { total: rows.length, improved: 0, failed: 0, pending: 0, baseline: 0 } as {
+      total: number;
+      improved: number;
+      failed: number;
+      pending: number;
+      baseline: number;
+      lastImprovedAt?: number;
+    };
+    for (const r of rows) {
+      const o = this.normalizeOutcome(r.outcome);
+      if (o === "improved") {
+        stats.improved++;
+        stats.lastImprovedAt = r.ts;
+      } else if (o === "failed") stats.failed++;
+      else if (o === "pending") stats.pending++;
+      else if (o === "baseline") stats.baseline++;
+    }
+    return stats;
+  }
+
+  hasImprovedAtLeastOnce(draftName: string, minTimes = 1): boolean {
+    const stats = this.getValidationStats(draftName);
+    return stats.improved >= minTimes;
+  }
+
+  private normalizeOutcome(raw: unknown): ValidationAttempt["outcome"] {
+    if (raw === "improved" || raw === "baseline" || raw === "pending" || raw === "failed") {
+      return raw;
+    }
+    return "failed";
   }
 
   close(): void {

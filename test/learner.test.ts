@@ -37,6 +37,7 @@ describe("Learner", () => {
       outcome: "success",
       whatWorked: ["used the deploy script"],
       whatFailed: [],
+      procedureConfidence: 0.9,
       reusableProcedure: "Run deploy.sh after tests pass.",
       suggestedSkill: {
         name: "deploy-app",

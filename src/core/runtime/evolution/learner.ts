@@ -53,10 +53,16 @@ export class Learner {
       '- "outcome": one of "success", "partial", "failure"',
       '- "whatWorked": array of short strings describing what went well',
       '- "whatFailed": array of short strings describing problems, errors, or gaps',
-      '- "reusableProcedure": optional string describing a reusable step-by-step procedure with preconditions, success checks, and failure modes',
-      '- "suggestedSkill": optional object with { name, description, body, trigger }. Only include this when the procedure is general enough to become a reusable skill.',
+      '- "reusableProcedure": a reusable step-by-step procedure with three sections:',
+      '    - Preconditions: when should this procedure apply?',
+      '    - Steps: numbered actions, each small enough to verify',
+      '    - Failure modes: what could go wrong and how to recover',
+      '    If no procedure is reusable, return an empty string ("").',
+      '- "procedureConfidence": number 0..1 — how confident you are the procedure is reusable beyond this single task',
+      '- "suggestedSkill": optional object with { name, description, body, trigger }. Only include when the procedure is general enough to become a reusable skill (confidence >= 0.7).',
       "",
-      "If you find a reusable pattern, write it as a compact procedure that could be copied into project memory and applied again later.",
+      "Always populate reusableProcedure when there is at least one repeating pattern, even if small. " +
+        "Prefer short, copy-pasteable procedures over long narratives.",
       "",
       "Available skills:",
       this.deps.skills.toPromptContext(),
@@ -84,6 +90,7 @@ export class Learner {
       outcome: "partial",
       whatWorked: [],
       whatFailed: ["could not parse learner response"],
+      procedureConfidence: 0,
     };
 
     try {
@@ -91,6 +98,17 @@ export class Learner {
         suggestedSkill?: Partial<SkillDraft>;
       };
       const suggestedSkill = this.normalizeSkillDraft(parsed.suggestedSkill, sessionId);
+      const explicitProcedure =
+        typeof parsed.reusableProcedure === "string" && parsed.reusableProcedure.trim()
+          ? parsed.reusableProcedure.trim()
+          : undefined;
+
+      // If the model didn't write an explicit procedure but did list reusable patterns
+      // in whatWorked, synthesize a minimal one. Keeps the evolution loop useful
+      // even on shallow reflections.
+      const synthesized =
+        explicitProcedure ?? this.synthesizeProcedure(parsed.whatWorked, parsed.whatFailed);
+      const confidence = this.normalizeConfidence(parsed.procedureConfidence, !!synthesized);
 
       return {
         sessionId,
@@ -98,15 +116,45 @@ export class Learner {
         outcome: this.normalizeOutcome(parsed.outcome),
         whatWorked: this.normalizeStringArray(parsed.whatWorked),
         whatFailed: this.normalizeStringArray(parsed.whatFailed),
-        reusableProcedure:
-          typeof parsed.reusableProcedure === "string" && parsed.reusableProcedure.trim()
-            ? parsed.reusableProcedure.trim()
-            : undefined,
-        suggestedSkill,
+        reusableProcedure: synthesized,
+        procedureConfidence: confidence,
+        suggestedSkill: confidence >= 0.7 ? suggestedSkill : undefined,
       };
     } catch {
       return fallback;
     }
+  }
+
+  private synthesizeProcedure(worked: unknown, failed: unknown): string | undefined {
+    const ws = this.normalizeStringArray(worked);
+    const fs = this.normalizeStringArray(failed);
+    if (ws.length === 0 && fs.length === 0) return undefined;
+
+    const steps = ws.length > 0
+      ? ws.map((w, i) => `${i + 1}. ${w}`).join("\n")
+      : "1. Re-investigate before retrying.";
+
+    const failures = fs.length > 0 ? fs.map((f) => `- ${f}`).join("\n") : "- (none observed)";
+
+    return [
+      "Preconditions: derived from a single completed task; verify before reuse.",
+      "Steps:",
+      steps,
+      "Failure modes:",
+      failures,
+    ].join("\n");
+  }
+
+  private normalizeConfidence(raw: unknown, hasProcedure: boolean): number {
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return Math.max(0, Math.min(1, raw));
+    }
+    if (typeof raw === "string") {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return Math.max(0, Math.min(1, n));
+    }
+    // Fallback: any procedure gets a low baseline confidence.
+    return hasProcedure ? 0.3 : 0;
   }
 
   private normalizeOutcome(raw: unknown): Reflection["outcome"] {

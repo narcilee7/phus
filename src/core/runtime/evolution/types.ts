@@ -4,6 +4,7 @@ import { SessionId } from "@/types/brand";
 import { AgentMessage } from "@mariozechner/pi-agent-core";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { SkillRegistry } from "@/infra/skills/registry";
+import { PlanStore } from "@/core/session/plan-store";
 import type { MemoryStore } from "@/infra/memory/index.js";
 import { Learner } from "./learner";
 
@@ -15,7 +16,10 @@ export type Reflection = {
   outcome: ReflectionOutcomeStatus;
   whatWorked: string[];
   whatFailed: string[];
+  /** Reusable step-by-step procedure: preconditions, success checks, failure modes. */
   reusableProcedure?: string;
+  /** 0..1 self-rated confidence in the procedure; 0 when none. */
+  procedureConfidence: number;
   suggestedSkill?: SkillDraft;
 }
 
@@ -33,4 +37,5 @@ export type EvolutionDeps = {
   skills: SkillRegistry;
   memoryStore: MemoryStore;
   tape: TapeLike;
+  planStore: PlanStore;
 }
