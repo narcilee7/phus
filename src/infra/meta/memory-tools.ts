@@ -133,8 +133,10 @@ export function defineMemoryMetaTools(deps: {
         };
         try {
           deps.tape.append(tapeEntry as unknown as Parameters<Tape["append"]>[0]);
-        } catch {
+        } catch (err) {
           // Tape failure shouldn't fail the write — memory store already succeeded.
+          // Log so a stale tape (e.g. another agent instance) doesn't silently drop writes.
+          console.error("[phus] memory_write: tape.append failed:", err);
         }
 
         return {

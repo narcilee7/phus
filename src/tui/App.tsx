@@ -252,7 +252,14 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   });
 
   // ─── Render ───────────────────────────────────────────────────
-  const sidebarHeight = Math.max(10, terminalRows - 6);
+  // Keep the chat area anchored to the bottom instead of stretching to fill
+  // the whole terminal when there's little content. The fixed chat height
+  // leaves empty space above the conversation, similar to Claude/Codex.
+  const SIDEBAR_MIN_ROWS = 10;
+  const BOTTOM_UI_ROWS = 7; // TodoPill + PermissionBar/CommandPalette allowance + StatusBar + InputBox
+  const chatHeight = Math.max(8, terminalRows - 6 - BOTTOM_UI_ROWS);
+  const sidebarHeight = Math.max(SIDEBAR_MIN_ROWS, chatHeight + BOTTOM_UI_ROWS);
+
   return (
     <Box flexDirection="column" height={terminalRows} overflow="hidden">
       <Header
@@ -278,7 +285,8 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
           </Box>
         )}
         <Box flexDirection="column" flexGrow={1} overflow="hidden">
-          <Box flexGrow={1} overflow="hidden">
+          <Box flexGrow={1} overflow="hidden" />
+          <Box height={chatHeight} overflow="hidden">
             <ChatViewport
               items={state.items}
               busy={state.busy}
@@ -286,7 +294,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
               hasNew={state.scroll.hasNew}
               lastOp={state.lastOp}
               fileSnapshots={fileSnapshots.current}
-              height="100%"
+              height={chatHeight}
             />
           </Box>
           <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />

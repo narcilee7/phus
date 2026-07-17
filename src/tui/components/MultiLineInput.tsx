@@ -3,8 +3,13 @@
 // Enter to submit, Up/Down for history when on the first/last line).
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, useStdout } from "ink";
 import Fuse from "fuse.js";
+import {
+  displayWidth,
+  findCursorDisplayRow,
+  wrapLineToRows,
+} from "@/tui/components/terminal-width.js";
 
 export interface MultiLineInputProps {
   value: string;
@@ -358,28 +363,80 @@ export function MultiLineInput({
     commit(next, nextCursor);
   }, { isActive });
 
+  const { stdout } = useStdout();
+  // Reserve a few columns for the prompt prefix and input box borders/padding.
+  const maxWidth = Math.max(10, (stdout.columns ?? 80) - 4);
+  const MAX_DISPLAY_ROWS = 5;
+
   const lines = value.split("\n");
   const cur = clampCursor(value, cursor);
   const showPlaceholder = value.length === 0 && showHint && placeholder;
+
+  // Build display rows using terminal column widths so CJK characters wrap
+  // at the correct boundary and don't throw off the measured height.
+  interface DisplayRow {
+    lineIndex: number;
+    rowInLine: number;
+    text: string;
+    width: number;
+  }
+
+  const allDisplayRows: DisplayRow[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const wrapped = wrapLineToRows(lines[i]!, maxWidth);
+    for (let r = 0; r < wrapped.length; r++) {
+      allDisplayRows.push({
+        lineIndex: i,
+        rowInLine: r,
+        text: wrapped[r]!.text,
+        width: wrapped[r]!.width,
+      });
+    }
+  }
+
+  const cursorDisplayRow = findCursorDisplayRow(cur, lines, maxWidth);
+  let startRow = 0;
+  if (allDisplayRows.length > MAX_DISPLAY_ROWS) {
+    startRow = Math.max(
+      0,
+      Math.min(
+        cursorDisplayRow - Math.floor(MAX_DISPLAY_ROWS / 2),
+        allDisplayRows.length - MAX_DISPLAY_ROWS,
+      ),
+    );
+  }
+  const visibleRows = allDisplayRows.slice(startRow, startRow + MAX_DISPLAY_ROWS);
+  const cursorLocalRow = cursorDisplayRow - startRow;
+  const cursorVisible =
+    cursorDisplayRow >= startRow && cursorDisplayRow < startRow + MAX_DISPLAY_ROWS;
 
   return (
     <Box flexDirection="column" width="100%">
       {showPlaceholder ? (
         <Text dimColor>{placeholder}</Text>
       ) : (
-        lines.map((line, idx) => {
-          if (idx !== cur.line) {
+        visibleRows.map((row, idx) => {
+          const key = `${row.lineIndex}-${row.rowInLine}`;
+          if (!cursorVisible || idx !== cursorLocalRow) {
             return (
-              <Text key={idx} wrap="wrap">
-                {line}
+              <Text key={key} wrap="wrap">
+                {row.text}
               </Text>
             );
           }
-          const before = line.slice(0, cur.col);
+
+          // Cursor row: split into before/at/after within this wrapped row.
+          const line = lines[row.lineIndex]!;
+          const wrapped = wrapLineToRows(line, maxWidth);
+          let rowStartIdx = 0;
+          for (let r = 0; r < row.rowInLine; r++) {
+            rowStartIdx += wrapped[r]!.text.length;
+          }
+          const before = line.slice(rowStartIdx, cur.col);
           const at = line.slice(cur.col, cur.col + 1) || " ";
-          const after = line.slice(cur.col + 1);
+          const after = line.slice(cur.col + 1, rowStartIdx + row.text.length);
           return (
-            <Text key={idx} wrap="wrap">
+            <Text key={key} wrap="wrap">
               {before}
               <Text backgroundColor="cyan" color="black">
                 {at}

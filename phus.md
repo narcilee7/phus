@@ -6,5 +6,4 @@ User communicates in Chinese. Code comments in English.
 
 - Concise replies
 - Use file_write for code changes (not paste)
-
 - 使用 rg 而非 grep
