@@ -11,6 +11,7 @@ import {
   wrapLineToRows,
 } from "@/tui/utils/terminal.js";
 import { useBottomOverlay } from "@/tui/context/tui-layout-context.js";
+import { PasteBurst } from "@/tui/runtime/paste-burst.js";
 
 export interface SuggestionItem {
   name: string;
@@ -109,6 +110,17 @@ export function MultiLineInput({
   // paste so that embedded newlines/tabs are inserted literally instead of
   // submitting or triggering shortcuts.
   const lastInputAtRef = useRef<number | null>(null);
+  // PasteBurst detects rapid character arrivals (terminal paste without
+  // bracketed paste markers, OR a fast IME composition). When a burst is
+  // active an Enter inserts a newline instead of submitting. Ported from
+  // @moonshot-ai/pi-tui (MIT).
+  const pasteBurstRef = useRef(new PasteBurst());
+  // Set to true when the next value change is the result of a Tab/Enter
+  // completion. The `useEffect([value])` below reads this to skip the
+  // "reopen the suggestion popup" branch — otherwise pressing Tab to fill a
+  // command keeps the popup open showing the just-completed command, which
+  // looks like the input is stuck.
+  const lastChangeWasCompletionRef = useRef(false);
 
   useEffect(() => {
     valueRef.current = value;
@@ -156,9 +168,17 @@ export function MultiLineInput({
 
   useEffect(() => {
     setSelectedSuggestion(0);
-    setSuggestionsOpen(true);
     setSelectedMention(0);
-    setMentionsOpen(true);
+    // If the most recent value change came from a Tab/Enter completion,
+    // leave the popups closed — the user explicitly accepted a suggestion.
+    // Resetting selection (above) is still correct so a subsequent reopen
+    // (e.g. after backspacing) starts from index 0.
+    if (lastChangeWasCompletionRef.current) {
+      lastChangeWasCompletionRef.current = false;
+    } else {
+      setSuggestionsOpen(true);
+      setMentionsOpen(true);
+    }
   }, [value]);
 
   const submit = useCallback(() => {
@@ -210,8 +230,13 @@ export function MultiLineInput({
     }
 
     const now = Date.now();
-    const isRapidPaste = lastInputAtRef.current !== null && now - lastInputAtRef.current < 50;
+    // Cheap "fast typing" heuristic retained for Tab/Enter behavior during
+    // paste-burst (e.g. a user pastes then immediately hits Tab). The
+    // authoritative paste detector is pasteBurstRef below; this ref is just
+    // used as a "did something arrive in the last 50ms?" signal.
+    const isRapidInput = lastInputAtRef.current !== null && now - lastInputAtRef.current < 50;
     lastInputAtRef.current = now;
+    const shouldPasteInsertNewline = pasteBurstRef.current.shouldInsertNewlineInsteadOfSubmit(now);
 
     // Work on refs so rapid input (e.g. paste) sees the latest value/cursor.
     let value = valueRef.current;
@@ -226,10 +251,24 @@ export function MultiLineInput({
       setCursor(nextCursor);
     }
 
-    function commitValue(nextValue: string) {
+    function commitValue(
+      nextValue: string,
+      opts: { advanceCursor?: boolean; markAsCompletion?: boolean } = {},
+    ) {
       valueRef.current = nextValue;
       value = nextValue;
+      if (opts.advanceCursor) {
+        // Place the caret at the very end so the user can type the
+        // command's arguments immediately, instead of inserting into the
+        // middle of the just-completed text.
+        const endCursor = clampCursor(nextValue, { line: 0, col: nextValue.length });
+        cursorRef.current = endCursor;
+        setCursor(endCursor);
+      }
       onChange(nextValue);
+      if (opts.markAsCompletion) {
+        lastChangeWasCompletionRef.current = true;
+      }
     }
 
     function commitCursor(nextCursor: Cursor) {
@@ -250,6 +289,7 @@ export function MultiLineInput({
         const before = line.slice(0, mentionState.atIndex);
         const after = line.slice(cursor.col);
         lines[mentionState.lineIndex] = `${before}@${chosen.target} ${after}`;
+        lastChangeWasCompletionRef.current = true;
         commit(lines.join("\n"), {
           line: mentionState.lineIndex,
           col: before.length + chosen.target.length + 2,
@@ -273,7 +313,19 @@ export function MultiLineInput({
       }
       if (key.tab) {
         const chosen = matches[selectedSuggestion]!;
-        commitValue(`/${chosen.name} `);
+        // Tab on a unique match is "complete + submit" in one keystroke
+        // — matches Claude Code / Codex / Kimi Code. The user has
+        // narrowed to a single command (e.g. `/help` is the only `/hel*`
+        // candidate) so they almost always want to run it. If they wanted
+        // to pass args they wouldn't have hit Tab yet; they would have
+        // typed the args and pressed Enter. With multiple candidates Tab
+        // stays as "complete only" — user picks via ↓/↑ and confirms
+        // with Enter.
+        if (matches.length === 1 && chosen.name === query) {
+          submit();
+        } else {
+          commitValue(`/${chosen.name} `, { advanceCursor: true, markAsCompletion: true });
+        }
         return;
       }
       if (key.downArrow) {
@@ -293,14 +345,14 @@ export function MultiLineInput({
         if (chosen.name === query) {
           submit();
         } else {
-          commitValue(`/${chosen.name} `);
+          commitValue(`/${chosen.name} `, { advanceCursor: true, markAsCompletion: true });
         }
         return;
       }
     }
 
     if (key.tab || (key.shift && key.tab)) {
-      if (isRapidPaste) {
+      if (isRapidInput || shouldPasteInsertNewline) {
         const { value: next, cursor: nextCursor } = setValueAtCursor(value, clampCursor(value, cursor), "\t");
         commit(next, nextCursor);
       }
@@ -308,7 +360,7 @@ export function MultiLineInput({
     }
 
     if (key.return) {
-      if (key.shift || isRapidPaste) {
+      if (key.shift || isRapidInput || shouldPasteInsertNewline) {
         const { value: next, cursor: nextCursor } = setValueAtCursor(value, clampCursor(value, cursor), "\n");
         commit(next, { line: nextCursor.line + 1, col: 0 });
       } else {
@@ -399,6 +451,8 @@ export function MultiLineInput({
     // input box even when it's not logically focused (e.g. Ctrl+K
     // opens the palette but also types "k" into the input underneath).
     if (key.ctrl || key.meta) return;
+
+    pasteBurstRef.current.onPlainChar(now);
 
     const { value: next, cursor: nextCursor } = setValueAtCursor(value, cur, input);
     commit(next, nextCursor);
