@@ -29,6 +29,25 @@ const MENTIONS: MentionItem[] = [
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 
+/** Poll `lastFrame()` until it contains `needle`, or 2s elapses.
+ *  CI runners can be slow enough that React's useEffect-driven
+ *  setBottomOverlayRows doesn't flush within a single 50ms tick,
+ *  so we wait until the overlay actually settles. */
+async function waitForFrame(
+  frame: () => string | undefined,
+  needle: string,
+  timeoutMs = 2_000,
+): Promise<string> {
+  const start = Date.now();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const f = frame() ?? "";
+    if (f.includes(needle)) return f;
+    if (Date.now() - start > timeoutMs) return f;
+    await wait(20);
+  }
+}
+
 function ControlledInput(props: {
   suggestions?: SuggestionItem[];
   mentionSuggestions?: MentionItem[];
@@ -71,9 +90,8 @@ describe("TuiLayoutProvider overlay reservation", () => {
     );
     await wait();
     stdin.write("/");
-    await wait();
     // VISIBLE_SUGGESTIONS (4) + marginTop (1) + hint row (1) = 6
-    expect(lastFrame()).toContain("overlay=6");
+    expect(await waitForFrame(lastFrame, "overlay=6")).toContain("overlay=6");
   });
 
   it("reserves rows while mention suggestions are visible", async () => {
@@ -85,9 +103,8 @@ describe("TuiLayoutProvider overlay reservation", () => {
     );
     await wait();
     stdin.write("@");
-    await wait();
     // 3 mention items + marginTop + hint = 5
-    expect(lastFrame()).toContain("overlay=5");
+    expect(await waitForFrame(lastFrame, "overlay=5")).toContain("overlay=5");
   });
 
   it("clears reserved rows when the dropdown closes", async () => {
@@ -99,10 +116,8 @@ describe("TuiLayoutProvider overlay reservation", () => {
     );
     await wait();
     stdin.write("/");
-    await wait();
-    expect(lastFrame()).toContain("overlay=6");
+    expect(await waitForFrame(lastFrame, "overlay=6")).toContain("overlay=6");
     stdin.write("\x1b"); // escape closes suggestions
-    await wait();
-    expect(lastFrame()).toContain("overlay=0");
+    expect(await waitForFrame(lastFrame, "overlay=0")).toContain("overlay=0");
   });
 });
