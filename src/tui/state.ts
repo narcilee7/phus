@@ -214,16 +214,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (callIdx === -1) return state;
       const call = state.items[callIdx]!;
       const updated = [...state.items];
-      updated[callIdx] = { ...call, isError: action.isError };
-      updated.splice(callIdx + 1, 0, {
-        id: crypto.randomUUID(),
-        kind: "tool_result",
-        ts: Date.now(),
-        toolCallId: action.toolCallId,
-        toolName: call.toolName,
+      updated[callIdx] = {
+        ...call,
         result: action.result,
         isError: action.isError,
-      });
+        durationMs: Date.now() - call.ts,
+      };
       return withScrollOnNewContent({ ...state, items: updated });
     }
     case "finalize_streaming":

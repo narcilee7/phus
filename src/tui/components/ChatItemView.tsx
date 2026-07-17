@@ -26,7 +26,7 @@ export function ChatItemView({ item, items, fileSnapshots }: ChatItemViewProps) 
       return <AssistantMessage item={item} />;
 
     case "tool_call":
-      return <ToolCallCard item={item} />;
+      return <ToolCallCard item={item} fileSnapshots={fileSnapshots} />;
 
     case "tool_result":
       return <ToolResultCard item={item} items={items} fileSnapshots={fileSnapshots} />;

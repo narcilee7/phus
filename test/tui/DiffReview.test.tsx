@@ -9,6 +9,7 @@ import {
   DiffReviewContext,
   type DiffReviewAction,
 } from "../../src/tui/components/DiffReviewContext.js";
+import { TuiFocusContext } from "../../src/tui/components/TuiFocusContext.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 
@@ -16,16 +17,23 @@ function renderWithAction(
   ui: React.ReactElement,
   opts: { focusedId?: string | null; onAction?: (a: DiffReviewAction) => void } = {},
 ) {
+  const focusedId = opts.focusedId ?? null;
   return render(
-    <DiffReviewContext.Provider
+    <TuiFocusContext.Provider
       value={{
-        onAction: opts.onAction ?? vi.fn(),
-        focusedId: opts.focusedId ?? null,
-        setFocusedId: vi.fn(),
+        focusedId,
+        focusedKind: focusedId ? "diffreview" : null,
+        setFocused: vi.fn(),
       }}
     >
-      {ui}
-    </DiffReviewContext.Provider>,
+      <DiffReviewContext.Provider
+        value={{
+          onAction: opts.onAction ?? vi.fn(),
+        }}
+      >
+        {ui}
+      </DiffReviewContext.Provider>
+    </TuiFocusContext.Provider>,
   );
 }
 

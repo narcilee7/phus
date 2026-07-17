@@ -14,6 +14,7 @@ import "prismjs/components/prism-python.js";
 import "prismjs/components/prism-yaml.js";
 import "prismjs/components/prism-markdown.js";
 import { CodeActionContext } from "@/tui/components/CodeActionContext.js";
+import { TuiFocusContext } from "@/tui/components/TuiFocusContext.js";
 
 const ALIASES: Record<string, string> = {
   ts: "typescript",
@@ -123,18 +124,19 @@ export function CodeBlock({ code, language, showLineNumbers = true, id: idProp }
   const generatedId = React.useId();
   const id = idProp ?? generatedId;
   const ctx = React.useContext(CodeActionContext);
+  const focusCtx = React.useContext(TuiFocusContext);
   const { isFocused } = useFocus({ isActive: true, id, autoFocus: false });
 
   React.useEffect(() => {
-    if (!ctx) return;
+    if (!focusCtx) return;
     if (isFocused) {
-      ctx.setFocusedId(id);
-    } else if (ctx.focusedId === id) {
-      ctx.setFocusedId(null);
+      focusCtx.setFocused(id, "codeblock");
+    } else if (focusCtx.focusedId === id) {
+      focusCtx.setFocused(null);
     }
-  }, [isFocused, id, ctx]);
+  }, [isFocused, id, focusCtx]);
 
-  const active = ctx?.focusedId === id;
+  const active = focusCtx?.focusedId === id;
 
   useInput((input, key) => {
     if (!active || !ctx) return;

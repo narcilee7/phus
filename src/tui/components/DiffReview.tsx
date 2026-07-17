@@ -5,6 +5,7 @@ import React from "react";
 import { Box, Text, useFocus, useInput } from "ink";
 import { DiffView } from "@/tui/components/DiffView.js";
 import { DiffReviewContext } from "@/tui/components/DiffReviewContext.js";
+import { TuiFocusContext } from "@/tui/components/TuiFocusContext.js";
 
 export interface DiffReviewProps {
   path: string;
@@ -18,18 +19,19 @@ export function DiffReview({ path, oldContent, newContent, id: idProp }: DiffRev
   const generatedId = React.useId();
   const id = idProp ?? generatedId;
   const ctx = React.useContext(DiffReviewContext);
+  const focusCtx = React.useContext(TuiFocusContext);
   const { isFocused } = useFocus({ isActive: true, id, autoFocus: false });
 
   React.useEffect(() => {
-    if (!ctx) return;
+    if (!focusCtx) return;
     if (isFocused) {
-      ctx.setFocusedId(id);
-    } else if (ctx.focusedId === id) {
-      ctx.setFocusedId(null);
+      focusCtx.setFocused(id, "diffreview");
+    } else if (focusCtx.focusedId === id) {
+      focusCtx.setFocused(null);
     }
-  }, [isFocused, id, ctx]);
+  }, [isFocused, id, focusCtx]);
 
-  const active = ctx?.focusedId === id;
+  const active = focusCtx?.focusedId === id;
 
   useInput((input, key) => {
     if (!active || !ctx) return;

@@ -33,6 +33,7 @@ import {
   DiffReviewContext,
   type DiffReviewAction,
 } from "@/tui/components/DiffReviewContext.js";
+import { TuiFocusContext } from "@/tui/components/TuiFocusContext.js";
 import { copyToClipboard, runCode } from "@/tui/code-actions.js";
 
 interface AppProps {
@@ -56,8 +57,8 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const [input, setInput] = React.useState("");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const [focusedCodeBlockId, setFocusedCodeBlockId] = React.useState<string | null>(null);
-  const [focusedDiffReviewId, setFocusedDiffReviewId] = React.useState<string | null>(null);
+  const [focusedId, setFocusedId] = React.useState<string | null>(null);
+  const [focusedKind, setFocusedKind] = React.useState<import("@/tui/components/TuiFocusContext.js").FocusKind | null>(null);
   const [stats, setStats] = React.useState({
     entries: 0,
     skills: 0,
@@ -120,10 +121,8 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const codeActionValue = React.useMemo(
     () => ({
       onAction: handleCodeAction,
-      focusedId: focusedCodeBlockId,
-      setFocusedId: setFocusedCodeBlockId,
     }),
-    [handleCodeAction, focusedCodeBlockId],
+    [handleCodeAction],
   );
 
   const handleDiffReviewAction = React.useCallback(
@@ -160,13 +159,23 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const diffReviewValue = React.useMemo(
     () => ({
       onAction: handleDiffReviewAction,
-      focusedId: focusedDiffReviewId,
-      setFocusedId: setFocusedDiffReviewId,
     }),
-    [handleDiffReviewAction, focusedDiffReviewId],
+    [handleDiffReviewAction],
   );
 
-  const anyInteractiveFocused = focusedCodeBlockId !== null || focusedDiffReviewId !== null;
+  const tuiFocusValue = React.useMemo(
+    () => ({
+      focusedId,
+      focusedKind,
+      setFocused: (id: string | null, kind?: import("@/tui/components/TuiFocusContext.js").FocusKind) => {
+        setFocusedId(id);
+        setFocusedKind(id ? kind ?? null : null);
+      },
+    }),
+    [focusedId, focusedKind],
+  );
+
+  const anyInteractiveFocused = focusedId !== null;
 
   // ─── Layout heights ────────────────────────────────────────────
   // Reserve rows for every bottom UI element so that dynamic overlays
@@ -187,12 +196,14 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const sidebarHeight = Math.max(10, terminalRows - HEADER_ROWS);
   const statusHint = paletteOpen
     ? "↑↓ navigate · Enter select · Esc close"
-    : focusedCodeBlockId
+    : focusedKind === "codeblock"
       ? "c copy · r run · i insert · Esc input"
-      : focusedDiffReviewId
+      : focusedKind === "diffreview"
         ? "a accept · r reject · e edit · Esc input"
-        : state.permissionQueue[0]
-          ? "Y yes · S session · A always · N no · Esc"
+        : focusedKind === "toolcall"
+          ? "Enter/Space expand · Esc input"
+          : state.permissionQueue[0]
+            ? "Y yes · S session · A always · N no · Esc"
           : undefined;
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
@@ -406,8 +417,8 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
     }
     if (sidebarOpen) return;
     if (anyInteractiveFocused && key.escape) {
-      setFocusedCodeBlockId(null);
-      setFocusedDiffReviewId(null);
+      setFocusedId(null);
+      setFocusedKind(null);
       return;
     }
     if (anyInteractiveFocused && !key.ctrl && !key.meta) return;
@@ -452,9 +463,10 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
 
 
   return (
-    <CodeActionContext.Provider value={codeActionValue}>
-      <DiffReviewContext.Provider value={diffReviewValue}>
-        <Box flexDirection="column" height={terminalRows} overflow="hidden">
+    <TuiFocusContext.Provider value={tuiFocusValue}>
+      <CodeActionContext.Provider value={codeActionValue}>
+        <DiffReviewContext.Provider value={diffReviewValue}>
+          <Box flexDirection="column" height={terminalRows} overflow="hidden">
           <Header
             model={modelLabel}
             session={sessionId}
@@ -529,8 +541,9 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
           </Box>
         </Box>
       </Box>
-    </DiffReviewContext.Provider>
-  </CodeActionContext.Provider>
+        </DiffReviewContext.Provider>
+      </CodeActionContext.Provider>
+    </TuiFocusContext.Provider>
   );
 }
 

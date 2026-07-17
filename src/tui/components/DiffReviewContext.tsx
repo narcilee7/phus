@@ -1,6 +1,5 @@
 // src/tui/components/DiffReviewContext.tsx
-// Context that wires file-write diff review actions to the application and
-// tracks which review card currently has keyboard focus.
+// Context that wires file-write diff review actions to the application.
 
 import { createContext, useContext } from "react";
 
@@ -11,8 +10,6 @@ export type DiffReviewAction =
 
 interface DiffReviewContextValue {
   onAction: (action: DiffReviewAction) => void;
-  focusedId: string | null;
-  setFocusedId: (id: string | null) => void;
 }
 
 export const DiffReviewContext = createContext<DiffReviewContextValue | undefined>(undefined);

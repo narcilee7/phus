@@ -100,13 +100,14 @@ describe("upsert_tool_call", () => {
 });
 
 describe("complete_tool_call", () => {
-  it("appends a tool_result after the matching tool_call", () => {
+  it("updates the matching tool_call with result, error and duration", () => {
     const s1 = action({ type: "upsert_tool_call", toolCallId: "tc-1", toolName: "bash", args: {} });
     const s2 = appReducer(s1, { type: "complete_tool_call", toolCallId: "tc-1", result: "ok", isError: false });
-    expect(s2.items).toHaveLength(2);
-    expect(s2.items[1]!.kind).toBe("tool_result");
-    expect((s2.items[1]!.result as any)).toBe("ok");
-    expect(s2.items[1]!.isError).toBe(false);
+    expect(s2.items).toHaveLength(1);
+    expect(s2.items[0]!.kind).toBe("tool_call");
+    expect((s2.items[0]!.result as any)).toBe("ok");
+    expect(s2.items[0]!.isError).toBe(false);
+    expect(s2.items[0]!.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("no-ops when no matching tool_call exists", () => {
@@ -118,8 +119,9 @@ describe("complete_tool_call", () => {
   it("marks the original call as errored on failure", () => {
     const s1 = action({ type: "upsert_tool_call", toolCallId: "tc-1", toolName: "bash", args: {} });
     const s2 = appReducer(s1, { type: "complete_tool_call", toolCallId: "tc-1", result: "boom", isError: true });
+    expect(s2.items).toHaveLength(1);
     expect(s2.items[0]!.isError).toBe(true);
-    expect(s2.items[1]!.isError).toBe(true);
+    expect((s2.items[0]!.result as any)).toBe("boom");
   });
 });
 

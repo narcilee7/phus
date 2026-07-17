@@ -9,6 +9,7 @@ import {
   CodeActionContext,
   type CodeBlockAction,
 } from "../../src/tui/components/CodeActionContext.js";
+import { TuiFocusContext } from "../../src/tui/components/TuiFocusContext.js";
 import { detectInterpreter, runCode } from "../../src/tui/code-actions.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
@@ -17,16 +18,23 @@ function renderWithAction(
   ui: React.ReactElement,
   opts: { focusedId?: string | null; onAction?: (a: CodeBlockAction) => void } = {},
 ) {
+  const focusedId = opts.focusedId ?? null;
   return render(
-    <CodeActionContext.Provider
+    <TuiFocusContext.Provider
       value={{
-        onAction: opts.onAction ?? vi.fn(),
-        focusedId: opts.focusedId ?? null,
-        setFocusedId: vi.fn(),
+        focusedId,
+        focusedKind: focusedId ? "codeblock" : null,
+        setFocused: vi.fn(),
       }}
     >
-      {ui}
-    </CodeActionContext.Provider>,
+      <CodeActionContext.Provider
+        value={{
+          onAction: opts.onAction ?? vi.fn(),
+        }}
+      >
+        {ui}
+      </CodeActionContext.Provider>
+    </TuiFocusContext.Provider>,
   );
 }
 
