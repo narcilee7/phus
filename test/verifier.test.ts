@@ -9,9 +9,24 @@ function makeStep(expectedOutput?: string): Step {
     index: 0,
     description: "test step",
     expectedOutput,
+    phase: "edit",
     status: "pending",
     retryCount: 0,
   };
+}
+
+function extractText(messages: AgentMessage[]): string {
+  return messages
+    .map((message) => {
+      const content = message.content;
+      if (typeof content === "string") return content;
+      if (!Array.isArray(content)) return "";
+      return content
+        .map((part) => (part && typeof part === "object" && part.type === "text" && typeof part.text === "string" ? part.text : ""))
+        .filter(Boolean)
+        .join(" ");
+    })
+    .join("\n");
 }
 
 function makeModel(response: string) {
@@ -67,5 +82,26 @@ describe("Verifier", () => {
     const result = await verifier.verify(makeStep(), "actual");
     expect(result.ok).toBe(true);
     expect(result.action).toBe("proceed");
+  });
+
+  it("includes phase and repair context in the verification prompt", async () => {
+    let promptText = "";
+    const verifier = new Verifier({
+      model: {
+        prompt: async (messages: AgentMessage[]) => {
+          promptText = extractText(messages);
+          return JSON.stringify({ ok: true, confidence: 0.8, reason: "fine", action: "proceed" });
+        },
+      },
+    });
+
+    const step = makeStep("expected");
+    step.phase = "repair";
+    step.repairContext = "previous failure: tests broke";
+
+    await verifier.verify(step, "actual");
+
+    expect(promptText).toContain("Phase: repair");
+    expect(promptText).toContain("previous failure: tests broke");
   });
 });

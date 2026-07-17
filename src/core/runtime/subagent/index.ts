@@ -1,8 +1,15 @@
 import { asSessionId } from "@/types/brand";
-import { SubAgentOptions } from "../plan/types";
+import { type PlanPhase, type SubAgentOptions } from "../plan/types";
 import { SubAgentAgentLike } from "./types";
 import { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import { extractText } from "@/utils/pi-text";
+
+const PHASE_GUIDANCE: Record<PlanPhase, string> = {
+  inspect: "Inspect the relevant code, config, and tests before changing anything.",
+  edit: "Make the smallest targeted code change that addresses the task.",
+  test: "Run or update tests and report the concrete result.",
+  repair: "Use the failure context to diagnose and fix the exact cause.",
+};
 
 export class SubAgent {
   constructor(private deps: { agent: SubAgentAgentLike }) {}
@@ -25,10 +32,7 @@ export class SubAgent {
 
     try {
       this.deps.agent.setNextSessionId(subSessionId);
-
-      const taskText = options.context
-        ? `${options.task}\n\nContext: ${options.context}`
-        : options.task;
+      const taskText = this.buildTaskText(options);
 
       this.deps.agent.steer({
         role: "user",
@@ -48,5 +52,24 @@ export class SubAgent {
         this.deps.agent.setNextSessionId(previousSessionId);
       }
     }
+  }
+
+  private buildTaskText(options: SubAgentOptions): string {
+    const phase = options.phase ?? "edit";
+    const parts = [
+      `Phase: ${phase}`,
+      PHASE_GUIDANCE[phase],
+      `Task: ${options.task}`,
+    ];
+
+    if (options.context) {
+      parts.push(`Context: ${options.context}`);
+    }
+
+    if (options.repairContext) {
+      parts.push(`Repair context: ${options.repairContext}`);
+    }
+
+    return parts.join("\n\n");
   }
 }

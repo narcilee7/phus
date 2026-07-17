@@ -1,9 +1,10 @@
 import { asSessionId } from "@/types/brand";
-import { Plan, PlannerDeps, Step } from "./types";
+import { type Plan, type PlannerDeps, type PlanPhase, type Step } from "./types";
 import { makeCtx } from "@/core/runtime/hook/ctx-builder";
 import { AgentMessage } from "@mariozechner/pi-agent-core";
 import { stripJson } from "@/utils/json";
 
+const PHASES: PlanPhase[] = ["inspect", "edit", "test", "repair"];
 
 export class Planner {
   constructor(private deps: PlannerDeps) {}
@@ -49,7 +50,8 @@ export class Planner {
   private buildPrompt(goal: string, context?: string): AgentMessage[] {
     const parts = [
       "You are a task planner. Given a goal and available skills, output a JSON object with a top-level \"steps\" array.",
-      "Each step must have: id (unique string), description (string), tool (optional tool/skill name), expectedOutput (optional string), dependsOn (optional array of step ids).",
+      "Each step must have: id (unique string), description (string), phase (optional inspect|edit|test|repair), tool (optional tool/skill name), expectedOutput (optional string), dependsOn (optional array of step ids).",
+      "Use phase=inspect to gather context, edit to change code, test to validate behavior, and repair to fix a failed step with updated context.",
       "Steps should be concrete, actionable, and ordered by dependency. Output only the JSON object, no markdown fences.",
       "",
       `Goal: ${goal}`,
@@ -84,15 +86,41 @@ export class Planner {
   }
 
   private normalizeStep(raw: Partial<Step>, index: number): Step {
+    const description = raw.description ?? "";
     return {
       id: raw.id ?? crypto.randomUUID(),
       index,
-      description: raw.description ?? "",
+      description,
       tool: raw.tool,
       expectedOutput: raw.expectedOutput,
       status: "pending",
       retryCount: 0,
       dependsOn: Array.isArray(raw.dependsOn) ? raw.dependsOn : undefined,
+      phase: this.normalizePhase(raw.phase, description),
     };
+  }
+
+  private normalizePhase(raw: unknown, description: string): PlanPhase {
+    if (typeof raw === "string" && PHASES.includes(raw as PlanPhase)) {
+      return raw as PlanPhase;
+    }
+    return this.inferPhase(description);
+  }
+
+  private inferPhase(text: string): PlanPhase {
+    const normalized = text.toLowerCase();
+    if (/(inspect|read|scan|analy[sz]e|investigate|trace|understand|gather|survey|discover)/.test(normalized)) {
+      return "inspect";
+    }
+    if (/(test|verify|validate|check|assert|smoke)/.test(normalized)) {
+      return "test";
+    }
+    if (/(repair|fix|debug|patch|recover|restore|resolve)/.test(normalized)) {
+      return "repair";
+    }
+    if (/(edit|write|change|update|implement|patch|modify|refactor|add|remove)/.test(normalized)) {
+      return "edit";
+    }
+    return "edit";
   }
 }

@@ -24,15 +24,29 @@ function makeStep(): Step {
     index: 0,
     description: "do something",
     expectedOutput: "done",
+    phase: "edit",
     status: "pending",
     retryCount: 0,
   };
 }
 
+function extractText(message: AgentMessage): string {
+  const content = message.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => (part && typeof part === "object" && part.type === "text" && typeof part.text === "string" ? part.text : ""))
+    .filter(Boolean)
+    .join(" ");
+}
+
 function makeMockAgent(resultText = "done") {
   const handlers: Array<(event: AgentEvent) => void> = [];
+  const steered: string[] = [];
   return {
+    steered,
     steer: (msg: AgentMessage) => {
+      steered.push(extractText(msg));
       // Simulate a sub-agent run: emit an agent_end event with an assistant reply.
       handlers.forEach((h) =>
         h({
@@ -69,6 +83,33 @@ describe("Executor", () => {
     const { verification } = await executor.executeStep(step, makePlan());
     expect(step.status).toBe("completed");
     expect(verification.action).toBe("proceed");
+  });
+
+  it("retries with repair context after verification requests a retry", async () => {
+    let calls = 0;
+    const verifier = new Verifier({
+      model: {
+        prompt: async () => {
+          calls++;
+          return calls === 1
+            ? JSON.stringify({ ok: false, confidence: 0.4, reason: "retry", action: "retry" })
+            : JSON.stringify({ ok: true, confidence: 0.9, reason: "fixed", action: "proceed" });
+        },
+      },
+    });
+    const agent = makeMockAgent("fixed");
+    const executor = new Executor({ agent: agent as any, verifier, maxRetries: 1 });
+    const step = makeStep();
+
+    await executor.executeStep(step, makePlan());
+
+    expect(step.status).toBe("completed");
+    expect(step.retryCount).toBe(1);
+    expect(step.phase).toBe("repair");
+    expect(agent.steered).toHaveLength(2);
+    expect(agent.steered[1]).toContain("Phase: repair");
+    expect(agent.steered[1]).toContain("Repair context:");
+    expect(agent.steered[1]).toContain("retry");
   });
 
   it("retries a failing step up to maxRetries", async () => {

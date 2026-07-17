@@ -1,5 +1,12 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { Step, VerificationResult } from "@/core/runtime/plan/types";
+import type { Step, VerificationResult, PlanPhase } from "@/core/runtime/plan/types";
+
+const PHASE_HINTS: Record<PlanPhase, string> = {
+  inspect: "For inspect steps, prefer proceed when the result explains the codepath clearly enough to support the next action.",
+  edit: "For edit steps, prefer proceed when the change is targeted and consistent with the expected output.",
+  test: "For test steps, prefer proceed only when validation evidence is concrete and successful.",
+  repair: "For repair steps, prefer retry when the failure points to a fixable cause in the current codepath; replan only when the shape of the task must change.",
+};
 
 export interface VerifierDeps {
   model?: { prompt(messages: AgentMessage[]): Promise<string> };
@@ -51,12 +58,16 @@ export class Verifier {
 
   private buildPrompt(step: Step, result: unknown): AgentMessage[] {
     const actual = result instanceof Error ? result.message : JSON.stringify(result);
+    const phase = step.phase ?? "edit";
     const text = [
       "You are a verifier. Compare the expected output of a step with the actual result and decide what to do next.",
       "Output JSON with fields: ok (boolean), confidence (0-1 number), reason (string), action (one of: proceed, retry, replan, escalate, abort).",
+      `Phase: ${phase}`,
+      PHASE_HINTS[phase],
       "",
       `Step: ${step.description}`,
       `Expected output: ${step.expectedOutput}`,
+      step.repairContext ? `Repair context: ${step.repairContext}` : "",
       `Actual result: ${actual}`,
     ].join("\n");
 
