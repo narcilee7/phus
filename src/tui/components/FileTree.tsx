@@ -7,6 +7,7 @@ import { Box, Text, useInput } from "ink";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { scanFiles } from "@/tui/components/CommandPalette.js";
+import { loadGitStatus, type GitStatusMap } from "@/tui/git-status.js";
 
 interface TreeNode {
   name: string;
@@ -71,6 +72,22 @@ function depthOf(node: TreeNode, root: TreeNode): number {
   return depth;
 }
 
+function statusBadge(code: string | undefined): string {
+  if (!code) return "";
+  const color: Record<string, string> = {
+    M: "yellow",
+    A: "green",
+    D: "red",
+    "?": "magenta",
+    R: "cyan",
+    C: "cyan",
+    U: "red",
+  };
+  return ` [${code}]`;
+}
+
+const PREVIEW_MAX_LINES = 100;
+
 export interface FileTreeProps {
   height: number;
   onInsert: (value: string) => void;
@@ -82,12 +99,21 @@ export function FileTree({ height, onInsert, onPreview, onClose }: FileTreeProps
   const [files, setFiles] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectedPath, setSelectedPath] = useState<string>("");
+  const [gitStatus, setGitStatus] = useState<GitStatusMap>({});
+  const [filterMode, setFilterMode] = useState(false);
+  const [filterQuery, setFilterQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const list = await scanFiles(process.cwd(), 4);
-      if (!cancelled) setFiles(list);
+      const [list, status] = await Promise.all([
+        scanFiles(process.cwd(), 4),
+        loadGitStatus(process.cwd()),
+      ]);
+      if (!cancelled) {
+        setFiles(list);
+        setGitStatus(status);
+      }
     }
     void load();
     return () => {
@@ -98,9 +124,27 @@ export function FileTree({ height, onInsert, onPreview, onClose }: FileTreeProps
   const root = useMemo(() => buildTree(files), [files]);
   const visible = useMemo(() => getVisibleNodes(root, expanded), [root, expanded]);
 
+  // In filter mode flatten to matching files across the whole tree, regardless
+  // of which directories are currently expanded.
+  const filteredVisible = useMemo(() => {
+    const q = filterQuery.trim().toLowerCase();
+    if (!filterMode || !q) return visible;
+    const allFiles: TreeNode[] = [];
+    function collect(node: TreeNode) {
+      if (node === root) {
+        for (const child of node.children) collect(child);
+        return;
+      }
+      if (node.type === "file") allFiles.push(node);
+      else for (const child of node.children) collect(child);
+    }
+    collect(root);
+    return allFiles.filter((n) => n.name.toLowerCase().includes(q));
+  }, [visible, root, filterMode, filterQuery]);
+
   const selectedNode = useMemo(() => {
-    return visible.find((n) => n.path === selectedPath) ?? visible[0];
-  }, [visible, selectedPath]);
+    return filteredVisible.find((n) => n.path === selectedPath) ?? filteredVisible[0];
+  }, [filteredVisible, selectedPath]);
 
   useEffect(() => {
     if (selectedNode && selectedNode.path !== selectedPath) {
@@ -109,21 +153,47 @@ export function FileTree({ height, onInsert, onPreview, onClose }: FileTreeProps
   }, [selectedNode, selectedPath]);
 
   const selectedIndex = useMemo(
-    () => Math.max(0, visible.findIndex((n) => n.path === selectedPath)),
-    [visible, selectedPath],
+    () => Math.max(0, filteredVisible.findIndex((n) => n.path === selectedPath)),
+    [filteredVisible, selectedPath],
   );
 
   useInput((input, key) => {
+    if (filterMode) {
+      if (key.escape) {
+        setFilterMode(false);
+        setFilterQuery("");
+        return;
+      }
+      if (key.backspace || key.delete) {
+        setFilterQuery((q) => q.slice(0, -1));
+        return;
+      }
+      if (key.return) {
+        setFilterMode(false);
+        return;
+      }
+      if (input && !key.ctrl && !key.meta) {
+        setFilterQuery((q) => q + input);
+      }
+      return;
+    }
+
+    if (input === "/") {
+      setFilterMode(true);
+      setFilterQuery("");
+      return;
+    }
+
     if (key.escape || (key.ctrl && input === "b")) {
       onClose();
       return;
     }
     if (key.upArrow) {
-      setSelectedPath(visible[Math.max(0, selectedIndex - 1)]?.path ?? "");
+      setSelectedPath(filteredVisible[Math.max(0, selectedIndex - 1)]?.path ?? "");
       return;
     }
     if (key.downArrow) {
-      setSelectedPath(visible[Math.min(visible.length - 1, selectedIndex + 1)]?.path ?? "");
+      setSelectedPath(filteredVisible[Math.min(filteredVisible.length - 1, selectedIndex + 1)]?.path ?? "");
       return;
     }
     if (key.leftArrow) {
@@ -171,7 +241,12 @@ export function FileTree({ height, onInsert, onPreview, onClose }: FileTreeProps
       if (!node || node.type !== "file") return;
       void readFile(node.path, "utf-8")
         .then((text) => {
-          onPreview(`── ${node.path} (${text.length} chars) ──\n${text}`);
+          const lines = text.split("\n");
+          const preview =
+            lines.length > PREVIEW_MAX_LINES
+              ? lines.slice(0, PREVIEW_MAX_LINES).join("\n") + "\n..."
+              : text;
+          onPreview(`── ${node.path} (${text.length} chars) ──\n${preview}`);
         })
         .catch((err: any) => {
           onPreview(`could not read ${node.path}: ${err.message ?? err}`);
@@ -181,7 +256,7 @@ export function FileTree({ height, onInsert, onPreview, onClose }: FileTreeProps
 
   const maxRows = Math.max(1, height - 4);
   const windowStart = Math.max(0, selectedIndex - maxRows + 1);
-  const windowed = visible.slice(windowStart, windowStart + maxRows);
+  const windowed = filteredVisible.slice(windowStart, windowStart + maxRows);
 
   return (
     <Box
@@ -193,6 +268,14 @@ export function FileTree({ height, onInsert, onPreview, onClose }: FileTreeProps
     >
       <Box marginBottom={1}>
         <Text bold color="cyan">Files</Text>
+        {filterMode && (
+          <Text>
+            {"  "}
+            <Text color="cyan">/</Text>
+            <Text>{filterQuery}</Text>
+            <Text color="cyan">▍</Text>
+          </Text>
+        )}
       </Box>
       <Box flexDirection="column" flexGrow={1}>
         {windowed.map((node) => {
@@ -201,26 +284,33 @@ export function FileTree({ height, onInsert, onPreview, onClose }: FileTreeProps
           const icon = node.type === "dir" ? (isExpanded ? "📂" : "📁") : "📄";
           const chevron = node.type === "dir" ? (isExpanded ? "▼ " : "▶ ") : "  ";
           const indent = "  ".repeat(depthOf(node, root));
+          const badge = node.type === "file" ? statusBadge(gitStatus[node.path]) : "";
           return (
             <Box key={`${node.type}-${node.path}`}>
               {isSelected ? (
                 <Text backgroundColor="cyan" color="black">
                   {indent}{chevron}{icon} {node.name}
+                  <Text color="black">{badge}</Text>
                 </Text>
               ) : (
                 <Text>
                   {indent}{chevron}{icon} {node.name}
+                  <Text color="yellow">{badge}</Text>
                 </Text>
               )}
             </Box>
           );
         })}
-        {visible.length === 0 && (
-          <Text dimColor>(no files)</Text>
+        {filteredVisible.length === 0 && (
+          <Text dimColor>{filterMode ? "(no matches)" : "(no files)"}</Text>
         )}
       </Box>
       <Box>
-        <Text dimColor>↑↓ nav · ←→ expand · Enter @path · Space preview · Esc close</Text>
+        <Text dimColor>
+          {filterMode
+            ? "type to filter · Enter keep · Esc clear"
+            : "↑↓ nav · ←→ expand · Enter @path · Space preview · / filter · Esc close"}
+        </Text>
       </Box>
     </Box>
   );
