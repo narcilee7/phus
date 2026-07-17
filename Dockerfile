@@ -26,7 +26,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Build TS to dist/
-COPY tsconfig.json ./
+COPY tsconfig.json tsdown.config.ts ./
 COPY src ./src
 RUN pnpm build
 
