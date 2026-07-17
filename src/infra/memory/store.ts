@@ -27,6 +27,24 @@ export type ApplyResult =
   | { ok: true; path: string; diff: string; next: string }
   | { ok: false; reason: string };
 
+interface MemorySection {
+  heading: string;
+  body: string;
+  index: number;
+}
+
+interface ScoredMemorySection extends MemorySection {
+  score: number;
+  queryCoverage: number;
+  sectionCoverage: number;
+  headingOverlap: number;
+  recency: number;
+}
+
+const MEMORY_PROMPT_SECTION_BUDGET = 4;
+const MEMORY_PROMPT_MIN_SCORE = 0.18;
+const MEMORY_PROMPT_RECENCY_WEIGHT = 0.1;
+
 /** Parse `## foo` headings into ordered sections. Sections without a
  *  leading heading (preamble / leading prose) live under the empty
  *  string key `""`. */
@@ -52,6 +70,99 @@ function splitSections(raw: string): { headings: string[]; bodies: Record<string
     bodies[current] = (bodies[current] ?? "") + line + "\n";
   }
   return { headings, bodies };
+}
+
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((token) => token.length > 1),
+  );
+}
+
+function overlapCount(left: Set<string>, right: Set<string>): number {
+  let count = 0;
+  for (const token of left) {
+    if (right.has(token)) count++;
+  }
+  return count;
+}
+
+function shortenQuery(query: string, max = 80): string {
+  const compact = query.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, Math.max(0, max - 1))}…`;
+}
+
+function collectSections(raw: string): MemorySection[] {
+  const { headings, bodies } = splitSections(raw);
+  return headings.map((heading, index) => ({
+    heading,
+    body: bodies[heading] ?? "",
+    index,
+  }));
+}
+
+function formatSection(section: MemorySection): string {
+  const body = section.body.trimEnd();
+  if (!body) return section.heading;
+  return `${section.heading}\n\n${body}`;
+}
+
+function limitPromptContext(context: string): string {
+  const bytes = Buffer.byteLength(context, "utf-8");
+  if (bytes <= MEMORY_PROMPT_BUDGET_BYTES) return context;
+
+  const lines = context.split("\n");
+  const kept: string[] = [];
+  let used = 0;
+  for (const line of lines) {
+    const len = Buffer.byteLength(line, "utf-8") + 1;
+    if (used + len > MEMORY_PROMPT_BUDGET_BYTES) break;
+    kept.push(line);
+    used += len;
+  }
+
+  if (kept.length === 0) {
+    return context.slice(0, MEMORY_PROMPT_BUDGET_BYTES);
+  }
+
+  const dropped = Math.max(0, lines.length - kept.length);
+  const [firstLine, ...rest] = kept;
+  return [
+    `${firstLine} (truncated — ${dropped} more lines; see phus.md for full content)`,
+    ...rest,
+  ].join("\n");
+}
+
+function renderFullPromptContext(raw: string): string {
+  return limitPromptContext(`## Project memory\n${raw}`);
+}
+
+function scoreSection(section: MemorySection, queryTokens: Set<string>, total: number): ScoredMemorySection {
+  const sectionTokens = tokenize(`${section.heading} ${section.body}`);
+  const headingTokens = tokenize(section.heading);
+  const overlap = overlapCount(queryTokens, sectionTokens);
+  const headingOverlap = overlapCount(queryTokens, headingTokens);
+  const queryCoverage = queryTokens.size > 0 ? overlap / queryTokens.size : 0;
+  const sectionCoverage = sectionTokens.size > 0 ? overlap / sectionTokens.size : 0;
+  const recency = total > 1 ? section.index / (total - 1) : 1;
+  const score =
+    queryCoverage +
+    (sectionCoverage * 0.15) +
+    (headingOverlap > 0 ? 0.35 : 0) +
+    (recency * MEMORY_PROMPT_RECENCY_WEIGHT);
+
+  return {
+    ...section,
+    score,
+    queryCoverage,
+    sectionCoverage,
+    headingOverlap,
+    recency,
+  };
 }
 
 function serialize(headings: string[], bodies: Record<string, string>): string {
@@ -187,26 +298,54 @@ export class MemoryStore {
 
   /** Format for system-prompt injection. Truncates aggressively if
    *  the file is large so we don't blow the context window. */
-  toPromptContext(): string {
+  toPromptContext(query?: string): string {
     const { raw } = this.read();
     if (!raw) return "## Project memory\n(no project memory yet)";
-    const bytes = Buffer.byteLength(raw, "utf-8");
-    if (bytes <= MEMORY_PROMPT_BUDGET_BYTES) {
-      return `## Project memory\n${raw}`;
+    const trimmedQuery = query?.trim() ?? "";
+    if (!trimmedQuery) {
+      return renderFullPromptContext(raw);
     }
-    // Truncate by lines — keep whole lines, not bytes mid-character.
-    const kept: string[] = [];
-    let used = 0;
-    for (const line of raw.split("\n")) {
-      const len = Buffer.byteLength(line, "utf-8") + 1;
-      if (used + len > MEMORY_PROMPT_BUDGET_BYTES) break;
-      kept.push(line);
-      used += len;
+
+    const sections = collectSections(raw);
+    if (sections.length === 0) {
+      return renderFullPromptContext(raw);
     }
-    const dropped = raw.split("\n").length - kept.length;
-    return (
-      `## Project memory (truncated — ${dropped} more lines; ` +
-      `see phus.md for full content)\n${kept.join("\n")}`
-    );
+
+    const queryTokens = tokenize(trimmedQuery);
+    if (queryTokens.size === 0) {
+      return renderFullPromptContext(raw);
+    }
+
+    const scored = sections.map((section) => scoreSection(section, queryTokens, sections.length));
+    const strongMatches = scored
+      .filter((section) => section.score >= MEMORY_PROMPT_MIN_SCORE)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.recency !== a.recency) return b.recency - a.recency;
+        return a.index - b.index;
+      });
+
+    const selected = (strongMatches.length > 0 ? strongMatches : [...scored].sort((a, b) => {
+      if (b.recency !== a.recency) return b.recency - a.recency;
+      return a.index - b.index;
+    }))
+      .slice(0, MEMORY_PROMPT_SECTION_BUDGET)
+      .sort((a, b) => a.index - b.index);
+
+    if (selected.length === 0) {
+      return renderFullPromptContext(raw);
+    }
+
+    const queryLabel = JSON.stringify(shortenQuery(trimmedQuery));
+    const selectionLabel = strongMatches.length > 0
+      ? `selected for ${queryLabel}; ${selected.length} of ${sections.length} sections`
+      : `recent sections for ${queryLabel}; no strong match found`;
+
+    const context = [
+      `## Project memory (${selectionLabel})`,
+      ...selected.map((section) => formatSection(section)),
+    ].join("\n\n");
+
+    return limitPromptContext(context);
   }
 }

@@ -34,16 +34,36 @@ export interface PromptAssemblyDeps {
    *  a `toPromptContext()` that returns a markdown section or "(no
    *  project memory yet)". May be undefined for legacy callers / tests;
    *  in that case the memory section is omitted. */
-  memory?: { toPromptContext(): string };
+  memory?: { toPromptContext(query?: string): string };
   /** Function returning the model's context window; tests can stub it. */
   getContextWindow: () => number | undefined;
   /** Function returning the current session id (may be undefined pre-session). */
   getCurrentSessionId: () => SessionId | undefined;
-  /** Function returning the messages so we can pick the last user message
-   *  as the relevance-query input for `selectRelevantTurns`. */
-  getMessages: () => readonly AgentMessage[];
   /** Function writing the final composed prompt into the live agent state. */
   setSystemPrompt: (prompt: string) => void;
+}
+
+function extractMessageText(message: AgentMessage): string {
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const textPart = part as { type?: unknown; text?: unknown };
+      if (textPart.type === "text" && typeof textPart.text === "string") {
+        return textPart.text;
+      }
+      return "";
+    })
+    .filter((text) => text.length > 0)
+    .join(" ");
+}
+
+function getUserQuery(messages: readonly AgentMessage[]): string {
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
+  if (!lastUserMessage) return "";
+  return extractMessageText(lastUserMessage).trim();
 }
 
 /** Compose and apply the system prompt + dynamic context block.
@@ -68,16 +88,10 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
     dynamicContext = ctxResult;
   } else {
     const skillsCtx = deps.skills.toPromptContext();
+    const queryText = getUserQuery(messages);
     let tapeSummary: string;
     const sid = deps.getCurrentSessionId();
     if (sid) {
-      const lastUserMsg = [...deps.getMessages()].reverse().find((m) => m.role === "user");
-      const query = (lastUserMsg as any)?.content ?? "";
-      const queryText = typeof query === "string"
-        ? query
-        : Array.isArray(query)
-          ? query.filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ")
-          : "";
       const { selectRelevantTurns } = await import("@/core/session/context-select.js");
       // `selectRelevantTurns` requires the concrete `Tape` class.
       // `TapeLike` already declares `.replay()` so the cast is sound
@@ -98,10 +112,10 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
       tapeSummary = "(no session yet)";
     }
     const stats = deps.tape.stats();
-    const memoryCtx = deps.memory?.toPromptContext() ?? "## Project memory\n(no project memory yet)";
+    const memoryCtx = deps.memory?.toPromptContext(queryText) ?? "## Project memory\n(no project memory yet)";
     dynamicContext =
       `## Current skills\n${skillsCtx}\n\n` +
-      `## Project memory\n${memoryCtx.replace(/^## Project memory\n?/, "")}\n\n` +
+      `${memoryCtx}\n\n` +
       `## Relevant past turns (B.4.3 smart select)\n${tapeSummary}\n\n` +
       `## Tape statistics\nTotal entries across all sessions: ${stats.totalEntries}\n` +
       `Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;

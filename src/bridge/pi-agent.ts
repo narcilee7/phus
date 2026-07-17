@@ -539,7 +539,6 @@ export class PhusAgent implements PhusAgentFacade {
       memory: this.memoryStore,
       getContextWindow: () => this.piAgent.state.model.contextWindow,
       getCurrentSessionId: () => this.currentSessionId,
-      getMessages: () => this.piAgent.state.messages,
       setSystemPrompt: (prompt) => { this.piAgent.state.systemPrompt = prompt; },
     });
   }
