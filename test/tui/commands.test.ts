@@ -40,6 +40,8 @@ function makeAgent(over: Partial<PhusAgent> = {}): PhusAgent {
     clearConversation: async () => {},
     replayTape: function* () {},
     restoreCheckpoint: vi.fn(async () => {}),
+    saveCheckpoint: vi.fn(),
+    listCheckpoints: vi.fn(() => []),
     interrupt: vi.fn(),
     loadPluginsForReload: async () => ({ skills: 1, plugins: 0, pluginStatus: [] }),
     getPolicy: () => [{ toolName: "bash", evaluate: () => ({ allow: true }) } as any],
@@ -327,6 +329,57 @@ describe("runSlash — /context / /policy / /health / /reload", () => {
     const agent = makeAgent({ getCurrentSessionId: () => undefined } as any);
     const { dispatched, dispatch } = captureDispatch();
     await runSlash("/undo", agent, initialState, dispatch);
+    expect(getSystemText(dispatched)).toContain("no active session");
+  });
+
+  it("/checkpoint list shows checkpoints for current session", async () => {
+    const listCheckpoints = vi.fn(() => [
+      { ts: Date.now() * 1000, messages: [1, 2, 3] },
+      { ts: (Date.now() - 1000) * 1000, messages: [1, 2] },
+    ]);
+    const agent = makeAgent({ listCheckpoints } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/checkpoint list", agent, initialState, dispatch);
+    expect(listCheckpoints).toHaveBeenCalledWith("cli:default");
+    expect(getSystemText(dispatched)).toContain("1.");
+    expect(getSystemText(dispatched)).toContain("3 messages");
+  });
+
+  it("/checkpoint create saves a checkpoint", async () => {
+    const saveCheckpoint = vi.fn();
+    const agent = makeAgent({ saveCheckpoint } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/checkpoint create", agent, initialState, dispatch);
+    expect(saveCheckpoint).toHaveBeenCalledWith("cli:default");
+    expect(getSystemText(dispatched)).toContain("✓ checkpoint created");
+  });
+
+  it("/checkpoint restore restores the selected checkpoint", async () => {
+    const restoreCheckpoint = vi.fn(async () => {});
+    const listCheckpoints = vi.fn(() => [
+      { ts: Date.now() * 1000, messages: [1, 2, 3] },
+      { ts: (Date.now() - 1000) * 1000, messages: [1, 2] },
+    ]);
+    const agent = makeAgent({ restoreCheckpoint, listCheckpoints } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/checkpoint restore 2", agent, initialState, dispatch);
+    expect(restoreCheckpoint).toHaveBeenCalledWith("cli:default");
+    expect(dispatched.some((a) => a.type === "clear_items")).toBe(true);
+    expect(getSystemText(dispatched)).toContain("✓ restored to checkpoint");
+  });
+
+  it("/checkpoint restore warns for invalid index", async () => {
+    const listCheckpoints = vi.fn(() => [{ ts: Date.now() * 1000, messages: [] }]);
+    const agent = makeAgent({ listCheckpoints } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/checkpoint restore 5", agent, initialState, dispatch);
+    expect(getSystemText(dispatched)).toContain("checkpoint 5 not found");
+  });
+
+  it("/checkpoint warns when there is no active session", async () => {
+    const agent = makeAgent({ getCurrentSessionId: () => undefined } as any);
+    const { dispatched, dispatch } = captureDispatch();
+    await runSlash("/checkpoint list", agent, initialState, dispatch);
     expect(getSystemText(dispatched)).toContain("no active session");
   });
 

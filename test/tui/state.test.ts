@@ -100,13 +100,14 @@ describe("upsert_tool_call", () => {
 });
 
 describe("complete_tool_call", () => {
-  it("appends a tool_result after the matching tool_call", () => {
+  it("updates the matching tool_call with result, error and duration", () => {
     const s1 = action({ type: "upsert_tool_call", toolCallId: "tc-1", toolName: "bash", args: {} });
     const s2 = appReducer(s1, { type: "complete_tool_call", toolCallId: "tc-1", result: "ok", isError: false });
-    expect(s2.items).toHaveLength(2);
-    expect(s2.items[1]!.kind).toBe("tool_result");
-    expect((s2.items[1]!.result as any)).toBe("ok");
-    expect(s2.items[1]!.isError).toBe(false);
+    expect(s2.items).toHaveLength(1);
+    expect(s2.items[0]!.kind).toBe("tool_call");
+    expect((s2.items[0]!.result as any)).toBe("ok");
+    expect(s2.items[0]!.isError).toBe(false);
+    expect(s2.items[0]!.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("no-ops when no matching tool_call exists", () => {
@@ -118,8 +119,9 @@ describe("complete_tool_call", () => {
   it("marks the original call as errored on failure", () => {
     const s1 = action({ type: "upsert_tool_call", toolCallId: "tc-1", toolName: "bash", args: {} });
     const s2 = appReducer(s1, { type: "complete_tool_call", toolCallId: "tc-1", result: "boom", isError: true });
+    expect(s2.items).toHaveLength(1);
     expect(s2.items[0]!.isError).toBe(true);
-    expect(s2.items[1]!.isError).toBe(true);
+    expect((s2.items[0]!.result as any)).toBe("boom");
   });
 });
 
@@ -133,6 +135,31 @@ describe("finalize_streaming", () => {
   it("is a no-op when no streaming assistant exists", () => {
     const s1 = action({ type: "add_user", text: "hi" });
     const s2 = appReducer(s1, { type: "finalize_streaming" });
+    expect(s2.items).toEqual(s1.items);
+  });
+});
+
+describe("set_assistant_metadata", () => {
+  it("attaches model and usage to the last assistant message", () => {
+    const s1 = action({ type: "append_delta", delta: "hello" });
+    const s2 = appReducer(s1, {
+      type: "set_assistant_metadata",
+      model: "claude-sonnet-4",
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, cost: 0.0012 },
+    });
+    const last = s2.items[s2.items.length - 1]!;
+    expect(last.kind).toBe("assistant");
+    expect(last.model).toBe("claude-sonnet-4");
+    expect(last.usage).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 30, cost: 0.0012 });
+  });
+
+  it("is a no-op when there is no assistant message", () => {
+    const s1 = action({ type: "add_user", text: "hi" });
+    const s2 = appReducer(s1, {
+      type: "set_assistant_metadata",
+      model: "gpt-4o",
+      usage: { totalTokens: 100 },
+    });
     expect(s2.items).toEqual(s1.items);
   });
 });
@@ -295,6 +322,7 @@ describe("plan state", () => {
       status: "running" as const,
       steps: [{ id: "s1", description: "step 1", status: "running" as const }],
       currentStepId: "s1",
+      subagents: [],
     };
     const s = appReducer(initialState, { type: "set_plan", plan });
     expect(s.plan).toEqual(plan);
@@ -310,6 +338,7 @@ describe("plan state", () => {
         { id: "s2", description: "step 2", status: "pending" as const },
       ],
       currentStepId: "s1",
+      subagents: [],
     };
     const s1 = appReducer(initialState, { type: "set_plan", plan });
     const s2 = appReducer(s1, { type: "update_plan_step", stepId: "s1", status: "completed" });
@@ -331,10 +360,98 @@ describe("plan state", () => {
       goal: "refactor auth",
       status: "completed" as const,
       steps: [{ id: "s1", description: "step 1", status: "completed" as const }],
+      subagents: [],
     };
     const s1 = appReducer(initialState, { type: "set_plan", plan });
     const s2 = appReducer(s1, { type: "clear_plan" });
     expect(s2.plan).toBeUndefined();
+  });
+
+  it("set_plan_step_output attaches output to a step", () => {
+    const plan = {
+      id: "p1",
+      goal: "g",
+      status: "running" as const,
+      steps: [{ id: "s1", description: "step 1", status: "running" as const }],
+      subagents: [],
+    };
+    const s1 = appReducer(initialState, { type: "set_plan", plan });
+    const s2 = appReducer(s1, {
+      type: "set_plan_step_output",
+      stepId: "s1",
+      output: "scanning src/",
+    });
+    expect(s2.plan?.steps[0]?.output).toBe("scanning src/");
+  });
+
+  it("set_plan_status flips the plan lifecycle status", () => {
+    const plan = {
+      id: "p1",
+      goal: "g",
+      status: "running" as const,
+      steps: [],
+      subagents: [],
+    };
+    const s1 = appReducer(initialState, { type: "set_plan", plan });
+    const s2 = appReducer(s1, { type: "set_plan_status", status: "paused" });
+    expect(s2.plan?.status).toBe("paused");
+  });
+
+  it("upsert_plan_subagent adds and merges a subagent", () => {
+    const plan = {
+      id: "p1",
+      goal: "g",
+      status: "running" as const,
+      steps: [],
+      subagents: [],
+    };
+    const s1 = appReducer(initialState, { type: "set_plan", plan });
+    const s2 = appReducer(s1, {
+      type: "upsert_plan_subagent",
+      subagent: { sessionId: "s1", label: "explore", goal: "scan", status: "running" },
+    });
+    expect(s2.plan?.subagents).toHaveLength(1);
+    const s3 = appReducer(s2, {
+      type: "upsert_plan_subagent",
+      subagent: { sessionId: "s1", label: "explore", goal: "scan", status: "completed" },
+    });
+    expect(s3.plan?.subagents).toHaveLength(1);
+    expect(s3.plan?.subagents[0]?.status).toBe("completed");
+  });
+
+  it("remove_plan_subagent drops the matching subagent", () => {
+    const plan = {
+      id: "p1",
+      goal: "g",
+      status: "running" as const,
+      steps: [],
+      subagents: [
+        { sessionId: "s1", label: "a", goal: "g", status: "completed" },
+        { sessionId: "s2", label: "b", goal: "g", status: "running" },
+      ],
+    };
+    const s1 = appReducer(initialState, { type: "set_plan", plan });
+    const s2 = appReducer(s1, { type: "remove_plan_subagent", sessionId: "s1" });
+    expect(s2.plan?.subagents).toHaveLength(1);
+    expect(s2.plan?.subagents[0]?.sessionId).toBe("s2");
+  });
+});
+
+describe("sidebar request", () => {
+  it("request_sidebar stores the request", () => {
+    const s = appReducer(initialState, { type: "request_sidebar", view: "sessions" });
+    expect(s.sidebarRequest).toBe("sessions");
+  });
+
+  it("consume_sidebar_request clears the stored request", () => {
+    const s1 = appReducer(initialState, { type: "request_sidebar", view: "files" });
+    const s2 = appReducer(s1, { type: "consume_sidebar_request" });
+    expect(s2.sidebarRequest).toBeUndefined();
+  });
+
+  it("consume_sidebar_request is a no-op when nothing was requested", () => {
+    const s = appReducer(initialState, { type: "consume_sidebar_request" });
+    expect(s).toEqual(initialState);
   });
 });
 

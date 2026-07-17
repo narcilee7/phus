@@ -6,13 +6,27 @@ import React, { useState } from "react";
 import { render } from "ink-testing-library";
 import { MultiLineInput } from "../../src/tui/components/MultiLineInput.js";
 
-const SUGGESTIONS = ["help", "clear", "quit", "models", "profiles"];
-const MENTION_SUGGESTIONS = ["src/foo.ts", "src/bar.ts", "README.md"];
+import type { SuggestionItem } from "../../src/tui/components/MultiLineInput.js";
+
+const SUGGESTIONS: SuggestionItem[] = [
+  { name: "help", description: "show available commands" },
+  { name: "clear", description: "clear chat area" },
+  { name: "quit", description: "exit" },
+  { name: "models", description: "list known models" },
+  { name: "profiles", description: "list provider profiles" },
+];
+import type { MentionItem } from "../../src/tui/components/MultiLineInput.js";
+
+const MENTION_SUGGESTIONS: MentionItem[] = [
+  { target: "src/foo.ts", type: "file" },
+  { target: "src/bar.ts", type: "file" },
+  { target: "README.md", type: "file" },
+];
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 
 function ControlledInput(props: {
-  suggestions?: string[];
-  mentionSuggestions?: string[];
+  suggestions?: SuggestionItem[];
+  mentionSuggestions?: MentionItem[];
   onSubmit?: (text: string) => void;
 }) {
   const [value, setValue] = useState("");

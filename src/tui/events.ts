@@ -39,7 +39,7 @@ export function eventToAction(event: any): AppAction | null {
       };
     case "agent_end":
       return { type: "finalize_streaming" };
-    case "turn_end":
+    case "turn_end": {
       if (event.message?.errorMessage) {
         return {
           type: "add_system",
@@ -47,7 +47,21 @@ export function eventToAction(event: any): AppAction | null {
           level: "error",
         };
       }
+      const usage = event.message?.usage;
+      if (usage) {
+        return {
+          type: "set_assistant_metadata",
+          model: event.message?.model,
+          usage: {
+            inputTokens: usage.input,
+            outputTokens: usage.output,
+            totalTokens: usage.totalTokens,
+            cost: usage.cost?.total,
+          },
+        };
+      }
       return null;
+    }
     default:
       return null;
   }

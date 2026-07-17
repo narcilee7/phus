@@ -17,6 +17,7 @@ type WizardStep =
   | "provider"
   | "model"
   | "apiKey"
+  | "keyMode"
   | "profile"
   | "confirm"
   | "done"
@@ -37,6 +38,15 @@ const PICKER_VISIBLE_COUNT = 10;
 
 function truncateLabel(label: string, max: number): string {
   return label.length > max ? label.slice(0, max - 1) + "…" : label;
+}
+
+/** Derive a conventional env var name from a provider id, e.g.
+ *  "anthropic" → "ANTHROPIC_API_KEY". Used by the wizard as the
+ *  sensible default when the user picks "use env var". */
+function defaultEnvVarName(provider: string | undefined): string {
+  if (!provider) return "API_KEY";
+  const upper = provider.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  return `${upper}_API_KEY`;
 }
 
 function Picker<T>({ title, items, selectedIndex, renderLabel }: PickerProps<T>) {
@@ -82,9 +92,13 @@ interface TextStepProps {
   onChange: (value: string) => void;
   placeholder?: string;
   hint?: string;
+  /** When true, the displayed value is masked with bullets to keep
+   *  secrets off the screen. The real value is still passed through
+   *  `onChange` unchanged. */
+  secure?: boolean;
 }
 
-function TextStep({ title, value, onChange, placeholder, hint }: TextStepProps) {
+function TextStep({ title, value, onChange, placeholder, hint, secure }: TextStepProps) {
   useInput((input, key) => {
     if (key.return || key.escape) return;
     if (key.backspace || key.delete) {
@@ -96,11 +110,13 @@ function TextStep({ title, value, onChange, placeholder, hint }: TextStepProps) 
     }
   });
 
+  const display = secure && value.length > 0 ? "•".repeat(value.length) : value;
+
   return (
     <Box flexDirection="column">
       <Text bold color="cyan">{title}</Text>
       <Box marginTop={1}>
-        <Text color="cyan">{value}</Text>
+        <Text color="cyan">{display}</Text>
         <Text color="cyan">▍</Text>
         {value.length === 0 && placeholder && (
           <Text dimColor>{placeholder}</Text>
@@ -126,6 +142,9 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
   const [providerIndex, setProviderIndex] = useState(0);
   const [modelIndex, setModelIndex] = useState(0);
   const [apiKey, setApiKey] = useState("");
+  /** "inline" writes the secret straight into apiKey; "envVar" stores
+   *  the name of the env var (preferred for shared / multi-host setups). */
+  const [keyMode, setKeyMode] = useState<"inline" | "envVar">("envVar");
   const [profileName, setProfileName] = useState("default");
   const [error, setError] = useState<string | undefined>();
 
@@ -189,7 +208,10 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
     if (step === "model") {
       if (key.upArrow) setModelIndex((i) => Math.max(0, i - 1));
       if (key.downArrow) setModelIndex((i) => Math.min(models.length - 1, i + 1));
-      if (key.return) setStep("apiKey");
+      if (key.return) {
+        setStep("keyMode");
+        setApiKey(defaultEnvVarName(providers[providerIndex]));
+      }
       if (key.escape) setStep("provider");
       return;
     }
@@ -208,10 +230,24 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
       return;
     }
 
+    if (step === "keyMode") {
+      if (key.upArrow || key.downArrow) {
+        setKeyMode((m) => (m === "envVar" ? "inline" : "envVar"));
+      }
+      if (key.return) {
+        setApiKey(keyMode === "envVar" ? defaultEnvVarName(providers[providerIndex]) : "");
+        setStep(keyMode === "envVar" ? "apiKey" : "apiKey");
+      }
+      if (key.escape) {
+        setStep("model");
+      }
+      return;
+    }
+
     if (step === "profile") {
       if (key.return) setStep("confirm");
       if (key.escape) {
-        setStep("apiKey");
+        setStep("keyMode");
         return;
       }
       return;
@@ -251,16 +287,21 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
       return;
     }
     const name = profileName.trim() || "default";
+    const profile: Record<string, unknown> = {
+      provider,
+      modelId,
+      thinkingLevel: "medium",
+    };
+    if (keyMode === "inline" && apiKey.trim()) {
+      profile.apiKey = apiKey.trim();
+    } else if (keyMode === "envVar" && apiKey.trim()) {
+      profile.apiKeyEnv = apiKey.trim();
+    }
     const config = {
       providers: {
         defaultProfile: name,
         profiles: {
-          [name]: {
-            provider,
-            modelId,
-            ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-            thinkingLevel: "medium",
-          },
+          [name]: profile,
         },
       },
     };
@@ -316,13 +357,35 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
         />
       )}
 
+      {step === "keyMode" && (
+        <Box flexDirection="column">
+          <Text bold color="cyan">How do you want to provide the key?</Text>
+          <Box marginTop={1} flexDirection="column">
+            <Text color={keyMode === "envVar" ? "cyan" : undefined}>
+              {keyMode === "envVar" ? "› " : "  "}Use an environment variable (recommended)
+            </Text>
+            <Text color={keyMode === "inline" ? "cyan" : undefined}>
+              {keyMode === "inline" ? "› " : "  "}Paste the key inline (stored in config)
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>↑↓ toggle · Enter confirm · Esc back</Text>
+          </Box>
+        </Box>
+      )}
+
       {step === "apiKey" && (
         <TextStep
-          title="API key"
+          title={keyMode === "envVar" ? "Env var name" : "API key"}
           value={apiKey}
           onChange={setApiKey}
-          placeholder="sk-..."
-          hint="Your API key for the selected provider. It will be written to phus.config.yaml so Phus can use it right away. You can switch to an env var later."
+          placeholder={keyMode === "envVar" ? "ANTHROPIC_API_KEY" : "sk-..."}
+          secure={keyMode === "inline"}
+          hint={
+            keyMode === "envVar"
+              ? `Phus will read $${apiKey || defaultEnvVarName(providers[providerIndex])} from the environment. Make sure it is exported before running.`
+              : "Your API key for the selected provider. It will be written to phus.config.yaml so Phus can use it right away."
+          }
         />
       )}
 
@@ -348,7 +411,9 @@ export function BootstrapWizard({ onDone }: BootstrapWizardProps) {
                     [profileName.trim() || "default"]: {
                       provider: providers[providerIndex],
                       modelId: models[modelIndex],
-                      apiKey: apiKey.trim() ? "***" : "(missing)",
+                      ...(keyMode === "inline"
+                        ? { apiKey: apiKey.trim() ? "***" : "(missing)" }
+                        : { apiKeyEnv: apiKey.trim() || "(missing)" }),
                       thinkingLevel: "medium",
                     },
                   },

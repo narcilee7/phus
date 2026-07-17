@@ -10,6 +10,18 @@ import {
   findCursorDisplayRow,
   wrapLineToRows,
 } from "@/tui/components/terminal-width.js";
+import { useBottomOverlay } from "@/tui/layout-context.js";
+
+export interface SuggestionItem {
+  name: string;
+  description?: string;
+}
+
+export interface MentionItem {
+  target: string;
+  type: "file" | "skill" | "session";
+  label?: string;
+}
 
 export interface MultiLineInputProps {
   value: string;
@@ -19,16 +31,19 @@ export interface MultiLineInputProps {
   showHint?: boolean;
   placeholder?: string;
   isActive?: boolean;
-  /** Command names (without leading slash) to suggest when user types "/". */
-  suggestions?: string[];
-  /** File paths to suggest when user types "@". */
-  mentionSuggestions?: string[];
+  /** Slash commands to suggest when user types "/". */
+  suggestions?: SuggestionItem[];
+  /** Items to suggest when user types "@". */
+  mentionSuggestions?: MentionItem[];
 }
 
 interface Cursor {
   line: number;
   col: number;
 }
+
+const VISIBLE_SUGGESTIONS = 4;
+const VISIBLE_MENTIONS = 4;
 
 function clampCursor(value: string, cursor: Cursor): Cursor {
   const lines = value.split("\n");
@@ -106,21 +121,38 @@ export function MultiLineInput({
   const isSlashMode = value.startsWith("/") && !value.includes("\n");
   const query = isSlashMode ? value.slice(1) : "";
   const matches = isSlashMode
-    ? suggestions
-        .filter((s) => s.startsWith(query) && !s.includes(" "))
-        .sort((a, b) => a.localeCompare(b))
-        .slice(0, 8)
+    ? (() => {
+        if (!query) return suggestions;
+        const prefixMatches = suggestions.filter((s) => s.name.startsWith(query));
+        if (prefixMatches.length > 0) return prefixMatches;
+        return new Fuse(suggestions, { keys: ["name", "description"], threshold: 0.3 })
+          .search(query)
+          .map((r) => r.item);
+      })()
     : [];
   const showSuggestions = isActive && suggestionsOpen && isSlashMode && matches.length > 0;
+  const suggestionStart =
+    showSuggestions && matches.length > VISIBLE_SUGGESTIONS
+      ? Math.max(0, Math.min(selectedSuggestion, matches.length - VISIBLE_SUGGESTIONS))
+      : 0;
+  const visibleSuggestions = matches.slice(suggestionStart, suggestionStart + VISIBLE_SUGGESTIONS);
 
   const mentionState = findMentionState(value, cursor);
   const mentionMatches = mentionState && mentionSuggestions.length > 0
-    ? new Fuse(mentionSuggestions, { threshold: 0.4 })
+    ? new Fuse(mentionSuggestions, { keys: ["target", "label"], threshold: 0.4 })
         .search(mentionState.query)
         .map((r) => r.item)
-        .slice(0, 8)
     : [];
   const showMentions = isActive && mentionsOpen && !!mentionState && mentionMatches.length > 0;
+  const mentionStart =
+    showMentions && mentionMatches.length > VISIBLE_MENTIONS
+      ? Math.max(0, Math.min(selectedMention, mentionMatches.length - VISIBLE_MENTIONS))
+      : 0;
+  const visibleMentions = mentionMatches.slice(mentionStart, mentionStart + VISIBLE_MENTIONS);
+
+  const suggestionRows = showSuggestions ? Math.min(matches.length, VISIBLE_SUGGESTIONS) + 2 : 0;
+  const mentionRows = showMentions ? Math.min(mentionMatches.length, VISIBLE_MENTIONS) + 2 : 0;
+  useBottomOverlay(suggestionRows + mentionRows, showSuggestions || showMentions);
 
   useEffect(() => {
     setSelectedSuggestion(0);
@@ -217,8 +249,11 @@ export function MultiLineInput({
         const line = lines[mentionState.lineIndex]!;
         const before = line.slice(0, mentionState.atIndex);
         const after = line.slice(cursor.col);
-        lines[mentionState.lineIndex] = `${before}@${chosen} ${after}`;
-        commit(lines.join("\n"), { line: mentionState.lineIndex, col: before.length + chosen.length + 2 });
+        lines[mentionState.lineIndex] = `${before}@${chosen.target} ${after}`;
+        commit(lines.join("\n"), {
+          line: mentionState.lineIndex,
+          col: before.length + chosen.target.length + 2,
+        });
         return;
       }
       if (key.downArrow) {
@@ -238,7 +273,7 @@ export function MultiLineInput({
       }
       if (key.tab) {
         const chosen = matches[selectedSuggestion]!;
-        commitValue(`/${chosen} `);
+        commitValue(`/${chosen.name} `);
         return;
       }
       if (key.downArrow) {
@@ -255,10 +290,10 @@ export function MultiLineInput({
       }
       if (key.return) {
         const chosen = matches[selectedSuggestion]!;
-        if (chosen === query) {
+        if (chosen.name === query) {
           submit();
         } else {
-          commitValue(`/${chosen} `);
+          commitValue(`/${chosen.name} `);
         }
         return;
       }
@@ -448,33 +483,53 @@ export function MultiLineInput({
       )}
       {showSuggestions && (
         <Box flexDirection="column" marginTop={1}>
-          {matches.map((m, idx) => (
-            <Text key={m} wrap="wrap">
-              {idx === selectedSuggestion ? (
-                <Text backgroundColor="cyan" color="black">
-                  › /{m}
-                </Text>
-              ) : (
-                <Text dimColor>  /{m}</Text>
-              )}
-            </Text>
-          ))}
+          {visibleSuggestions.map((m, idx) => {
+            const actualIndex = suggestionStart + idx;
+            const selected = actualIndex === selectedSuggestion;
+            const desc = m.description ? ` — ${m.description}` : "";
+            return (
+              <Text key={m.name} wrap="wrap">
+                {selected ? (
+                  <Text backgroundColor="cyan" color="black">
+                    › /{m.name}
+                    {desc}
+                  </Text>
+                ) : (
+                  <Text>
+                    <Text dimColor>  /</Text>
+                    <Text color="cyan">{m.name}</Text>
+                    <Text dimColor>{desc}</Text>
+                  </Text>
+                )}
+              </Text>
+            );
+          })}
           <Text dimColor>↑↓ navigate · Tab complete · Enter submit · Esc close</Text>
         </Box>
       )}
       {showMentions && (
         <Box flexDirection="column" marginTop={1}>
-          {mentionMatches.map((m, idx) => (
-            <Text key={m} wrap="wrap">
-              {idx === selectedMention ? (
-                <Text backgroundColor="cyan" color="black">
-                  › @{m}
-                </Text>
-              ) : (
-                <Text dimColor>  @{m}</Text>
-              )}
-            </Text>
-          ))}
+          {visibleMentions.map((m, idx) => {
+            const actualIndex = mentionStart + idx;
+            const selected = actualIndex === selectedMention;
+            const icon = m.type === "file" ? "📄" : m.type === "skill" ? "🔧" : "💬";
+            const label = m.label ?? m.target;
+            const prefix = m.type === "skill" ? "@skill/" : m.type === "session" ? "@session/" : "@";
+            return (
+              <Text key={`${m.type}-${m.target}`} wrap="wrap">
+                {selected ? (
+                  <Text backgroundColor="cyan" color="black">
+                    › {icon} {prefix}{label}
+                  </Text>
+                ) : (
+                  <Text>
+                    <Text dimColor>  {icon} </Text>
+                    <Text color="cyan">{prefix}{label}</Text>
+                  </Text>
+                )}
+              </Text>
+            );
+          })}
           <Text dimColor>↑↓ navigate · Tab complete · Enter submit · Esc close</Text>
         </Box>
       )}

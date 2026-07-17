@@ -5,10 +5,11 @@
 
 import React, { useEffect, useState } from "react";
 import { Box, Text } from "ink";
-import { MultiLineInput } from "@/tui/components/MultiLineInput.js";
+import { MultiLineInput, type MentionItem } from "@/tui/components/MultiLineInput.js";
 import { SLASH_COMMANDS } from "@/tui/commands.js";
 import { formatFileSize } from "@/tui/mentions.js";
 import { scanFiles } from "@/tui/components/CommandPalette.js";
+import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 export interface MentionChip {
   path: string;
@@ -23,6 +24,7 @@ export function InputBox({
   onSubmit,
   isActive = true,
   mentions = [],
+  agent,
 }: {
   value: string;
   busy: boolean;
@@ -31,20 +33,32 @@ export function InputBox({
   onSubmit: (text: string) => void;
   isActive?: boolean;
   mentions?: MentionChip[];
+  agent: PhusAgent;
 }) {
-  const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
+  const [mentionSuggestions, setMentionSuggestions] = useState<MentionItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       const files = await scanFiles(process.cwd(), 3);
-      if (!cancelled) setFileSuggestions(files);
+      const skills = agent.getAllSkills();
+      const sessions = agent.getTapeStats();
+      const items: MentionItem[] = [
+        ...files.map((target) => ({ target, type: "file" as const })),
+        ...skills.map((s) => ({ target: s.name, type: "skill" as const, label: s.name })),
+        ...Object.keys(sessions.sessions).map((id) => ({
+          target: id,
+          type: "session" as const,
+          label: id,
+        })),
+      ];
+      if (!cancelled) setMentionSuggestions(items);
     }
     void load();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [agent]);
 
   return (
     <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
@@ -70,8 +84,8 @@ export function InputBox({
             showHint={showHint}
             placeholder={showHint ? "type a message, Shift+Enter for newline, /help for commands, @file" : ""}
             isActive={isActive}
-            suggestions={SLASH_COMMANDS.map((c) => c.name)}
-            mentionSuggestions={fileSuggestions}
+            suggestions={SLASH_COMMANDS}
+            mentionSuggestions={mentionSuggestions}
           />
         </Box>
       </Box>

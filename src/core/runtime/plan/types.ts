@@ -14,6 +14,14 @@ export interface Step {
   result?: unknown;
   retryCount: number;
   dependsOn?: string[];
+  /** Subagent session id responsible for this step, if delegated. */
+  subagentSessionId?: string;
+  /** Short label for the subagent (e.g. "explore", "verify"). */
+  subagentLabel?: string;
+  /** Latest error message if the step failed. */
+  error?: string;
+  /** Intermediate output captured during execution. */
+  output?: string;
 }
 
 export interface Plan {

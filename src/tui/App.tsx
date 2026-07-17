@@ -5,7 +5,7 @@
 
 import React, { useEffect, useReducer, useRef } from "react";
 import { Box, useApp, useInput, useStdout } from "ink";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 import { appReducer, initialState } from "@/tui/state.js";
@@ -14,16 +14,29 @@ import { ChatViewport } from "@/tui/components/ChatViewport.js";
 import { TodoPill } from "@/tui/components/TodoPill.js";
 import { PlanPanel } from "@/tui/components/PlanPanel.js";
 import { InputBox } from "@/tui/components/InputBox.js";
-import { PermissionBar } from "@/tui/components/PermissionBar.js";
+import { TuiLayoutProvider, useTuiLayout } from "@/tui/layout-context.js";
+import { PermissionPanel } from "@/tui/components/PermissionPanel.js";
 import { CommandPalette, type PaletteAction } from "@/tui/components/CommandPalette.js";
 import { StatusBar } from "@/tui/components/StatusBar.js";
 import { FileTree } from "@/tui/components/FileTree.js";
+import { SessionTree } from "@/tui/components/SessionTree.js";
 import { eventToAction } from "@/tui/events.js";
 import { runSlash } from "@/tui/commands.js";
 import { tuiChannel } from "@/tui/channel.js";
 import type { RememberChoice } from "@/tui/state.js";
 import { extractMentions, readFileMention, buildContextBlock } from "@/tui/mentions.js";
 import { parseMemoryAction } from "@/infra/meta/memory-tools.js";
+import {
+  CodeActionContext,
+  type CodeBlockAction,
+} from "@/tui/components/CodeActionContext.js";
+import {
+  DiffReviewContext,
+  type DiffReviewAction,
+} from "@/tui/components/DiffReviewContext.js";
+import { TuiFocusContext } from "@/tui/components/TuiFocusContext.js";
+import { copyToClipboard, runCode } from "@/tui/code-actions.js";
+import { ErrorBoundary } from "@/tui/components/ErrorBoundary.js";
 
 interface AppProps {
   agent: PhusAgent;
@@ -32,11 +45,39 @@ interface AppProps {
 }
 
 export function App({ agent, sessionId, modelLabel }: AppProps) {
+  const [reloadKey, setReloadKey] = React.useState(0);
+  return (
+    <ErrorBoundary onRecover={() => setReloadKey((k) => k + 1)}>
+      <TuiLayoutProvider>
+        <AppInner key={reloadKey} agent={agent} sessionId={sessionId} modelLabel={modelLabel} />
+      </TuiLayoutProvider>
+    </ErrorBoundary>
+  );
+}
+
+function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const { exit } = useApp();
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const { bottomOverlayRows } = useTuiLayout();
   const [input, setInput] = React.useState("");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [sidebarView, setSidebarView] = React.useState<"files" | "sessions">("files");
+  const [planExpanded, setPlanExpanded] = React.useState(false);
+  const [focusedId, setFocusedId] = React.useState<string | null>(null);
+
+  // Sidebar request hook: when a slash command (e.g. /subagent) asks for
+  // a particular sidebar view, honor it once and consume the flag.
+  React.useEffect(() => {
+    if (!state.sidebarRequest) return;
+    setSidebarView(state.sidebarRequest);
+    setSidebarOpen(true);
+    dispatch({ type: "consume_sidebar_request" });
+  }, [state.sidebarRequest, dispatch]);
+  const [focusedKind, setFocusedKind] = React.useState<import("@/tui/components/TuiFocusContext.js").FocusKind | null>(null);
+  const [lastWriteTs, setLastWriteTs] = React.useState<number | undefined>(undefined);
+  const writeHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const prevItemsRef = useRef(state.items);
   const [stats, setStats] = React.useState({
     entries: 0,
     skills: 0,
@@ -56,6 +97,197 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     () => new Set(["bash", "file_write", "startup_write", "skill_write", "skill_delete", "memory_write"]),
     [],
   );
+
+  // ─── Plan control handlers ─────────────────────────────────────
+  const handlePlanPause = React.useCallback(() => {
+    const id = agent.pauseActivePlan();
+    if (id) {
+      dispatch({ type: "add_system", text: `⏸ paused plan ${id.slice(0, 8)}`, level: "info" });
+    }
+  }, [agent, dispatch]);
+
+  const handlePlanResume = React.useCallback(async () => {
+    dispatch({ type: "set_last_op", op: "running plan…" });
+    try {
+      const id = await agent.resumeActivePlan();
+      if (id) {
+        dispatch({ type: "add_system", text: `▶ resumed plan ${id.slice(0, 8)}`, level: "info" });
+      }
+    } finally {
+      dispatch({ type: "set_last_op", op: "idle" });
+    }
+  }, [agent, dispatch]);
+
+  const handlePlanCancel = React.useCallback(() => {
+    const id = agent.cancelActivePlan();
+    if (id) {
+      dispatch({ type: "add_system", text: `✗ cancelled plan ${id.slice(0, 8)}`, level: "warn" });
+    }
+  }, [agent, dispatch]);
+
+  const handlePlanRetryStep = React.useCallback((stepId: string) => {
+    if (!state.plan) return;
+    const ok = agent.retryStep(state.plan.id, stepId);
+    if (ok) {
+      dispatch({
+        type: "add_system",
+        text: `↻ step ${stepId.slice(0, 6)} queued for retry — run /plan resume`,
+        level: "info",
+      });
+    }
+  }, [agent, state.plan, dispatch]);
+
+  // ─── Code block actions ────────────────────────────────────────
+  const handleCodeAction = React.useCallback(
+    async (action: CodeBlockAction) => {
+      if (action.type === "copy") {
+        try {
+          await copyToClipboard(action.code);
+          dispatch({ type: "add_system", text: "✓ copied to clipboard", level: "info" });
+        } catch (err: any) {
+          dispatch({
+            type: "add_system",
+            text: `copy failed: ${err.message ?? err}`,
+            level: "error",
+          });
+        }
+      } else if (action.type === "run") {
+        dispatch({ type: "add_system", text: `running ${action.language}…`, level: "info" });
+        try {
+          const { output, exitCode } = await runCode(action.language, action.code);
+          const status = exitCode === 0 ? "✓" : `✗ exit ${exitCode}`;
+          dispatch({
+            type: "add_system",
+            text: `${status} ${action.language}\n${output}`,
+            level: exitCode === 0 ? "info" : "warn",
+          });
+        } catch (err: any) {
+          dispatch({
+            type: "add_system",
+            text: `run failed: ${err.message ?? err}`,
+            level: "error",
+          });
+        }
+      } else if (action.type === "insert") {
+        setInput((prev) => prev + action.code);
+        dispatch({ type: "add_system", text: "✓ code inserted into input", level: "info" });
+      }
+    },
+    [dispatch],
+  );
+
+  const codeActionValue = React.useMemo(
+    () => ({
+      onAction: handleCodeAction,
+    }),
+    [handleCodeAction],
+  );
+
+  const handleDiffReviewAction = React.useCallback(
+    async (action: DiffReviewAction) => {
+      if (action.type === "accept") {
+        dispatch({
+          type: "add_system",
+          text: `✓ accepted changes to ${action.path}`,
+          level: "info",
+        });
+      } else if (action.type === "reject") {
+        try {
+          await writeFile(action.path, action.oldContent);
+          dispatch({ type: "add_system", text: `✓ reverted ${action.path}`, level: "info" });
+        } catch (err: any) {
+          dispatch({
+            type: "add_system",
+            text: `revert failed: ${err.message ?? err}`,
+            level: "error",
+          });
+        }
+      } else if (action.type === "edit") {
+        setInput((prev) => prev + action.newContent);
+        dispatch({
+          type: "add_system",
+          text: `✓ copied ${action.path} to input`,
+          level: "info",
+        });
+      }
+    },
+    [dispatch],
+  );
+
+  const diffReviewValue = React.useMemo(
+    () => ({
+      onAction: handleDiffReviewAction,
+    }),
+    [handleDiffReviewAction],
+  );
+
+  const tuiFocusValue = React.useMemo(
+    () => ({
+      focusedId,
+      focusedKind,
+      setFocused: (id: string | null, kind?: import("@/tui/components/TuiFocusContext.js").FocusKind) => {
+        setFocusedId(id);
+        setFocusedKind(id ? kind ?? null : null);
+      },
+    }),
+    [focusedId, focusedKind],
+  );
+
+  const anyInteractiveFocused = focusedId !== null;
+
+  // ─── Layout heights ────────────────────────────────────────────
+  // Reserve rows for every bottom UI element so that dynamic overlays
+  // (suggestion/mention dropdowns) can expand without covering the chat.
+  const HEADER_ROWS = 4;
+  const INPUT_ROWS = 3;
+  const STATUS_ROWS = 1;
+  const PLAN_ROWS = state.plan ? (planExpanded ? 16 : 6) : 0;
+  const TODO_ROWS =
+    state.busy || state.items.some((it) => it.kind === "tool_call" && it.isError === undefined) ? 1 : 0;
+  const PERMISSION_ROWS = state.permissionQueue[0] ? 4 : 0;
+  const PALETTE_ROWS = paletteOpen ? 14 : 0;
+  const bottomRows = INPUT_ROWS + STATUS_ROWS + PLAN_ROWS + TODO_ROWS + PERMISSION_ROWS + PALETTE_ROWS + bottomOverlayRows;
+  const chatHeight = Math.max(6, terminalRows - HEADER_ROWS - bottomRows);
+  // The sidebar shares the full right-column height, including the bottom UI
+  // (input, status bar, plan/permission/palette). This avoids an empty strip
+  // below the file tree when those panels are open.
+  const sidebarHeight = Math.max(10, terminalRows - HEADER_ROWS);
+  const statusHint = paletteOpen
+    ? "↑↓ navigate · Enter select · Esc close"
+    : focusedKind === "codeblock"
+      ? "c copy · r run · i insert · Esc input"
+      : focusedKind === "diffreview"
+        ? "a accept · r reject · e edit · Esc input"
+        : focusedKind === "toolcall"
+          ? "Enter/Space expand · Esc input"
+          : state.permissionQueue[0]
+            ? "Y yes · S session · A always · N no · Esc"
+            : sidebarView === "sessions"
+              ? "↑↓ navigate · Enter open · q back"
+              : lastWriteTs
+              ? "Ctrl+Z undo · /checkpoint list"
+              : undefined;
+
+  // ─── Flash undo hint after write tools complete ─────────────────
+  useEffect(() => {
+    const prevMap = new Map(prevItemsRef.current.map((it) => [it.id, it]));
+    const newlyCompleted = state.items.find((it) => {
+      if (it.kind !== "tool_call") return false;
+      if (!["file_write", "skill_write", "memory_write"].includes(it.toolName || "")) return false;
+      if (it.isError === undefined) return false;
+      const prev = prevMap.get(it.id);
+      return !prev || prev.isError === undefined;
+    });
+    prevItemsRef.current = state.items;
+    if (newlyCompleted) {
+      setLastWriteTs(Date.now());
+      if (writeHintTimeoutRef.current) clearTimeout(writeHintTimeoutRef.current);
+      writeHintTimeoutRef.current = setTimeout(() => setLastWriteTs(undefined), 10000);
+    }
+    return () => {
+      if (writeHintTimeoutRef.current) clearTimeout(writeHintTimeoutRef.current);
+    };
+  }, [state.items]);
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
@@ -82,17 +314,79 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   useEffect(() => {
     const unsub = agent.subscribeToPlanEvents((event) => {
       const currentPlan = planRef.current;
-      if (event.type === "plan_completed") {
-        dispatch({
-          type: "set_plan",
-          plan: {
-            id: event.planId,
-            goal: event.goal,
-            status: event.planStatus,
-            steps: currentPlan?.id === event.planId ? currentPlan.steps : [],
-          },
-        });
-        return;
+      switch (event.type) {
+        case "plan_completed":
+          dispatch({
+            type: "set_plan",
+            plan: {
+              id: event.planId,
+              goal: event.goal,
+              status: event.planStatus,
+              steps: currentPlan?.id === event.planId ? currentPlan.steps : [],
+              subagents: currentPlan?.id === event.planId ? currentPlan.subagents : [],
+            },
+          });
+          return;
+        case "plan_paused":
+        case "plan_resumed":
+        case "plan_cancelled":
+          dispatch({ type: "set_plan_status", status: event.planStatus });
+          return;
+        case "plan_subagent_started":
+          if (event.subagent) {
+            dispatch({
+              type: "upsert_plan_subagent",
+              subagent: {
+                sessionId: event.subagent.sessionId,
+                label: event.subagent.label,
+                goal: event.subagent.goal,
+                status: "running",
+              },
+            });
+          }
+          return;
+        case "plan_subagent_completed":
+          if (event.subagent?.sessionId) {
+            // Find existing subagent and mark it completed/failed.
+            const existing = currentPlan?.subagents.find(
+              (a) => a.sessionId === event.subagent!.sessionId,
+            );
+            if (existing) {
+              dispatch({
+                type: "upsert_plan_subagent",
+                subagent: {
+                  ...existing,
+                  status: "completed",
+                },
+              });
+            }
+          }
+          return;
+        case "plan_step_output": {
+          const step = event.step;
+          if (!step) return;
+          dispatch({
+            type: "set_plan_step_output",
+            stepId: step.id,
+            output: event.output ?? "",
+          });
+          return;
+        }
+        case "plan_step_retry": {
+          const step = event.step;
+          if (!step) return;
+          const prev = currentPlan?.steps.find((s) => s.id === step.id);
+          dispatch({
+            type: "update_plan_step_meta",
+            stepId: step.id,
+            meta: {
+              status: "pending",
+              retryCount: (prev?.retryCount ?? 0) + (event.retryDelta ?? 1),
+              error: undefined,
+            },
+          });
+          return;
+        }
       }
       const step = event.step;
       if (!step) return;
@@ -106,6 +400,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
               status: event.planStatus,
               steps: [{ id: step.id, description: step.description, status: "running" }],
               currentStepId: step.id,
+              subagents: [],
             },
           });
         } else {
@@ -267,6 +562,12 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       return;
     }
     if (sidebarOpen) return;
+    if (anyInteractiveFocused && key.escape) {
+      setFocusedId(null);
+      setFocusedKind(null);
+      return;
+    }
+    if (anyInteractiveFocused && !key.ctrl && !key.meta) return;
     if ((key.ctrl || key.meta) && input === "k" && state.permissionQueue.length === 0) {
       setPaletteOpen(true);
       return;
@@ -284,11 +585,25 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
     if (key.ctrl && input === "l") {
       dispatch({ type: "clear_items" });
     }
+    if (key.ctrl && input === "z" && !state.busy) {
+      void runSlash("/undo", agent, state, dispatch);
+      return;
+    }
+    if (key.ctrl && input === "t" && state.plan) {
+      setPlanExpanded((e) => !e);
+      return;
+    }
     if (key.pageUp) {
-      dispatch({ type: "scroll_up", lines: 5 });
+      dispatch({ type: "scroll_up", lines: Math.max(1, chatHeight - 1) });
     }
     if (key.pageDown) {
-      dispatch({ type: "scroll_down", lines: 5 });
+      dispatch({ type: "scroll_down", lines: Math.max(1, chatHeight - 1) });
+    }
+    if (key.ctrl && key.upArrow) {
+      dispatch({ type: "scroll_up", lines: 1 });
+    }
+    if (key.ctrl && key.downArrow) {
+      dispatch({ type: "scroll_down", lines: 1 });
     }
     if (key.ctrl && key.end) {
       dispatch({ type: "scroll_bottom" });
@@ -296,90 +611,121 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   });
 
   // ─── Render ───────────────────────────────────────────────────
-  // Keep the chat area anchored to the bottom instead of stretching to fill
-  // the whole terminal when there's little content. The fixed chat height
-  // leaves empty space above the conversation, similar to Claude/Codex.
-  const SIDEBAR_MIN_ROWS = 10;
-  const BOTTOM_UI_ROWS = 7; // TodoPill + PermissionBar/CommandPalette allowance + StatusBar + InputBox
-  const chatHeight = Math.max(8, terminalRows - 6 - BOTTOM_UI_ROWS);
-  const sidebarHeight = Math.max(SIDEBAR_MIN_ROWS, chatHeight + BOTTOM_UI_ROWS);
+  // Chat fills all remaining space between the header and the bottom UI.
+  // We compute an explicit height for ChatViewport so overflow is clipped
+  // correctly when the plan panel, permission bar or command palette is open.
+
 
   return (
-    <Box flexDirection="column" height={terminalRows} overflow="hidden">
-      <Header
-        model={modelLabel}
-        session={sessionId}
-        stats={stats}
-        lastOp={state.lastOp}
-      />
-      <Box flexDirection="row" flexGrow={1} overflow="hidden">
-        {sidebarOpen && (
-          <Box width={34}>
-            <FileTree
-              height={sidebarHeight}
-              onInsert={(value: string) => {
-                setInput((prev) => prev + value);
-                setSidebarOpen(false);
-              }}
-              onPreview={(text: string) =>
-                dispatch({ type: "add_system", text, level: "info" })
-              }
-              onClose={() => setSidebarOpen(false)}
-            />
-          </Box>
-        )}
-        <Box flexDirection="column" flexGrow={1} overflow="hidden">
-          <Box flexGrow={1} overflow="hidden" />
-          <Box height={chatHeight} overflow="hidden">
-            <ChatViewport
-              items={state.items}
-              busy={state.busy}
-              scrollOffset={state.scroll.offset}
-              hasNew={state.scroll.hasNew}
-              lastOp={state.lastOp}
-              fileSnapshots={fileSnapshots.current}
-              height={chatHeight}
-            />
-          </Box>
-          {state.plan && <PlanPanel plan={state.plan} />}
-          <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
-          {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
-            <PermissionBar
-              request={state.permissionQueue[0]}
-              onResolve={(allow: boolean, remember: RememberChoice) =>
-                dispatch({ type: "resolve_permission", allow, remember })
-              }
-            />
-          )}
-          {paletteOpen && (
-            <CommandPalette
-              agent={agent}
-              onSelect={(value: string, action: PaletteAction) => {
-                setPaletteOpen(false);
-                if (action === "insert") {
-                  setInput((prev) => prev + value);
-                } else {
-                  void submit(value);
-                }
-              }}
-              onClose={() => setPaletteOpen(false)}
-            />
-          )}
-          <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} />
-          <InputBox
-            value={input}
-            busy={state.busy}
-            showHint={state.showHint}
-            onChange={setInput}
-            onSubmit={submit}
-            isActive={state.permissionQueue.length === 0 && !paletteOpen && !sidebarOpen}
-            mentions={extractMentions(input)
-              .filter((m) => m.type === "file")
-              .map((m) => ({ path: m.target, size: 0 }))}
+    <TuiFocusContext.Provider value={tuiFocusValue}>
+      <CodeActionContext.Provider value={codeActionValue}>
+        <DiffReviewContext.Provider value={diffReviewValue}>
+          <Box flexDirection="column" height={terminalRows} overflow="hidden">
+          <Header
+            model={modelLabel}
+            session={sessionId}
+            stats={stats}
+            lastOp={state.lastOp}
           />
+          <Box flexDirection="row" flexGrow={1} overflow="hidden">
+            {sidebarOpen && sidebarView === "files" && (
+              <Box width={34}>
+                <FileTree
+                  height={sidebarHeight}
+                  onInsert={(value: string) => {
+                    setInput((prev) => prev + value);
+                    setSidebarOpen(false);
+                  }}
+                  onPreview={(text: string) =>
+                    dispatch({ type: "add_system", text, level: "info" })
+                  }
+                  onClose={() => setSidebarOpen(false)}
+                />
+              </Box>
+            )}
+            {sidebarOpen && sidebarView === "sessions" && (
+              <Box width={42}>
+                <SessionTree
+                  currentSessionId={sessionId}
+                  subagents={state.plan?.subagents}
+                  plan={state.plan}
+                  height={sidebarHeight}
+                  onFocusSubagent={(sid) => {
+                    dispatch({
+                      type: "add_system",
+                      text: `↳ subagent session ${sid.slice(0, 8)} (read-only)`,
+                      level: "info",
+                    });
+                  }}
+                  onClose={() => setSidebarOpen(false)}
+                />
+              </Box>
+            )}
+            <Box flexDirection="column" flexGrow={1} overflow="hidden">
+              <Box flexGrow={1} overflow="hidden">
+                <ChatViewport
+                  items={state.items}
+                  busy={state.busy}
+                  scrollOffset={state.scroll.offset}
+                  hasNew={state.scroll.hasNew}
+                  lastOp={state.lastOp}
+                  fileSnapshots={fileSnapshots.current}
+                  height={chatHeight}
+                />
+              </Box>
+              {state.plan && (
+                <PlanPanel
+                  plan={state.plan}
+                  expanded={planExpanded}
+                  onToggleExpand={() => setPlanExpanded((e) => !e)}
+                  onPause={handlePlanPause}
+                  onResume={handlePlanResume}
+                  onCancel={handlePlanCancel}
+                  onRetryStep={handlePlanRetryStep}
+                />
+              )}
+              <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
+              {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
+                <PermissionPanel
+                  request={state.permissionQueue[0]}
+                  onResolve={(allow: boolean, remember: RememberChoice) =>
+                    dispatch({ type: "resolve_permission", allow, remember })
+                  }
+                />
+              )}
+              {paletteOpen && (
+                <CommandPalette
+                  agent={agent}
+                  onSelect={(value: string, action: PaletteAction) => {
+                    setPaletteOpen(false);
+                    if (action === "insert") {
+                      setInput((prev) => prev + value);
+                    } else {
+                      void submit(value);
+                    }
+                  }}
+                  onClose={() => setPaletteOpen(false)}
+                />
+              )}
+              <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} hint={statusHint} />
+              <InputBox
+                value={input}
+                busy={state.busy}
+                showHint={state.showHint}
+                onChange={setInput}
+                onSubmit={submit}
+                isActive={state.permissionQueue.length === 0 && !paletteOpen && !sidebarOpen && !anyInteractiveFocused}
+                agent={agent}
+                mentions={extractMentions(input)
+                  .filter((m) => m.type === "file")
+                .map((m) => ({ path: m.target, size: 0 }))}
+            />
+          </Box>
         </Box>
       </Box>
-    </Box>
+        </DiffReviewContext.Provider>
+      </CodeActionContext.Provider>
+    </TuiFocusContext.Provider>
   );
 }
 

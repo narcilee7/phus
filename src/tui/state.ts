@@ -6,6 +6,13 @@ export type ChatItemKind = "user" | "assistant" | "tool_call" | "tool_result" | 
 export type SystemLevel = "info" | "warn" | "error";
 export type RememberChoice = "once" | "session" | "always";
 
+export interface UsageMetadata {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cost?: number;
+}
+
 export interface ChatItem {
   id: string;
   kind: ChatItemKind;
@@ -20,6 +27,10 @@ export interface ChatItem {
   isError?: boolean;
   durationMs?: number;
   level?: SystemLevel;
+  /** Model that produced this assistant message, if known. */
+  model?: string;
+  /** Token usage / cost for this assistant message, if reported. */
+  usage?: UsageMetadata;
 }
 
 export interface ScrollState {
@@ -42,16 +53,43 @@ export interface PermissionRequest {
   resolve: (allow: boolean) => void;
 }
 
+export interface PlanStepState {
+  id: string;
+  description: string;
+  status: "pending" | "running" | "completed" | "failed" | "skipped";
+  /** Wall-clock time spent in this step, if finished. */
+  durationMs?: number;
+  /** Error message if the step failed. */
+  error?: string;
+  /** Number of retries attempted for this step. */
+  retryCount?: number;
+  /** Subagent session id responsible for this step. */
+  subagentSessionId?: string;
+  /** Short label for the subagent (e.g. "explore", "verify"). */
+  subagentLabel?: string;
+  /** Latest intermediate output produced by this step. */
+  output?: string;
+  /** Tool name this step is exercising, if any. */
+  tool?: string;
+}
+
+export interface PlanSubagentState {
+  sessionId: string;
+  label: string;
+  goal: string;
+  status: "running" | "completed" | "failed";
+  /** Brief progress note; refreshed while running. */
+  progress?: string;
+}
+
 export interface PlanState {
   id: string;
   goal: string;
   status: "pending" | "running" | "paused" | "completed" | "failed";
-  steps: Array<{
-    id: string;
-    description: string;
-    status: "pending" | "running" | "completed" | "failed" | "skipped";
-  }>;
+  steps: PlanStepState[];
   currentStepId?: string;
+  /** Subagents launched by the active plan step, keyed by sessionId. */
+  subagents: PlanSubagentState[];
 }
 
 export interface AppState {
@@ -66,6 +104,10 @@ export interface AppState {
   sessionAllowedTools: Set<string>;
   /** Active plan, if any. Updated from plan_runner hook events. */
   plan?: PlanState;
+  /** Sidebar view requested by the user (e.g. via /subagent). */
+  sidebarRequest?: "files" | "sessions";
+  /** Plan timeline expand toggle. */
+  planExpanded?: boolean;
 }
 
 export const initialState: AppState = {
@@ -86,6 +128,7 @@ export type AppAction =
   | { type: "upsert_tool_call"; toolCallId: string; toolName: string; args: unknown }
   | { type: "complete_tool_call"; toolCallId: string; result: unknown; isError: boolean }
   | { type: "finalize_streaming" }
+  | { type: "set_assistant_metadata"; model?: string; usage?: UsageMetadata }
   | { type: "add_user"; text: string }
   | { type: "add_system"; text: string; level: SystemLevel }
   | { type: "set_busy"; busy: boolean }
@@ -99,7 +142,14 @@ export type AppAction =
   | { type: "resolve_permission"; allow: boolean; remember?: RememberChoice }
   | { type: "clear_session_allowed_tools" }
   | { type: "set_plan"; plan: PlanState }
-  | { type: "update_plan_step"; stepId: string; status: PlanState["steps"][number]["status"] }
+  | { type: "update_plan_step"; stepId: string; status: PlanStepState["status"] }
+  | { type: "update_plan_step_meta"; stepId: string; meta: Partial<PlanStepState> }
+  | { type: "set_plan_step_output"; stepId: string; output: string }
+  | { type: "set_plan_status"; status: PlanState["status"] }
+  | { type: "upsert_plan_subagent"; subagent: PlanSubagentState }
+  | { type: "remove_plan_subagent"; sessionId: string }
+  | { type: "request_sidebar"; view: "files" | "sessions" }
+  | { type: "consume_sidebar_request" }
   | { type: "clear_plan" };
 
 /** Truncate a string for compact display. */
@@ -202,16 +252,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       if (callIdx === -1) return state;
       const call = state.items[callIdx]!;
       const updated = [...state.items];
-      updated[callIdx] = { ...call, isError: action.isError };
-      updated.splice(callIdx + 1, 0, {
-        id: crypto.randomUUID(),
-        kind: "tool_result",
-        ts: Date.now(),
-        toolCallId: action.toolCallId,
-        toolName: call.toolName,
+      updated[callIdx] = {
+        ...call,
         result: action.result,
         isError: action.isError,
-      });
+        durationMs: Date.now() - call.ts,
+      };
       return withScrollOnNewContent({ ...state, items: updated });
     }
     case "finalize_streaming":
@@ -221,6 +267,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           it.kind === "assistant" && it.isStreaming ? { ...it, isStreaming: false } : it,
         ),
       };
+    case "set_assistant_metadata": {
+      const idx = state.items.map((it) => it.kind).lastIndexOf("assistant");
+      if (idx === -1) return state;
+      const updated = [...state.items];
+      updated[idx] = { ...updated[idx]!, model: action.model, usage: action.usage };
+      return { ...state, items: updated };
+    }
     case "add_user":
       return withScrollOnNewContent({
         ...state,
@@ -295,6 +348,62 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           currentStepId: action.status === "running" ? action.stepId : state.plan.currentStepId,
         },
       };
+    }
+    case "update_plan_step_meta": {
+      if (!state.plan) return state;
+      return {
+        ...state,
+        plan: {
+          ...state.plan,
+          steps: state.plan.steps.map((s) =>
+            s.id === action.stepId ? { ...s, ...action.meta } : s,
+          ),
+        },
+      };
+    }
+    case "set_plan_step_output": {
+      if (!state.plan) return state;
+      return {
+        ...state,
+        plan: {
+          ...state.plan,
+          steps: state.plan.steps.map((s) =>
+            s.id === action.stepId ? { ...s, output: action.output } : s,
+          ),
+        },
+      };
+    }
+    case "set_plan_status": {
+      if (!state.plan) return state;
+      return { ...state, plan: { ...state.plan, status: action.status } };
+    }
+    case "upsert_plan_subagent": {
+      if (!state.plan) return state;
+      const existing = state.plan.subagents.find((a) => a.sessionId === action.subagent.sessionId);
+      const subagents = existing
+        ? state.plan.subagents.map((a) =>
+            a.sessionId === action.subagent.sessionId ? { ...a, ...action.subagent } : a,
+          )
+        : [...state.plan.subagents, action.subagent];
+      return { ...state, plan: { ...state.plan, subagents } };
+    }
+    case "remove_plan_subagent": {
+      if (!state.plan) return state;
+      return {
+        ...state,
+        plan: {
+          ...state.plan,
+          subagents: state.plan.subagents.filter((a) => a.sessionId !== action.sessionId),
+        },
+      };
+    }
+    case "request_sidebar":
+      return { ...state, sidebarRequest: action.view };
+    case "consume_sidebar_request": {
+      if (!state.sidebarRequest) return state;
+      const next: AppState = { ...state };
+      delete next.sidebarRequest;
+      return next;
     }
     case "clear_plan":
       return { ...state, plan: undefined };
