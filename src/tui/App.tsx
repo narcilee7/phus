@@ -285,10 +285,16 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
       dispatch({ type: "clear_items" });
     }
     if (key.pageUp) {
-      dispatch({ type: "scroll_up", lines: 5 });
+      dispatch({ type: "scroll_up", lines: Math.max(1, chatHeight - 1) });
     }
     if (key.pageDown) {
-      dispatch({ type: "scroll_down", lines: 5 });
+      dispatch({ type: "scroll_down", lines: Math.max(1, chatHeight - 1) });
+    }
+    if (key.ctrl && key.upArrow) {
+      dispatch({ type: "scroll_up", lines: 1 });
+    }
+    if (key.ctrl && key.downArrow) {
+      dispatch({ type: "scroll_down", lines: 1 });
     }
     if (key.ctrl && key.end) {
       dispatch({ type: "scroll_bottom" });
@@ -296,13 +302,18 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
   });
 
   // ─── Render ───────────────────────────────────────────────────
-  // Keep the chat area anchored to the bottom instead of stretching to fill
-  // the whole terminal when there's little content. The fixed chat height
-  // leaves empty space above the conversation, similar to Claude/Codex.
-  const SIDEBAR_MIN_ROWS = 10;
-  const BOTTOM_UI_ROWS = 7; // TodoPill + PermissionBar/CommandPalette allowance + StatusBar + InputBox
-  const chatHeight = Math.max(8, terminalRows - 6 - BOTTOM_UI_ROWS);
-  const sidebarHeight = Math.max(SIDEBAR_MIN_ROWS, chatHeight + BOTTOM_UI_ROWS);
+  // Chat fills all remaining space between the header and the bottom UI.
+  // We compute an explicit height for ChatViewport so overflow is clipped
+  // correctly when the plan panel, permission bar or command palette is open.
+  const HEADER_ROWS = 4;
+  const INPUT_ROWS = 3;
+  const STATUS_ROWS = 1;
+  const PLAN_ROWS = state.plan ? 6 : 0;
+  const PERMISSION_ROWS = state.permissionQueue[0] ? 4 : 0;
+  const PALETTE_ROWS = paletteOpen ? 14 : 0;
+  const bottomRows = INPUT_ROWS + STATUS_ROWS + PLAN_ROWS + PERMISSION_ROWS + PALETTE_ROWS;
+  const chatHeight = Math.max(6, terminalRows - HEADER_ROWS - bottomRows);
+  const sidebarHeight = Math.max(10, terminalRows - HEADER_ROWS - bottomRows);
 
   return (
     <Box flexDirection="column" height={terminalRows} overflow="hidden">
@@ -329,8 +340,7 @@ export function App({ agent, sessionId, modelLabel }: AppProps) {
           </Box>
         )}
         <Box flexDirection="column" flexGrow={1} overflow="hidden">
-          <Box flexGrow={1} overflow="hidden" />
-          <Box height={chatHeight} overflow="hidden">
+          <Box flexGrow={1} overflow="hidden">
             <ChatViewport
               items={state.items}
               busy={state.busy}

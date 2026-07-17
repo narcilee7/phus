@@ -190,6 +190,11 @@ const HELP_TEXT = [
   "",
   "── Control ─────────────────────────────────────────",
   ...SLASH_COMMANDS.slice(19).map((c) => `  /${c.name.padEnd(18)} ${c.description}`),
+  "",
+  "── Navigation ────────────────────────────────────────",
+  "  PgUp / PgDn         scroll chat history by page",
+  "  Ctrl+↑ / Ctrl+↓     scroll chat history by line",
+  "  Ctrl+End            jump to bottom",
 ].join("\n");
 
 // ─── Individual command handlers ──────────────────────────────────

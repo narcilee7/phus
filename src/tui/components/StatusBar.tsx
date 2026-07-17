@@ -16,7 +16,7 @@ export function StatusBar({
   return (
     <Box paddingX={1}>
       <Text dimColor>
-        {modelLabel} · {skills} skills · {entries} tape entries · Ctrl+C quit · Ctrl+L clear
+        {modelLabel} · {skills} skills · {entries} tape entries · Ctrl+C quit · Ctrl+L clear · PgUp/PgDn scroll
       </Text>
     </Box>
   );
