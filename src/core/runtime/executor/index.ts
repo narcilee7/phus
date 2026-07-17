@@ -1,39 +1,15 @@
-import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import type { SessionId } from "@/types/brand.js";
-import type { Plan, Step, VerificationResult } from "@/core/runtime/plan/types.js";
-import { Verifier } from "@/core/runtime/verifier.js";
-import { SubAgent } from "@/core/runtime/subagent.js";
-
-export class ReplanNeededError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ReplanNeededError";
-  }
-}
-
-export interface SubAgentAgentLike {
-  steer(message: AgentMessage): void;
-  waitForIdle(): Promise<void>;
-  getCurrentSessionId(): SessionId | undefined;
-  setNextSessionId(id: SessionId): void;
-  subscribeToAgentEvents(handler: (event: AgentEvent) => void): () => void;
-}
-
-/** @deprecated Use SubAgentAgentLike; kept for compatibility with existing call sites. */
-export type ExecutorAgentLike = SubAgentAgentLike;
-
-export interface ExecutorDeps {
-  agent: SubAgentAgentLike;
-  tools?: Map<string, (args: unknown) => Promise<unknown>>;
-  verifier: Verifier;
-  maxRetries?: number;
-}
+import { Step, Plan, VerificationResult } from "@/core/runtime/plan/types";
+import { SubAgent } from "@/core/runtime/subagent";
+import { ReplanNeededError } from "./error";
+import { ExecutorDeps } from "./types";
 
 export class Executor {
   constructor(private deps: ExecutorDeps) {}
 
+  readonly defaultMaxRetries = 3
+
   async executeStep(step: Step, plan: Plan): Promise<{ step: Step; verification: VerificationResult }> {
-    const maxRetries = this.deps.maxRetries ?? 2;
+    const maxRetries = this.deps.maxRetries ?? this.defaultMaxRetries;
     let lastResult: unknown;
     let verification: VerificationResult | undefined;
 

@@ -1,4 +1,3 @@
-// src/core/scheduler.ts
 // Cron-style scheduler — fires hooks on a recurring schedule.
 //
 // Usage:
@@ -14,11 +13,12 @@
 //     write to tape, etc.
 
 import { CronExpressionParser } from "cron-parser";
-import { logger } from "@/infra/logging.js";
-import { HookRegistry, makeCtx } from "@/core/runtime/hook.js";
-import { Schedule, SchedulerOptions } from "@/types/scheduler/index.js";
-import { HookContext } from "@/types/hooks/index.js";
-import { asSessionId } from "@/types/brand.js";
+import { logger } from "@/infra/logging";
+import { HookRegistry } from "@/core/runtime/hook/registry";
+import { makeCtx } from "@/core/runtime/hook/ctx-builder";
+import { Schedule, SchedulerOptions } from "@/types/scheduler";
+import { HookContext } from "@/types/hooks";
+import { asSessionId } from "@/types/brand";
 
 export class Scheduler {
   private schedules = new Map<string, Schedule>();

@@ -1,19 +1,8 @@
-import { HookRegistry, makeCtx } from "@/core/runtime/hook.js";
-import type { HookName } from "@/types/hooks/index.js";
-import type { Plan, Step } from "@/core/runtime/plan/types.js";
-import { Planner } from "@/core/runtime/planner.js";
-import { Executor } from "@/core/runtime/executor.js";
-import { PlanStore } from "@/core/session/plan-store.js";
-import type { EvolutionEngine } from "@/core/runtime/evolution.js";
-import { logger } from "@/infra/logging.js";
-
-export interface PlanRunnerDeps {
-  planner: Planner;
-  executor: Executor;
-  store: PlanStore;
-  hooks: HookRegistry;
-  evolutionEngine?: EvolutionEngine;
-}
+import { HookName } from "@/types";
+import { EvolutionEngine } from "../evolution/engine";
+import { Plan, PlanRunnerDeps, Step } from "./types";
+import { logger } from "@/infra/logging";
+import { makeCtx } from "@/core/runtime/hook/ctx-builder";
 
 export class PlanRunner {
   constructor(private deps: PlanRunnerDeps) {}
@@ -30,6 +19,7 @@ export class PlanRunner {
   async runPlan(plan: Plan): Promise<Plan> {
     plan.status = "running";
     plan.updatedAt = Date.now();
+    // Transaction ??
     this.deps.store.save(plan);
 
     const steps = this.sortSteps(plan.steps);

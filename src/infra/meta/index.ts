@@ -13,10 +13,10 @@ import { defineEvolutionMetaTools } from "./evolution-tools.js";
 import type { SkillRegistry } from "@/infra/skills/registry.js";
 import type { MemoryStore } from "@/infra/memory/index.js";
 import type { SessionId } from "@/types/brand.js";
-import type { PlanRunner } from "@/core/runtime/plan-runner.js";
+import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import type { PlanStore } from "@/core/session/plan-store.js";
-import type { Learner } from "@/core/runtime/learner.js";
-import type { EvolutionEngine } from "@/core/runtime/evolution.js";
+import type { Learner } from "@/core/runtime/evolution/learner";
+import type { EvolutionEngine } from "@/core/runtime/evolution/engine";
 
 export function createMetaTools(
   skills: SkillRegistry,

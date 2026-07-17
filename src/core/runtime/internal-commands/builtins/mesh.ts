@@ -1,7 +1,7 @@
 // src/core/internal-commands/builtins/mesh.ts
 // ,mesh — runtime provider-mesh status (endpoints, circuits, stats).
 
-import type { InternalCommand, InternalCommandServices } from "../types.js";
+import type { InternalCommand, InternalCommandServices } from "../types";
 
 export function defineMeshCommands(
   services: InternalCommandServices,

@@ -1,7 +1,7 @@
 import { Type } from "@mariozechner/pi-ai";
 import type { MetaTool } from "@/types/tool.js";
 import type { SessionId } from "@/types/brand.js";
-import type { PlanRunner } from "@/core/runtime/plan-runner.js";
+import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import type { PlanStore } from "@/core/session/plan-store.js";
 
 export function definePlanMetaTools(deps: {

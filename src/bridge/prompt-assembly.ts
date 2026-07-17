@@ -5,8 +5,8 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { SkillRegistryLike, TapeLike } from "@/types/hooks/index.js";
 import type { SessionId } from "@/types/brand.js";
-import { makeCtx } from "@/core/runtime/hook.js";
-import type { HookRegistry } from "@/core/runtime/hook.js";
+import { makeCtx } from "@/core/runtime/hook/ctx-builder";
+import type { HookRegistry } from "@/core/runtime/hook/registry";
 
 export const SYSTEM_PROMPT_HEADER = `You are Phus (⛰️ 西西弗斯), a self-evolving agent.
 

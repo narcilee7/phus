@@ -1,7 +1,7 @@
 // src/core/internal-commands/builtins/skills.ts
 // ,skills / ,skill / ,skill-review* — skill and draft management.
 
-import type { InternalCommand, InternalCommandServices } from "../types.js";
+import type { InternalCommand, InternalCommandServices } from "../types";
 
 export function defineSkillCommands(
   services: InternalCommandServices,

@@ -1,9 +1,8 @@
 import { Type } from "@mariozechner/pi-ai";
 import type { MetaTool } from "@/types/tool.js";
-import type { SessionId } from "@/types/brand.js";
 import { asSessionId } from "@/types/brand.js";
-import { Learner } from "@/core/runtime/learner.js";
-import { EvolutionEngine } from "@/core/runtime/evolution.js";
+import { Learner } from "@/core/runtime/evolution/learner";
+import { EvolutionEngine } from "@/core/runtime/evolution/engine";
 import type { SkillRegistry } from "@/infra/skills/registry.js";
 
 export function defineEvolutionMetaTools(deps: {

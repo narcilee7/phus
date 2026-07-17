@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { Step, VerificationResult } from "@/core/runtime/plan/types.js";
+import type { Step, VerificationResult } from "@/core/runtime/plan/types";
 
 export interface VerifierDeps {
   model?: { prompt(messages: AgentMessage[]): Promise<string> };

@@ -1,8 +1,8 @@
 // src/core/runtime/internal-commands/builtins/evolution.ts
 // Self-evolution commands: reflection, draft management, startup suggestions.
 
-import type { InternalCommand, InternalCommandServices } from "../types.js";
-import { asSessionId } from "@/types/brand.js";
+import type { InternalCommand, InternalCommandServices } from "../types";
+import { asSessionId } from "@/types/brand";
 
 export function defineEvolutionCommands(
   services: InternalCommandServices,

@@ -7,7 +7,7 @@ import type { MetaTool } from "@/types/tool.js";
 import type { SessionId } from "@/types/brand.js";
 import { asSessionId } from "@/types/brand.js";
 import { loadConfig } from "@/infra/config/index.js";
-import { StartupAdvisor } from "@/core/runtime/startup-advisor.js";
+import { StartupAdvisor } from "@/core/runtime/startup/advisor";
 
 export function defineSystemMetaTools(deps: {
   tape: { replay: (sessionId?: string) => Generator<unknown>; stats: () => unknown };

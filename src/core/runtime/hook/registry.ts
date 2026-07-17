@@ -1,23 +1,15 @@
-// hook registry with three execution modes:
-//   - first_result: return the first non-null implementation result
-//   - chain:       pipe ctx through each implementation in priority order
-//   - broadcast:   invoke every implementation in parallel, return all results
-//
-import type { Tape } from "@/core/session/tape.js";
-import type { SkillRegistry } from "@/infra/skills/registry.js";
-import { logger } from "@/infra/logging.js";
-import {
-  type HookContext,
-  type HookImpl,
-  type HookMode,
-  type HookName,
-  type RegisterOptions,
-  type TapeLike,
-  type SkillRegistryLike,
-} from "@/types/hooks/index.js";
-import { asSessionId } from "@/types/brand.js";
+/**
+ * Hook registry with three execution modes:
+ *   - first_result: return the first non-null implementation result
+ *   - chain:       pipe ctx through each implementation in priority order
+ *   - broadcast:   invoke every implementation in parallel, return all results
+ */
 
-export type { HookContext, HookMode, HookName, RegisterOptions };
+import { Tape } from "@/core/session/tape";
+import { SkillRegistry } from "@/infra/skills/registry";
+import { HookContext, HookImpl, HookMode, HookName, RegisterOptions, SkillRegistryLike, TapeLike } from "@/types";
+import { asSessionId } from "@/types/brand";
+import { logger } from "@/infra/logging";
 
 interface RegisteredHook {
   impl: HookImpl<any>;
@@ -115,28 +107,4 @@ export class HookRegistry {
     }
     return out;
   }
-}
-
-/**
- * Convenience builder for a base HookContext. `tape` and `skills` are
- * accepted as concrete types but stored as their narrow `TapeLike` /
- * `SkillRegistryLike` interfaces so a context built for a scheduler-fired
- * hook may legitimately omit them.
- */
-export function makeCtx(
-  partial: Partial<HookContext> & {
-    tape?: Tape | TapeLike;
-    skills?: SkillRegistry | SkillRegistryLike;
-    /** String is accepted at I/O boundaries and cast on the fly. */
-    sessionId?: string;
-  },
-): HookContext {
-  return {
-    envelope: partial.envelope,
-    sessionId: partial.sessionId ? asSessionId(partial.sessionId) : undefined,
-    state: partial.state ?? {},
-    tape: partial.tape,
-    skills: partial.skills,
-    extras: partial.extras ?? {},
-  };
 }

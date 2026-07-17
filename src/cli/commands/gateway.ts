@@ -7,8 +7,6 @@
 // that cleanly dispose.
 
 import type { Command } from "commander";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { PhusAgent } from "@/bridge/pi-agent.js";
 import { bootstrap } from "@/infra/bootstrap.js";
 import { logger } from "@/infra/logging.js";
@@ -66,7 +64,7 @@ export function registerGatewayCommand(program: Command): void {
       }
 
       // Scheduler + mesh → internal-commands services (DI, no singleton).
-      const { Scheduler } = await import("@/core/runtime/scheduler.js");
+      const { Scheduler } = await import("@/core/runtime/scheduler");
       const scheduler = new Scheduler(handle.internals.hooks);
       initInternalCommands({
         agent: handle.agent,

@@ -1,16 +1,7 @@
-import type { Plan } from "@/core/runtime/plan/types.js";
-import { Learner, type Reflection } from "@/core/runtime/learner.js";
-import { SkillValidator } from "@/core/runtime/skill-validator.js";
-import { SkillRegistry } from "@/infra/skills/registry.js";
-import type { SkillDraft } from "@/infra/skills/draft.js";
-import type { TapeLike } from "@/types/hooks/index.js";
-
-export interface EvolutionDeps {
-  learner: Learner;
-  skillValidator: SkillValidator;
-  skills: SkillRegistry;
-  tape: TapeLike;
-}
+import type { Plan } from "@/core/runtime/plan/types"
+import { SkillValidator } from "@/core/runtime/skill/validator";
+import type { SkillDraft } from "@/infra/skills/draft";
+import { EvolutionDeps, LearnerDeps, Reflection } from "./types";
 
 export class EvolutionEngine {
   readonly skillValidator: SkillValidator;

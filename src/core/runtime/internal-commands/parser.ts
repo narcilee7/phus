@@ -1,7 +1,7 @@
 // src/core/internal-commands/parser.ts
 // Pure tokenizer + parser for `,foo key=val pos1 pos2 ...` lines.
 
-import type { ParsedCommand } from "./types.js";
+import type { ParsedCommand } from "./types";
 
 /**
  * Parse a command line into name + args + positional.

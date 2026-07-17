@@ -1,17 +1,9 @@
-import * as crypto from "node:crypto";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { SkillRegistryLike } from "@/types/hooks/index.js";
-import { HookRegistry, makeCtx } from "@/core/runtime/hook.js";
-import type { Plan, Step } from "@/core/runtime/plan/types.js";
-import { asSessionId } from "@/types/brand.js";
+import { asSessionId } from "@/types/brand";
+import { Plan, PlannerDeps, Step } from "./types";
+import { makeCtx } from "@/core/runtime/hook/ctx-builder";
+import { AgentMessage } from "@mariozechner/pi-agent-core";
+import { stripJson } from "@/utils/json";
 
-export interface PlannerDeps {
-  skills: SkillRegistryLike;
-  model:
-    | { prompt(messages: AgentMessage[]): Promise<string> }
-    | ((messages: AgentMessage[]) => Promise<string>);
-  hooks?: HookRegistry;
-}
 
 export class Planner {
   constructor(private deps: PlannerDeps) {}
@@ -79,7 +71,7 @@ export class Planner {
   }
 
   private parseSteps(response: string, goal: string, context?: string): Step[] {
-    const cleaned = this.stripJson(response);
+    const cleaned = stripJson(response);
     try {
       const parsed = JSON.parse(cleaned) as { steps?: Array<Partial<Step>> };
       if (Array.isArray(parsed.steps) && parsed.steps.length > 0) {
@@ -102,11 +94,5 @@ export class Planner {
       retryCount: 0,
       dependsOn: Array.isArray(raw.dependsOn) ? raw.dependsOn : undefined,
     };
-  }
-
-  private stripJson(text: string): string {
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (fenced && fenced[1]) return fenced[1].trim();
-    return text.trim();
   }
 }

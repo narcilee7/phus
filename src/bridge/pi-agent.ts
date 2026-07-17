@@ -15,24 +15,21 @@ import {
   type AfterToolCallContext,
   type AfterToolCallResult,
 } from "@mariozechner/pi-agent-core";
-import { getModel, type Model } from "@mariozechner/pi-ai";
+import { type Model } from "@mariozechner/pi-ai";
 import type { Envelope, Outbound } from "@/types/channel/index.js";
+import { Planner } from '@/core/runtime/plan/planner';
 import type { Plan, PlanStatus, Step, StepStatus } from "@/core/runtime/plan/types.js";
-import { Planner } from "@/core/runtime/planner.js";
-import { Verifier } from "@/core/runtime/verifier.js";
-import { Executor } from "@/core/runtime/executor.js";
-import { PlanRunner } from "@/core/runtime/plan-runner.js";
 import { PlanStore } from "@/core/session/plan-store.js";
-import { createPlannerModel } from "@/core/runtime/planner-model.js";
-import { Learner } from "@/core/runtime/learner.js";
-import { SkillValidator } from "@/core/runtime/skill-validator.js";
-import { EvolutionEngine } from "@/core/runtime/evolution.js";
+import { createPlannerModel } from "@/core/runtime/plan/planner-model.js";
+import { Learner } from "@/core/runtime/evolution/learner";
+import { SkillValidator } from "@/core/runtime/skill/validator";
+import { EvolutionEngine } from "@/core/runtime/evolution/engine";
 import type { Turn } from "@/types/tape/index.js";
 import type { MetaTool } from "@/types/tool.js";
 import type { SessionId } from "@/types/brand.js";
 import { asSessionId, asToolCallId, asTurnId } from "@/types/brand.js";
-import { HookRegistry, makeCtx, type HookContext } from "@/core/runtime/hook.js";
 import { Tape } from "@/core/session/tape.js";
+import { PiSteeringInbox } from "@/core/runtime/steering";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import type { SkillDraft } from "@/infra/skills/draft.js";
 import { createMetaTools } from "@/infra/meta/index.js";
@@ -45,11 +42,9 @@ import {
   type ProviderProfile,
 } from "@/infra/profile.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
-import { PiSteeringInbox } from "@/core/runtime/steering.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@/core/session/checkpoint.js";
-import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/llm/provider-mesh/index.js";
-import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
+import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/llm/provider-mesh/index.js";
 import { logger } from "@/infra/logging.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { toAgentTool } from "@/bridge/agent-tool-adapter.js";
@@ -58,6 +53,12 @@ import { resolveApiKey } from "@/bridge/model-resolver.js";
 import { registerDefaultHooks } from "@/bridge/default-hooks.js";
 import { buildContextBlock } from "@/bridge/prompt-assembly.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
+import { HookRegistry } from "@/core/runtime/hook/registry";
+import { Executor } from "@/core/runtime/executor";
+import { PlanRunner } from "@/core/runtime/plan/plan-runner";
+import { makeCtx } from "@/core/runtime/hook/ctx-builder";
+import { HookContext } from "@/types";
+import { Verifier } from "@/core/runtime/verifier";
 
 export interface PhusAgentDeps {
   /** Logger used for all diagnostic and error events. */
@@ -244,7 +245,7 @@ export interface PhusAgentFacade {
   /** Suggest startup.sh content based on recent tape. */
   suggestStartup(): Promise<string>;
   /** Reflect on a session and return a structured reflection. */
-  reflect(sessionId: SessionId, task: string): Promise<import("@/core/runtime/learner.js").Reflection>;
+  reflect(sessionId: SessionId, task: string): Promise<import("@/core/runtime/evolution/types").Reflection>;
   /** Number of entries currently in tape. */
   getTapeTotalEntries(): number;
   /** Number of sessions currently in tape. */
@@ -1245,12 +1246,12 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   async suggestStartup(): Promise<string> {
-    const { StartupAdvisor } = await import("@/core/runtime/startup-advisor.js");
+    const { StartupAdvisor } = await import("@/core/runtime/startup/advisor");
     const advisor = new StartupAdvisor();
     return advisor.suggestStartup(this.tape);
   }
 
-  async reflect(sessionId: SessionId, task: string): Promise<import("@/core/runtime/learner.js").Reflection> {
+  async reflect(sessionId: SessionId, task: string): Promise<import("@/core/runtime/evolution/types").Reflection> {
     return this.learner.reflect(sessionId, task);
   }
 

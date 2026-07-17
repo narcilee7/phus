@@ -4,7 +4,7 @@
 import { PhusAgent } from "@/bridge/pi-agent.js";
 import { loadLatestCheckpoint, listCheckpoints } from "@/core/session/checkpoint.js";
 import { CLIChannel } from "@/channels/cli.js";
-import { ExitCode, CliExit } from "@/core/runtime/exit-codes.js";
+import { ExitCode, CliExit } from "@/core/runtime/executor/exit-code";
 import { makeTextEnvelope } from "@/channels/base.js";
 import { logger } from "@/infra/logging.js";
 import { asSessionId } from "@/types/brand.js";

@@ -1,8 +1,11 @@
 // src/core/internal-commands/types.ts
 // Public types for the internal-command subsystem.
 
-import type { PhusAgentFacade } from "@/bridge/pi-agent.js";
-import type { ChannelAdapter } from "@/channels/base.js";
+import type { PhusAgentFacade } from "@/bridge/pi-agent";
+import type { ChannelAdapter } from "@/channels/base";
+import type { Scheduler } from "@/core/runtime/scheduler";
+
+
 
 /** Where the command was invoked. */
 export type CommandSurface = "cli" | "tui";
@@ -47,7 +50,7 @@ export interface InternalCommandServices {
   agent: PhusAgentFacade;
   home: () => string;
   mesh?: import("@/core/llm/provider-mesh/contract.js").MeshLike;
-  scheduler?: import("@/core/runtime/scheduler.js").Scheduler | undefined;
+  scheduler?: Scheduler | undefined;
   extraChannels?: () => ChannelAdapter[];
 }
 
