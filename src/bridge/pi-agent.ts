@@ -47,7 +47,7 @@ import {
 import type { SteeringInbox } from "@/types/steering/index.js";
 import { PiSteeringInbox } from "@/core/runtime/steering.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
-import { saveCheckpoint, loadLatestCheckpoint } from "@/core/session/checkpoint.js";
+import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@/core/session/checkpoint.js";
 import { ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/llm/provider-mesh/index.js";
 import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
 import { logger } from "@/infra/logging.js";
@@ -159,6 +159,8 @@ export interface PhusAgentFacade {
   clearConversation(): Promise<void>;
   compactCurrentSession(): Promise<string>;
   restoreCheckpoint(id: SessionId): Promise<void>;
+  saveCheckpoint(id: SessionId): void;
+  listCheckpoints(id: SessionId): CheckpointEntry[];
 
   // ─── Diagnostics (used by `phus hooks/skills/tape/policy/context`) ─
   /** Aggregate snapshot — what `phus context` prints. */
@@ -920,6 +922,14 @@ export class PhusAgent implements PhusAgentFacade {
     this.piAgent.state.messages = cp.messages as any;
     this.currentSessionId = id;
     this.piAgent.sessionId = id;
+  }
+
+  saveCheckpoint(id: SessionId): void {
+    saveCheckpoint(this.tape, id, this.piAgent.state.messages as unknown[]);
+  }
+
+  listCheckpoints(id: SessionId): CheckpointEntry[] {
+    return listCheckpoints(this.tape, id);
   }
 
   getDiagnostics(): AgentDiagnostics {

@@ -98,6 +98,9 @@ export async function runSlash(
     case "undo":
       return await cmdUndo(agent, dispatch);
 
+    case "checkpoint":
+      return await cmdCheckpoint(arg, agent, dispatch);
+
     case "retry":
       return cmdRetry(state, dispatch);
 
@@ -164,6 +167,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "health", description: "run health check" },
   { name: "interrupt", description: "abort the current turn" },
   { name: "undo", description: "restore the last checkpoint for this session" },
+  { name: "checkpoint", description: "checkpoint management: list|create|restore <id>" },
   { name: "retry", description: "retry last prompt" },
   { name: "plan", description: "plan management: create|run|status|list|resume <args>" },
   { name: "new", description: "start a fresh session" },
@@ -485,6 +489,65 @@ async function cmdUndo(agent: PhusAgent, dispatch: (a: AppAction) => void): Prom
   } catch (err: any) {
     dispatch({ type: "add_system", text: `undo failed: ${err.message ?? err}`, level: "error" });
   }
+}
+
+async function cmdCheckpoint(
+  arg: string,
+  agent: PhusAgent,
+  dispatch: (a: AppAction) => void,
+): Promise<SlashResult> {
+  const sid = agent.getCurrentSessionId();
+  if (!sid) {
+    dispatch({ type: "add_system", text: "no active session", level: "warn" });
+    return;
+  }
+
+  const [sub, ...rest] = arg.trim().split(/\s+/);
+  const subArg = rest.join(" ");
+
+  if (!sub || sub === "list") {
+    const cps = agent.listCheckpoints(sid);
+    if (cps.length === 0) {
+      dispatch({ type: "add_system", text: "no checkpoints for this session", level: "info" });
+      return;
+    }
+    const lines = cps.slice(0, 10).map((cp, idx) => {
+      const at = new Date(cp.ts / 1000).toLocaleString();
+      return `${idx + 1}. ${at} · ${cp.messages.length} messages`;
+    });
+    dispatch({ type: "add_system", text: lines.join("\n"), level: "info" });
+    return;
+  }
+
+  if (sub === "create") {
+    agent.saveCheckpoint(sid);
+    dispatch({ type: "add_system", text: "✓ checkpoint created", level: "info" });
+    return;
+  }
+
+  if (sub === "restore") {
+    const index = Number(subArg);
+    const cps = agent.listCheckpoints(sid);
+    const cp = Number.isNaN(index) ? undefined : cps[index - 1];
+    if (!cp) {
+      dispatch({ type: "add_system", text: `checkpoint ${subArg} not found`, level: "warn" });
+      return;
+    }
+    try {
+      await agent.restoreCheckpoint(sid);
+      dispatch({ type: "clear_items" });
+      dispatch({ type: "add_system", text: "✓ restored to checkpoint", level: "info" });
+    } catch (err: any) {
+      dispatch({ type: "add_system", text: `restore failed: ${err.message ?? err}`, level: "error" });
+    }
+    return;
+  }
+
+  dispatch({
+    type: "add_system",
+    text: "usage: /checkpoint list | /checkpoint create | /checkpoint restore <n>",
+    level: "warn",
+  });
 }
 
 function cmdRetry(state: AppState, dispatch: (a: AppAction) => void): void {

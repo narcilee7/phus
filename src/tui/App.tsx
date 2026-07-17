@@ -59,6 +59,9 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [focusedId, setFocusedId] = React.useState<string | null>(null);
   const [focusedKind, setFocusedKind] = React.useState<import("@/tui/components/TuiFocusContext.js").FocusKind | null>(null);
+  const [lastWriteTs, setLastWriteTs] = React.useState<number | undefined>(undefined);
+  const writeHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const prevItemsRef = useRef(state.items);
   const [stats, setStats] = React.useState({
     entries: 0,
     skills: 0,
@@ -204,7 +207,30 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
           ? "Enter/Space expand · Esc input"
           : state.permissionQueue[0]
             ? "Y yes · S session · A always · N no · Esc"
-          : undefined;
+            : lastWriteTs
+              ? "Ctrl+Z undo · /checkpoint list"
+              : undefined;
+
+  // ─── Flash undo hint after write tools complete ─────────────────
+  useEffect(() => {
+    const prevMap = new Map(prevItemsRef.current.map((it) => [it.id, it]));
+    const newlyCompleted = state.items.find((it) => {
+      if (it.kind !== "tool_call") return false;
+      if (!["file_write", "skill_write", "memory_write"].includes(it.toolName || "")) return false;
+      if (it.isError === undefined) return false;
+      const prev = prevMap.get(it.id);
+      return !prev || prev.isError === undefined;
+    });
+    prevItemsRef.current = state.items;
+    if (newlyCompleted) {
+      setLastWriteTs(Date.now());
+      if (writeHintTimeoutRef.current) clearTimeout(writeHintTimeoutRef.current);
+      writeHintTimeoutRef.current = setTimeout(() => setLastWriteTs(undefined), 10000);
+    }
+    return () => {
+      if (writeHintTimeoutRef.current) clearTimeout(writeHintTimeoutRef.current);
+    };
+  }, [state.items]);
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
@@ -438,6 +464,10 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
     }
     if (key.ctrl && input === "l") {
       dispatch({ type: "clear_items" });
+    }
+    if (key.ctrl && input === "z" && !state.busy) {
+      void runSlash("/undo", agent, state, dispatch);
+      return;
     }
     if (key.pageUp) {
       dispatch({ type: "scroll_up", lines: Math.max(1, chatHeight - 1) });
