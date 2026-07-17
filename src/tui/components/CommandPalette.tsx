@@ -1,6 +1,7 @@
 // src/tui/components/CommandPalette.tsx
 // Global command palette (Ctrl+K). Fuzzy-search slash commands, project
 // files, loaded skills and tape sessions; select to insert or run.
+// Supports frecency-boosted history and grouped display.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
@@ -9,11 +10,21 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 import { SLASH_COMMANDS } from "@/tui/commands.js";
+import {
+  loadPaletteHistory,
+  recordPaletteUse,
+  score,
+  type PaletteHistoryEntry,
+} from "@/tui/palette-history.js";
+import { loadConfig } from "@/infra/config/index.js";
 
 export type PaletteAction = "insert" | "run";
 
+export type PaletteGroup = "command" | "file" | "skill" | "session";
+
 interface PaletteItem {
-  type: "command" | "file" | "skill" | "session";
+  type: PaletteGroup;
+  group: PaletteGroup;
   label: string;
   value: string;
   icon: string;
@@ -21,6 +32,8 @@ interface PaletteItem {
 
 interface CommandPaletteProps {
   agent: PhusAgent;
+  /** Optional PHUS_HOME override. If omitted, loadConfig().paths.home is used. */
+  home?: string;
   onSelect: (value: string, action: PaletteAction) => void;
   onClose: () => void;
 }
@@ -28,6 +41,14 @@ interface CommandPaletteProps {
 const EXCLUDED_DIRS = new Set([".git", "node_modules", "dist", ".phus", ".claude", ".vscode"]);
 const MAX_FILES = 200;
 const VISIBLE_COUNT = 10;
+
+const GROUP_ORDER: PaletteGroup[] = ["command", "file", "skill", "session"];
+const GROUP_COLORS: Record<PaletteGroup, string> = {
+  command: "cyan",
+  file: "green",
+  skill: "yellow",
+  session: "magenta",
+};
 
 export async function scanFiles(dir: string, depth: number): Promise<string[]> {
   if (depth <= 0) return [];
@@ -62,24 +83,36 @@ export async function scanFiles(dir: string, depth: number): Promise<string[]> {
   return files;
 }
 
-export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps) {
+export function CommandPalette({ agent, home: homeProp, onSelect, onClose }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [items, setItems] = useState<PaletteItem[]>([]);
+  const [history, setHistory] = useState<PaletteHistoryEntry[]>([]);
+
+  const home = useMemo(() => {
+    if (homeProp) return homeProp;
+    try {
+      return loadConfig().paths.home;
+    } catch {
+      return "";
+    }
+  }, [homeProp]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [files, skills, sessions] = await Promise.all([
+      const [files, skills, sessions, hist] = await Promise.all([
         scanFiles(process.cwd(), 3),
         Promise.resolve(agent.getAllSkills()),
         Promise.resolve(agent.getTapeStats()),
+        loadPaletteHistory(home),
       ]);
       if (cancelled) return;
 
       const paletteItems: PaletteItem[] = [
         ...SLASH_COMMANDS.map((c) => ({
           type: "command" as const,
+          group: "command" as const,
           label: `/${c.name}`,
           value: `/${c.name} `,
           icon: "/",
@@ -91,44 +124,78 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
           { name: "plan resume", args: "", icon: "📋" },
         ].map((c) => ({
           type: "command" as const,
+          group: "command" as const,
           label: `/${c.name}`,
           value: `/${c.name}${c.args ? ` ${c.args}` : ""} `,
           icon: c.icon,
         })),
         ...files.slice(0, MAX_FILES).map((f) => ({
           type: "file" as const,
+          group: "file" as const,
           label: f,
           value: `@${f} `,
           icon: "📄",
         })),
         ...skills.map((s) => ({
           type: "skill" as const,
+          group: "skill" as const,
           label: s.name,
           value: `@skill/${s.name} `,
           icon: "🔧",
         })),
         ...Object.keys(sessions.sessions).map((sid) => ({
           type: "session" as const,
+          group: "session" as const,
           label: sid,
           value: `/use ${sid}`,
           icon: "💬",
         })),
       ];
       setItems(paletteItems);
+      setHistory(hist);
     }
     void load();
     return () => {
       cancelled = true;
     };
-  }, [agent]);
+  }, [agent, home]);
+
+  const historyScoreMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const h of history) {
+      map.set(`${h.group}:${h.value}`, score(h));
+    }
+    return map;
+  }, [history]);
 
   const fuse = useMemo(() => new Fuse(items, { keys: ["label"], threshold: 0.4 }), [items]);
 
   const results = useMemo(() => {
     const trimmed = query.trim();
-    if (!trimmed) return items;
-    return fuse.search(trimmed).map((r) => r.item);
-  }, [query, items, fuse]);
+    let matched: PaletteItem[];
+    if (!trimmed) {
+      matched = [...items];
+    } else {
+      matched = fuse.search(trimmed).map((r) => r.item);
+    }
+    // Boost recently/frequently used items without fully overriding relevance.
+    matched.sort((a, b) => {
+      const scoreA = historyScoreMap.get(`${a.group}:${a.value}`) ?? 0;
+      const scoreB = historyScoreMap.get(`${b.group}:${b.value}`) ?? 0;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      return GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group);
+    });
+    // When there is no query, keep a stable group order with boosted items first inside each group.
+    if (!trimmed) {
+      const byGroup = new Map<PaletteGroup, PaletteItem[]>();
+      for (const g of GROUP_ORDER) byGroup.set(g, []);
+      for (const item of matched) {
+        byGroup.get(item.group)?.push(item);
+      }
+      matched = GROUP_ORDER.flatMap((g) => byGroup.get(g) ?? []);
+    }
+    return matched;
+  }, [query, items, fuse, historyScoreMap]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -170,6 +237,7 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
       const item = results[safeSelectedIndex];
       if (item) {
         const action: PaletteAction = item.type === "session" ? "run" : "insert";
+        void recordPaletteUse(home, item.value, item.group);
         onSelect(item.value, action);
       }
       return;
@@ -200,19 +268,19 @@ export function CommandPalette({ agent, onSelect, onClose }: CommandPaletteProps
       <Box flexDirection="column" flexGrow={1}>
         {visibleResults.map((item, idx) => {
           const actualIndex = visibleStart + idx;
+          const color = GROUP_COLORS[item.group];
           return (
-            <Box key={`${item.type}-${item.label}`} flexDirection="row">
-              <Text>
-                {actualIndex === safeSelectedIndex ? (
-                  <Text backgroundColor="cyan" color="black">
-                    › {item.icon} {item.label}
-                  </Text>
-                ) : (
-                  <Text dimColor>
-                    {"  "}{item.icon} {item.label}
-                  </Text>
-                )}
-              </Text>
+            <Box key={`${item.group}-${item.label}-${actualIndex}`} flexDirection="row">
+              {actualIndex === safeSelectedIndex ? (
+                <Text backgroundColor="cyan" color="black">
+                  {"› "}{item.icon} {item.label}
+                </Text>
+              ) : (
+                <Text>
+                  <Text dimColor>{"  "}{item.icon} </Text>
+                  <Text color={color}>{item.label}</Text>
+                </Text>
+              )}
             </Box>
           );
         })}
