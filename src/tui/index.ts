@@ -101,12 +101,39 @@ export async function startTui(): Promise<void> {
   const model = agent.getCurrentModel();
   const modelLabel = `${model.provider}/${model.id}`;
 
+  // Enable terminal-level features that improve TUI input handling:
+  // bracketed paste (so paste is distinguishable from typing), alternate
+  // screen buffer (so the user's scrollback is preserved), and CSI 2026
+  // synchronized output (so each render is one atomic update). We install
+  // these BEFORE rendering ink, then restore on exit.
+  const { enableTerminalModes, restoreTerminalModes } = await import(
+    "@/tui/runtime/terminal-modes.js"
+  );
+  const { installSyncOutput } = await import("@/tui/runtime/sync-output.js");
+  const stdout = process.stdout;
+  enableTerminalModes(stdout);
+  const uninstallSync = installSyncOutput(stdout);
+
+  const restore = () => {
+    uninstallSync();
+    restoreTerminalModes(stdout);
+  };
+  process.on("SIGINT", () => {
+    restore();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    restore();
+    process.exit(0);
+  });
+
   const { waitUntilExit } = render(
     React.createElement(App, { agent, sessionId, modelLabel }),
   );
 
   logger.info("tui.started", { sessionId, model: modelLabel });
   await waitUntilExit();
+  restore();
   await handle.dispose();
   logger.info("tui.exited", { sessionId });
 }

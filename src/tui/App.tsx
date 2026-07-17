@@ -146,7 +146,10 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
 
   // ─── Layout heights ─────────────────────────────────────────────
   // Reserve rows for every bottom UI element so dynamic overlays don't
-  // cover the chat viewport. Computed each render from current state.
+  // cover the chat viewport. The IME candidate window lives *outside*
+  // the TUI's layout (in the blank rows at the bottom of the terminal),
+  // so no IME reservation row goes into the budget — useTerminalSize
+  // already prevents the TUI from shrinking when the IME is open.
   const PLAN_ROWS = state.plan ? (planExpanded ? PLAN_ROWS_EXPANDED : PLAN_ROWS_COLLAPSED) : 0;
   const TODO_ROWS_ACTIVE =
     state.busy || state.items.some((it) => it.kind === "tool_call" && it.isError === undefined)
@@ -162,6 +165,10 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
     PERMISSION_ROWS_ACTIVE +
     PALETTE_ROWS_ACTIVE +
     bottomOverlayRows;
+  // The chat viewport fills whatever rows are left between the header
+  // and the input box. terminalRows is monotonically expanding (see
+  // useTerminalSize), so the chat only ever grows — it never squeezes
+  // when the IME opens.
   const chatHeight = Math.max(MIN_CHAT_HEIGHT, terminalRows - HEADER_ROWS - bottomRows);
   const sidebarHeight = Math.max(MIN_SIDEBAR_HEIGHT, terminalRows - HEADER_ROWS);
   const chatHeightRef = useRef(chatHeight);
@@ -312,6 +319,14 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
                     .filter((m) => m.type === "file")
                     .map((m) => ({ path: m.target, size: 0 }))}
                 />
+                {/* No IME reservation <Box> here. The IME candidate
+                    window renders *outside* the TUI's layout — in the
+                    blank rows at the bottom of the terminal — because
+                    useTerminalSize ignores resize-shrinks from iTerm2
+                    while an IME is up (see src/tui/hooks/useTerminalSize.ts).
+                    Adding an empty <Box> here would push the terminal
+                    caret below the input, disconnecting the IME
+                    candidate's highlight from the actual text cursor. */}
               </Box>
             </Box>
           </Box>

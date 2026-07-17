@@ -65,8 +65,11 @@ function summarize(payload: any): string {
       return `[${payload.stage}] ${payload.error}`;
     case "anchor":
       return payload.name;
-    case "memory_write":
-      return `${payload.autonomyDecision} ${payload.action?.kind ?? "?"} ${payload.action?.section ?? "?"} — ${payload.reason ?? ""}`.trim();
+    case "memory_write": {
+      const base = `${payload.autonomyDecision} ${payload.action?.kind ?? "?"} ${payload.action?.section ?? "?"} — ${payload.reason ?? ""}`.trim();
+      const meta = [payload.category, payload.authority].filter(Boolean).join("/");
+      return meta ? `${base}  [${meta}]` : base;
+    }
     default:
       return truncate(JSON.stringify(payload));
   }
