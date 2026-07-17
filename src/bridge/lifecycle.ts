@@ -43,6 +43,7 @@ export async function createPhusAgent(deps: PhusAgentDeps): Promise<PhusAgentHan
     try { internals.tape.close?.(); } catch (err: any) {
       logger.warn("lifecycle.tape_close_failed", { error: err.message });
     }
+    try { internals.planStore.close(); } catch { /* ignore */ }
     logger.info("phus_agent.disposed");
   };
 

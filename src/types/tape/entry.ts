@@ -1,5 +1,6 @@
 import { Envelope } from "@/types/channel/index.js";
 import { Turn } from "@/types/tape/turn.js";
+import type { Plan } from "@/core/runtime/plan/types.js";
 import type { SessionId, ToolCallId, TurnId } from "@/types/brand.js";
 
 /**
@@ -85,6 +86,13 @@ export type TapeMemoryWriteEntry = {
   ts: number;
 };
 
+export type TapePlanEntry = {
+  kind: "plan";
+  sessionId: SessionId;
+  plan: Plan;
+  ts: number;
+};
+
 export type TapeEntry =
   | TapeTurnEntry
   | TapeAnchorEntry
@@ -92,6 +100,7 @@ export type TapeEntry =
   | TapeToolResultEntry
   | TapeErrorEntry
   | TapeCheckpointEntry
-  | TapeMemoryWriteEntry;
+  | TapeMemoryWriteEntry
+  | TapePlanEntry;
 
 export type TapeState = Record<string, unknown>;

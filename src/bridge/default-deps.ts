@@ -21,6 +21,11 @@ import { resolveModel } from "@/bridge/model-resolver.js";
 import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
 import { loadConfig, type ResolvedConfig } from "@/infra/config/index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
+import { PlanStore } from "@/core/session/plan-store.js";
+import { Planner } from "@/core/runtime/planner.js";
+import { createPlannerModel } from "@/core/runtime/planner-model.js";
+import { modelFromProfile } from "@/infra/profile.js";
+import * as path from "node:path";
 
 export interface DefaultDepsOptions {
   /** Force a specific profile (e.g. `phus run --profile foo`). */
@@ -72,6 +77,13 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
 
   const steeringInbox: SteeringInbox = new PiSteeringInbox();
 
+  const planStore = new PlanStore(path.join(config.paths.home, "plans.sqlite"));
+  const planner = new Planner({
+    skills,
+    model: createPlannerModel(modelFromProfile(profile)),
+    hooks,
+  });
+
   return {
     logger,
     tape,
@@ -83,5 +95,7 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
     steeringInbox,
     profile,
     policy,
+    planStore,
+    planner,
   };
 }

@@ -77,6 +77,9 @@ describe("default-registry shim (initInternalCommands + module-level register/ex
       getTapeTotalEntries: () => 0,
       getSessionCount: () => 0,
       getMessageCount: () => 0,
+      getCurrentSessionId: () => undefined,
+      getPlanRunner: () => undefined,
+      getPlanStore: () => undefined,
       ...over,
     } as any;
   }
@@ -159,6 +162,7 @@ describe("default-registry shim (initInternalCommands + module-level register/ex
       "reload", "plugins", "policy", "context", "clear", "quit",
       "mesh",
       "schedule", "schedule.list", "schedule.add", "schedule.remove", "schedule.enable", "schedule.disable",
+      "plan",
     ];
     const names = new Set(list().map((c) => c.name));
     for (const n of expected) {

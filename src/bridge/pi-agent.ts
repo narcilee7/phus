@@ -17,6 +17,13 @@ import {
 } from "@mariozechner/pi-agent-core";
 import { getModel, type Model } from "@mariozechner/pi-ai";
 import type { Envelope, Outbound } from "@/types/channel/index.js";
+import type { Plan } from "@/core/runtime/plan/types.js";
+import { Planner } from "@/core/runtime/planner.js";
+import { Verifier } from "@/core/runtime/verifier.js";
+import { Executor } from "@/core/runtime/executor.js";
+import { PlanRunner } from "@/core/runtime/plan-runner.js";
+import { PlanStore } from "@/core/session/plan-store.js";
+import { createPlannerModel } from "@/core/runtime/planner-model.js";
 import type { Turn } from "@/types/tape/index.js";
 import type { MetaTool } from "@/types/tool.js";
 import type { SessionId } from "@/types/brand.js";
@@ -75,6 +82,14 @@ export interface PhusAgentDeps {
   autonomyGate: AutonomyGate;
   /** Override for the auto-compaction threshold. */
   autoCompact?: AutoCompactConfig;
+  /** SQLite-backed plan store. If omitted, an in-memory store is used. */
+  planStore?: PlanStore;
+  /** Planner for long-horizon tasks. If omitted, a default planner is created. */
+  planner?: Planner;
+  /** Step executor used by the plan runner. If omitted, a default executor is created. */
+  executor?: Executor;
+  /** Plan runner orchestrating multi-step plans. If omitted, a default runner is created. */
+  planRunner?: PlanRunner;
 }
 
 /** Diagnostics snapshot returned by `getDiagnostics()`. */
@@ -196,6 +211,10 @@ export interface PhusAgentFacade {
   interrupt(): void;
   /** Get the underlying mesh (for diagnostic / advanced commands). */
   getMesh(): MeshLike;
+  /** Get the plan runner, if one is configured. */
+  getPlanRunner(): PlanRunner | undefined;
+  /** Get the plan store, if one is configured. */
+  getPlanStore(): PlanStore | undefined;
   /**
    * Re-load plugins from disk into the live HookRegistry, plus the
    * supplied channels. Returns a summary suitable for `,reload`.
@@ -228,6 +247,10 @@ export class PhusAgent implements PhusAgentFacade {
    *  scheduler + plugin loader + tempHandle contexts. */
   readonly hooks: HookRegistry;
   readonly steeringInbox: SteeringInbox;
+  readonly planStore: PlanStore;
+  readonly planner: Planner;
+  readonly executor: Executor;
+  readonly planRunner: PlanRunner;
   private currentSessionId: SessionId | undefined;
   private sessionOverride: SessionId | undefined;
   readonly extraChannels: ChannelAdapter[];
@@ -281,6 +304,37 @@ export class PhusAgent implements PhusAgentFacade {
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
     registerDefaultHooks(this.hooks, { tape: this.tape });
+
+    this.planStore = deps.planStore ?? new PlanStore(":memory:");
+    this.planner = deps.planner ?? new Planner({
+      skills: this.skills,
+      model: this.makePlannerModel(),
+      hooks: this.hooks,
+    });
+    const verifier = new Verifier({ model: this.makePlannerModel() });
+    this.executor = deps.executor ?? new Executor({ agent: this, verifier, tools: new Map() });
+    this.planRunner = deps.planRunner ?? new PlanRunner({
+      planner: this.planner,
+      executor: this.executor,
+      store: this.planStore,
+      hooks: this.hooks,
+    });
+
+    this.piAgent.state.tools = [
+      ...createMetaTools(this.skills, this.tape, {
+        store: this.memoryStore,
+        getCurrentSessionId: () => this.currentSessionId,
+      }, {
+        runner: this.planRunner,
+        store: this.planStore,
+        getCurrentSessionId: () => this.currentSessionId,
+      }).map(toAgentTool),
+      ...createExternalTools(),
+    ];
+  }
+
+  private makePlannerModel(): { prompt(messages: AgentMessage[]): Promise<string> } {
+    return createPlannerModel(this.piAgent.state.model);
   }
 
   private modelForEndpoint(ep: ReturnType<MeshLike["pickEndpoint"]>): Model<any> {
@@ -421,14 +475,18 @@ export class PhusAgent implements PhusAgentFacade {
         "first_result",
       );
 
-      // 4. Pi agent loop runs LLM + tool calls
-      await this.piAgent.prompt(userMsg);
-
-      // 5. Extract assistant text
-      const lastAssistant = [...this.piAgent.state.messages]
-        .reverse()
-        .find((m) => m.role === "assistant");
-      const modelOutput = extractText(lastAssistant);
+      // 4. Long-horizon plan flow OR normal Pi agent loop
+      let modelOutput: string;
+      const planSummary = await this.runPlanFlowIfRequested(envelope, sessionId);
+      if (planSummary !== undefined) {
+        modelOutput = planSummary;
+      } else {
+        await this.piAgent.prompt(userMsg);
+        const lastAssistant = [...this.piAgent.state.messages]
+          .reverse()
+          .find((m) => m.role === "assistant");
+        modelOutput = extractText(lastAssistant);
+      }
 
       // 6. render_outbound (broadcast → merge)
       const outbounds = (await this.hooks.execute<Outbound[]>(
@@ -511,6 +569,53 @@ export class PhusAgent implements PhusAgentFacade {
       logger.error("turn.failed", { sessionId, stage: "turn", error: err.message });
       throw err;
     }
+  }
+
+  private async runPlanFlowIfRequested(
+    envelope: Envelope,
+    sessionId: SessionId,
+  ): Promise<string | undefined> {
+    if (!this.planRunner || !this.planStore) return undefined;
+    const content = (envelope.content ?? "").trim();
+    if (!content) return undefined;
+
+    try {
+      // Explicit /plan command: strip prefix and create+run a new plan.
+      const planPrefix = "/plan ";
+      if (content.startsWith(planPrefix)) {
+        const goal = content.slice(planPrefix.length).trim();
+        if (!goal) return undefined;
+        const plan = await this.planRunner.createAndRun(goal, sessionId, envelope.content);
+        return this.summarizePlan(plan);
+      }
+
+      // Heuristic: explicit multi-step intent.
+      if (/分步骤|step by step|multi[- ]?step/i.test(content)) {
+        const plan = await this.planRunner.createAndRun(content, sessionId, envelope.content);
+        return this.summarizePlan(plan);
+      }
+
+      // Resume an active plan for this session.
+      const activePlan = this.planStore.loadActiveForSession(sessionId);
+      if (activePlan && activePlan.status === "running") {
+        const plan = await this.planRunner.runPlan(activePlan);
+        return this.summarizePlan(plan);
+      }
+    } catch (err: any) {
+      logger.error("turn.plan_flow_failed", { sessionId, error: err.message });
+    }
+
+    return undefined;
+  }
+
+  private summarizePlan(plan: Plan): string {
+    const lines = [
+      `Plan ${plan.id} (${plan.status}): ${plan.goal}`,
+      ...plan.steps.map(
+        (s) => `  ${s.index + 1}. [${s.status}] ${s.description}${s.tool ? ` (tool: ${s.tool})` : ""}`,
+      ),
+    ];
+    return lines.join("\n");
   }
 
   private fallbackSession(envelope: Envelope): string {
@@ -812,6 +917,14 @@ export class PhusAgent implements PhusAgentFacade {
 
   getMesh(): MeshLike {
     return this.mesh;
+  }
+
+  getPlanRunner(): PlanRunner | undefined {
+    return this.planRunner;
+  }
+
+  getPlanStore(): PlanStore | undefined {
+    return this.planStore;
   }
 
   async loadPluginsForReload(channels: ChannelAdapter[]): Promise<{
