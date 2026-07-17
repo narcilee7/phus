@@ -135,6 +135,9 @@ export async function runSlash(
     case "plan":
       return await cmdPlan(arg, agent, dispatch);
 
+    case "subagent":
+      return cmdSubagent(arg, dispatch);
+
     default:
       dispatch({ type: "add_system", text: `unknown command: /${name}. Try /help.`, level: "warn" });
   }
@@ -170,6 +173,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "checkpoint", description: "checkpoint management: list|create|restore <id>" },
   { name: "retry", description: "retry last prompt" },
   { name: "plan", description: "plan management: create|run|status|list|resume <args>" },
+  { name: "subagent", description: "show subagent sessions in sidebar" },
   { name: "new", description: "start a fresh session" },
   { name: "clear", description: "clear chat area" },
   { name: "quit", description: "exit" },
@@ -809,4 +813,29 @@ async function cmdPlan(
         level: "warn",
       });
   }
+}
+
+function cmdSubagent(
+  arg: string,
+  dispatch: (a: AppAction) => void,
+): void {
+  const sub = (arg || "show").trim();
+  if (sub === "show" || sub === "") {
+    dispatch({ type: "request_sidebar", view: "sessions" });
+    dispatch({
+      type: "add_system",
+      text: "→ opened subagent sessions in sidebar",
+      level: "info",
+    });
+    return;
+  }
+  if (sub === "files" || sub === "hide") {
+    dispatch({ type: "request_sidebar", view: "files" });
+    return;
+  }
+  dispatch({
+    type: "add_system",
+    text: "usage: /subagent [show|files]",
+    level: "warn",
+  });
 }
