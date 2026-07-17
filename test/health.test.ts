@@ -6,11 +6,9 @@ import * as os from "node:os";
 import yaml from "yaml";
 import { healthCheck } from "../src/commands/health.js";
 import { resetConfigCache } from "../src/infra/config/index.js";
-import { resetConfigCache } from "../src/infra/config/index.js";
 
 describe("healthCheck", () => {
   let dir: string;
-  let originalPhusHome: string | undefined;
   let originalPhusHome: string | undefined;
 
   beforeEach(() => {
