@@ -6,15 +6,15 @@
 import type {
   InternalCommand,
   InternalCommandServices,
-} from "../types.js";
-import { defineEvolutionCommands } from "./evolution.js";
-import { defineFilesystemCommands } from "./filesystem.js";
-import { defineMaintenanceCommands } from "./maintenance.js";
-import { defineMeshCommands } from "./mesh.js";
-import { defineScheduleCommands } from "./schedule.js";
-import { defineSkillCommands } from "./skills.js";
-import { defineTapeCommands } from "./tape.js";
-import { definePlanCommands } from "./plan.js";
+} from "../types";
+import { defineEvolutionCommands } from "./evolution";
+import { defineFilesystemCommands } from "./filesystem";
+import { defineMaintenanceCommands } from "./maintenance";
+import { defineMeshCommands } from "./mesh";
+import { defineScheduleCommands } from "./schedule";
+import { defineSkillCommands } from "./skills";
+import { defineTapeCommands } from "./tape";
+import { definePlanCommands } from "./plan";
 
 /** All built-in command clusters. */
 export function defineAllBuiltinCommands(

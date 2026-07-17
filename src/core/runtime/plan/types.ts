@@ -1,18 +1,27 @@
+import { SkillRegistryLike } from "@/types";
 import type { SessionId } from "@/types/brand.js";
+import { AgentMessage } from "@mariozechner/pi-agent-core";
+import { HookRegistry } from "@/core/runtime/hook/registry";
+import { Planner } from "./planner";
+import { Executor } from "../executor";
+import { PlanStore } from "@/core/session/plan-store";
+import { EvolutionEngine } from "../evolution/engine";
 
 export type PlanStatus = "pending" | "running" | "paused" | "completed" | "failed";
 
 export type StepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
 
+export type VerificationStatus = "proceed" | "retry" | "replan" | "escalate" | "abort";
+
 export interface Step {
   id: string;
   index: number;
   description: string;
-  tool?: string;
   expectedOutput?: string;
   status: StepStatus;
-  result?: unknown;
   retryCount: number;
+  tool?: string;
+  result?: unknown;
   dependsOn?: string[];
   /** Subagent session id responsible for this step, if delegated. */
   subagentSessionId?: string;
@@ -38,12 +47,31 @@ export interface VerificationResult {
   ok: boolean;
   confidence: number;
   reason: string;
-  action: "proceed" | "retry" | "replan" | "escalate" | "abort";
+  action: VerificationStatus;
 }
 
+// Todo: migrate to subagent dir
 export interface SubAgentOptions {
   task: string;
   parentSessionId: string;
   context?: string;
   maxSteps?: number;
+}
+
+export type PlannerDepsModel =
+  | { prompt(messages: AgentMessage[]): Promise<string> }
+  | ((messages: AgentMessage[]) => Promise<string>);
+
+export type PlannerDeps = {
+  skills: SkillRegistryLike;
+  model: PlannerDepsModel;
+  hooks?: HookRegistry;
+};
+
+export type PlanRunnerDeps = {
+  planner: Planner;
+  executor: Executor;
+  store: PlanStore;
+  hooks: HookRegistry;
+  evolutionEngine?: EvolutionEngine;
 }

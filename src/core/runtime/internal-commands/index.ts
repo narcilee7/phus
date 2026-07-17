@@ -12,20 +12,20 @@
 //   register / unregister / list / get       — operate on default registry
 //   registerBuiltins(services)              — populate a registry
 
-import { logger } from "@/infra/logging.js";
+import { logger } from "@/infra/logging";
 import {
   InternalCommandRegistry,
   type RegistryOptions,
-} from "./registry.js";
-import { defineAllBuiltinCommands } from "./builtins/index.js";
-import { parse } from "./parser.js";
+} from "./registry";
+import { defineAllBuiltinCommands } from "./builtins/index";
+import { parse } from "./parser";
 import type {
   CommandSurface,
   InternalCommand,
   InternalCommandContext,
   InternalCommandServices,
   ParsedCommand,
-} from "./types.js";
+} from "./types";
 
 export type {
   CommandSurface,

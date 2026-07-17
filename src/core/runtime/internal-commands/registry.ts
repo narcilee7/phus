@@ -2,14 +2,14 @@
 // Per-instance command registry. Pure data structure; no module-level
 // state, no globals. Phase 4 will construct one of these per agent.
 
-import { logger } from "@/infra/logging.js";
+import { logger } from "@/infra/logging";
 import type {
   CommandSurface,
   InternalCommand,
   InternalCommandServices,
   ParsedCommand,
-} from "./types.js";
-import { parse } from "./parser.js";
+} from "./types";
+import { parse } from "./parser";
 
 export interface RegistryOptions {
   /** When true, an exception in a handler is logged but does not

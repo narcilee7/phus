@@ -1,26 +1,7 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { SessionId } from "@/types/brand.js";
-import type { TapeLike } from "@/types/hooks/index.js";
-import type { SkillRegistryLike } from "@/types/hooks/index.js";
-import type { SkillDraft } from "@/infra/skills/draft.js";
-
-export interface Reflection {
-  sessionId: SessionId;
-  task: string;
-  outcome: "success" | "partial" | "failure";
-  whatWorked: string[];
-  whatFailed: string[];
-  reusableProcedure?: string;
-  suggestedSkill?: SkillDraft;
-}
-
-export interface LearnerDeps {
-  tape: TapeLike;
-  skills: SkillRegistryLike;
-  model:
-    | { prompt(messages: AgentMessage[]): Promise<string> }
-    | ((messages: AgentMessage[]) => Promise<string>);
-}
+import { SessionId } from "@/types/brand";
+import { LearnerDeps, Reflection } from "./types";
+import { AgentMessage } from "@mariozechner/pi-agent-core";
+import { SkillDraft } from "@/infra/skills/draft";
 
 export class Learner {
   constructor(private deps: LearnerDeps) {}

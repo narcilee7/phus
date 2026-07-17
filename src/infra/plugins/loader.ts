@@ -13,7 +13,7 @@ import * as path from "node:path";
 import { createJiti } from "jiti";
 import * as yaml from "yaml";
 import { logger } from "@/infra/logging.js";
-import type { HookRegistry } from "@/core/runtime/hook.js";
+import type { HookRegistry } from "@/core/runtime/hook/registry";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { LoadedPlugin, Plugin, PluginContext, PluginLoaderOptions } from "@/types/plugins/index.js";
 import { Skill } from "@/types/skill.js";

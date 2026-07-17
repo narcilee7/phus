@@ -1,11 +1,11 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
-import type { SessionId } from "@/types/brand.js";
-import type { Plan } from "@/core/runtime/plan/types.js";
-import type { PlanRunner } from "@/core/runtime/plan-runner.js";
-import { PlanStore, type ValidationMetrics } from "@/core/session/plan-store.js";
-import { SkillRegistry } from "@/infra/skills/registry.js";
-import type { SkillDraft } from "@/infra/skills/draft.js";
+import fs from "node:fs";
+import path from "node:path";
+
+import { PlanStore, ValidationMetrics } from "@/core/session/plan-store";
+import { PlanRunner } from "@/core/runtime/plan/plan-runner";
+import { Plan } from "@/core/runtime/plan/types";
+import { SkillRegistry } from "@/infra/skills/registry";
+import { SkillDraft } from "@/infra/skills/draft";
 
 export interface SkillValidatorDeps {
   planRunner: PlanRunner;
@@ -24,7 +24,7 @@ export class SkillValidator {
   async validate(
     draftName: string,
     task: string,
-    sessionId: SessionId,
+    sessionId: string,
   ): Promise<{ improved: boolean; reason: string }> {
     const draft = this.deps.skills.getDraft(draftName);
     if (!draft) return { improved: false, reason: "draft not found" };

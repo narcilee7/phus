@@ -3,7 +3,7 @@
 // Used by CLI / TUI / commands that want a turnkey agent without
 // manually wiring every dependency.
 
-import { HookRegistry } from "@/core/runtime/hook.js";
+import { HookRegistry } from "@/core/runtime/hook/registry";
 import { Tape } from "@/core/session/tape.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import { defaultPolicy } from "@/infra/safety.js";
@@ -13,7 +13,7 @@ import {
   type MeshPolicy,
 } from "@/core/llm/provider-mesh/index.js";
 import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
-import { PiSteeringInbox } from "@/core/runtime/steering.js";
+import { PiSteeringInbox } from "@/core/runtime/steering";
 import type { SteeringInbox } from "@/types/steering/index.js";
 import { buildMesh } from "@/core/llm/provider-mesh/index.js";
 import { logger } from "@/infra/logging.js";
@@ -22,8 +22,8 @@ import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
 import { loadConfig, type ResolvedConfig } from "@/infra/config/index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
 import { PlanStore } from "@/core/session/plan-store.js";
-import { Planner } from "@/core/runtime/planner.js";
-import { createPlannerModel } from "@/core/runtime/planner-model.js";
+import { Planner } from "@/core/runtime/plan/planner";
+import { createPlannerModel } from "@/core/runtime/plan/planner-model";
 import * as path from "node:path";
 
 export interface DefaultDepsOptions {

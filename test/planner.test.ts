@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { Planner } from "@/core/runtime/planner.js";
-import { HookRegistry } from "@/core/runtime/hook.js";
+import { HookRegistry } from "@/core/runtime/hook/ctx-builder";
 import type { SkillRegistryLike } from "@/types/hooks/index.js";
 
 const stubSkills: SkillRegistryLike = {

@@ -1,4 +1,3 @@
-// src/core/exit-codes.ts
 // Distinct process exit codes so scripts can react appropriately.
 //
 // Phus CLI commands should use these instead of hardcoded 1.

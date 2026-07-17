@@ -3,7 +3,7 @@
 
 import type { Command } from "commander";
 import { resumeSession } from "@/commands/resume.js";
-import { ExitCode, CliExit } from "@/core/runtime/exit-codes.js";
+import { ExitCode, CliExit } from "@/core/runtime/executor/exit-code";
 
 export function registerResumeCommand(program: Command): void {
   program

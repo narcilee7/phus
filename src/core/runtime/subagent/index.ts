@@ -1,18 +1,19 @@
-import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import type { SessionId } from "@/types/brand.js";
-import type { SubAgentAgentLike } from "@/core/runtime/executor.js";
-import type { SubAgentOptions } from "@/core/runtime/plan/types.js";
-import { extractText } from "@/bridge/text.js";
-import { asSessionId } from "@/types/brand.js";
-
-export { type SubAgentAgentLike };
+import { asSessionId } from "@/types/brand";
+import { SubAgentOptions } from "../plan/types";
+import { SubAgentAgentLike } from "./types";
+import { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import { extractText } from "@/utils/pi-text";
 
 export class SubAgent {
   constructor(private deps: { agent: SubAgentAgentLike }) {}
 
+  private buildSubSessionId(parentSessionId: string) {
+    return asSessionId(`${parentSessionId}:sub:${Date.now()}`);
+  }
+
   async run(options: SubAgentOptions): Promise<unknown> {
     const parentSessionId = options.parentSessionId;
-    const subSessionId = asSessionId(`${parentSessionId}:sub:${Date.now()}`);
+    const subSessionId = this.buildSubSessionId(parentSessionId);
     const previousSessionId = this.deps.agent.getCurrentSessionId();
 
     const capturedMessages: AgentMessage[] = [];

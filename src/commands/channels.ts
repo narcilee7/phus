@@ -7,10 +7,10 @@
 
 import type { ChannelAdapter, ChannelStatus } from "@/channels/base.js";
 import type { ChannelConfig } from "@/infra/config/schema.js";
-import type { HookContext } from "@/core/runtime/hook.js";
-import { makeCtx } from "@/core/runtime/hook.js";
+import { makeCtx } from "@/core/runtime/hook/ctx-builder";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 import { logger } from "@/infra/logging.js";
+import { HookContext } from "@/types";
 
 export interface ChannelOpts {
   telegram?: boolean;

@@ -3,7 +3,7 @@ import { PlanRunner } from "@/core/runtime/plan-runner.js";
 import { Planner } from "@/core/runtime/planner.js";
 import { Executor } from "@/core/runtime/executor.js";
 import { PlanStore } from "@/core/session/plan-store.js";
-import { HookRegistry } from "@/core/runtime/hook.js";
+import { HookRegistry } from "@/core/runtime/hook/ctx-builder";
 import type { Plan, Step } from "@/core/runtime/plan/types.js";
 import { asSessionId } from "@/types/brand.js";
 

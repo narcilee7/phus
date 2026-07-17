@@ -7,7 +7,7 @@
 // Falls back to last-N when query is empty or no turns match.
 
 import type { Tape } from "@/core/session/tape.js";
-import type { TapeEntry, Turn } from "@/types/tape/index.js";
+import type { Turn } from "@/types/tape/index.js";
 
 export interface SelectOptions {
   /** Max turns to include in result. Default 10. */
@@ -33,8 +33,9 @@ export interface ScoredTurn {
 
 /** Tokenize for keyword scoring. */
 function tokenize(s: string): Set<string> {
+  if (!s) return new Set();
   return new Set(
-    (s || "")
+    s
       .toLowerCase()
       .replace(/[^\p{L}\p{N}\s]/gu, " ")
       .split(/\s+/)

@@ -1,8 +1,7 @@
-// src/core/internal-commands/builtins/schedule.ts
 // ,schedule.* — inspect and edit cron-driven hook schedules.
 
-import { asScheduleName } from "@/types/brand.js";
-import type { InternalCommand, InternalCommandServices } from "../types.js";
+import { asScheduleName } from "@/types/brand";
+import type { InternalCommand, InternalCommandServices } from "../types";
 
 function notInitializedMessage(): string {
   return "(scheduler not initialized — only runs in gateway mode)";

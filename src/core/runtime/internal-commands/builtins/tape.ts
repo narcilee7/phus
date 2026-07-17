@@ -1,7 +1,7 @@
 // src/core/internal-commands/builtins/tape.ts
 // ,tape / ,trace / ,sessions / ,use / ,compact — tape and session ops.
 
-import type { InternalCommand, InternalCommandServices } from "../types.js";
+import type { InternalCommand, InternalCommandServices } from "../types";
 
 export function defineTapeCommands(
   services: InternalCommandServices,
