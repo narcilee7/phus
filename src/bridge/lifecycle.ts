@@ -7,6 +7,7 @@ import {
   type PhusAgentDeps,
   type PhusAgentFacade,
 } from "@/bridge/pi-agent.js";
+import { RepoFileIndex } from "@/core/session/repo-file-index.js";
 import { logger } from "@/infra/logging.js";
 
 export interface PhusAgentHandle {
@@ -25,7 +26,14 @@ export interface PhusAgentHandle {
 /** Resolve every dependency the agent needs and return a handle
  *  that includes the agent plus a `dispose()` for clean shutdown. */
 export async function createPhusAgent(deps: PhusAgentDeps): Promise<PhusAgentHandle> {
-  const internals = new PhusAgent(deps);
+  // Default to a cwd-scoped repo index when none is wired. The index is
+  // cheap (a single directory walk) and gives the prompt assembler the
+  // file-relevance signal that §D Code Capability calls for.
+  const resolvedDeps: PhusAgentDeps = {
+    ...deps,
+    repoIndex: deps.repoIndex ?? new RepoFileIndex(process.cwd()),
+  };
+  const internals = new PhusAgent(resolvedDeps);
   // Load plugins before the agent accepts the first turn so skills
   // registered by plugins are discoverable immediately.
   const { loadPlugins } = await import("@/infra/plugins/loader.js");

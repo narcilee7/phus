@@ -7,6 +7,8 @@ import type { SkillRegistryLike, TapeLike } from "@/types/hooks/index.js";
 import type { SessionId } from "@/types/brand.js";
 import { makeCtx } from "@/core/runtime/hook/ctx-builder";
 import type { HookRegistry } from "@/core/runtime/hook/registry";
+import type { RepoFileIndex } from "@/core/session/repo-file-index.js";
+import { selectRelevantFiles } from "@/core/session/context-select.js";
 
 export const SYSTEM_PROMPT_HEADER = `You are Phus (⛰️ 西西弗斯), a self-evolving agent.
 
@@ -41,6 +43,10 @@ export interface PromptAssemblyDeps {
   getCurrentSessionId: () => SessionId | undefined;
   /** Function writing the final composed prompt into the live agent state. */
   setSystemPrompt: (prompt: string) => void;
+  /** Optional repo file index — when present, the context block lists the
+   *  most relevant files for the current query. Cheap to omit for unit
+   *  tests; production wires it via the lifecycle. */
+  repoIndex?: RepoFileIndex;
 }
 
 function extractMessageText(message: AgentMessage): string {
@@ -113,14 +119,34 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
     }
     const stats = deps.tape.stats();
     const memoryCtx = deps.memory?.toPromptContext(queryText) ?? "## Project memory\n(no project memory yet)";
+    const repoCtx = buildRepoContext(queryText, deps.repoIndex);
     dynamicContext =
       `## Current skills\n${skillsCtx}\n\n` +
       `${memoryCtx}\n\n` +
       `## Relevant past turns (B.4.3 smart select)\n${tapeSummary}\n\n` +
+      repoCtx +
       `## Tape statistics\nTotal entries across all sessions: ${stats.totalEntries}\n` +
       `Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;
   }
 
   deps.setSystemPrompt(`${systemPrompt}\n\n${dynamicContext}`);
   return messages;
+}
+
+/**
+ * Build the "Relevant files" section from the optional repo file index.
+ * Returns an empty string when no index is wired so the section simply
+ * doesn't appear in the prompt.
+ */
+function buildRepoContext(query: string, index: RepoFileIndex | undefined): string {
+  if (!index) return "";
+  const hits = selectRelevantFiles(index, query, { budget: 10 });
+  if (hits.length === 0) return "";
+  const lines = hits
+    .map(
+      (h) =>
+        `- ${h.file.relPath}  (score ${h.score.toFixed(2)}${h.matchedTokens.length > 0 ? `; matched: ${h.matchedTokens.join(", ")}` : ""})`,
+    )
+    .join("\n");
+  return `## Relevant files in this repo\n${lines}\n\n`;
 }
