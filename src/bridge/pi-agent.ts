@@ -24,6 +24,9 @@ import { Executor } from "@/core/runtime/executor.js";
 import { PlanRunner } from "@/core/runtime/plan-runner.js";
 import { PlanStore } from "@/core/session/plan-store.js";
 import { createPlannerModel } from "@/core/runtime/planner-model.js";
+import { Learner } from "@/core/runtime/learner.js";
+import { SkillValidator } from "@/core/runtime/skill-validator.js";
+import { EvolutionEngine } from "@/core/runtime/evolution.js";
 import type { Turn } from "@/types/tape/index.js";
 import type { MetaTool } from "@/types/tool.js";
 import type { SessionId } from "@/types/brand.js";
@@ -31,6 +34,7 @@ import { asSessionId, asToolCallId, asTurnId } from "@/types/brand.js";
 import { HookRegistry, makeCtx, type HookContext } from "@/core/runtime/hook.js";
 import { Tape } from "@/core/session/tape.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
+import type { SkillDraft } from "@/infra/skills/draft.js";
 import { createMetaTools } from "@/infra/meta/index.js";
 import { createExternalTools } from "@/bridge/tools.js";
 import { defaultPolicy, evaluate, type PolicyRule } from "@/infra/safety.js";
@@ -199,6 +203,16 @@ export interface PhusAgentFacade {
   getSkillCount(): number;
   /** Get the skills-to-prompt-context block (markdown list). */
   getSkillsPrompt(): string;
+  /** All skill drafts. */
+  getSkillDrafts(): readonly SkillDraft[];
+  /** Promote a skill draft to a real skill. */
+  promoteSkillDraft(name: string): boolean;
+  /** Archive a skill draft. */
+  archiveSkillDraft(name: string): boolean;
+  /** Suggest startup.sh content based on recent tape. */
+  suggestStartup(): Promise<string>;
+  /** Reflect on a session and return a structured reflection. */
+  reflect(sessionId: SessionId, task: string): Promise<import("@/core/runtime/learner.js").Reflection>;
   /** Number of entries currently in tape. */
   getTapeTotalEntries(): number;
   /** Number of sessions currently in tape. */
@@ -251,6 +265,8 @@ export class PhusAgent implements PhusAgentFacade {
   readonly planner: Planner;
   readonly executor: Executor;
   readonly planRunner: PlanRunner;
+  readonly learner: Learner;
+  readonly evolutionEngine: EvolutionEngine;
   private currentSessionId: SessionId | undefined;
   private sessionOverride: SessionId | undefined;
   readonly extraChannels: ChannelAdapter[];
@@ -320,6 +336,24 @@ export class PhusAgent implements PhusAgentFacade {
       hooks: this.hooks,
     });
 
+    this.learner = new Learner({
+      tape: this.tape,
+      skills: this.skills,
+      model: this.makePlannerModel(),
+    });
+    const skillValidator = new SkillValidator({
+      planRunner: this.planRunner,
+      planStore: this.planStore,
+      skills: this.skills,
+    });
+    this.evolutionEngine = new EvolutionEngine({
+      learner: this.learner,
+      skillValidator,
+      skills: this.skills,
+      tape: this.tape,
+    });
+    this.planRunner.setEvolutionEngine(this.evolutionEngine);
+
     this.piAgent.state.tools = [
       ...createMetaTools(this.skills, this.tape, {
         store: this.memoryStore,
@@ -328,6 +362,9 @@ export class PhusAgent implements PhusAgentFacade {
         runner: this.planRunner,
         store: this.planStore,
         getCurrentSessionId: () => this.currentSessionId,
+      }, {
+        learner: this.learner,
+        evolutionEngine: this.evolutionEngine,
       }).map(toAgentTool),
       ...createExternalTools(),
     ];
@@ -877,6 +914,30 @@ export class PhusAgent implements PhusAgentFacade {
 
   getSkillsPrompt(): string {
     return this.skills.toPromptContext();
+  }
+
+  getSkillDrafts(): readonly SkillDraft[] {
+    return this.skills.getAllDrafts();
+  }
+
+  promoteSkillDraft(name: string): boolean {
+    return this.skills.promoteDraft(name) !== undefined;
+  }
+
+  archiveSkillDraft(name: string): boolean {
+    const before = this.skills.getDraft(name);
+    this.skills.archiveDraft(name);
+    return before !== undefined;
+  }
+
+  async suggestStartup(): Promise<string> {
+    const { StartupAdvisor } = await import("@/core/runtime/startup-advisor.js");
+    const advisor = new StartupAdvisor();
+    return advisor.suggestStartup(this.tape);
+  }
+
+  async reflect(sessionId: SessionId, task: string): Promise<import("@/core/runtime/learner.js").Reflection> {
+    return this.learner.reflect(sessionId, task);
   }
 
   getTapeTotalEntries(): number {

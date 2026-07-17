@@ -1,7 +1,7 @@
 // src/core/llm/meta/index.ts
 // Meta tools aggregator. `createMetaTools(skills, tape, memory)` was the
 // monolith entry point; this module keeps that signature stable while
-// internally composing skill-tools + system-tools + memory-tools + plan-tools.
+// internally composing skill-tools + system-tools + memory-tools + plan-tools + evolution-tools.
 
 import type { MetaTool } from "@/types/tool.js";
 import type { Tape } from "@/core/session/tape.js";
@@ -9,17 +9,21 @@ import { defineSkillMetaTools } from "./skill-tools.js";
 import { defineSystemMetaTools } from "./system-tools.js";
 import { defineMemoryMetaTools } from "./memory-tools.js";
 import { definePlanMetaTools } from "./plan-tools.js";
+import { defineEvolutionMetaTools } from "./evolution-tools.js";
 import type { SkillRegistry } from "@/infra/skills/registry.js";
 import type { MemoryStore } from "@/infra/memory/index.js";
 import type { SessionId } from "@/types/brand.js";
 import type { PlanRunner } from "@/core/runtime/plan-runner.js";
 import type { PlanStore } from "@/core/session/plan-store.js";
+import type { Learner } from "@/core/runtime/learner.js";
+import type { EvolutionEngine } from "@/core/runtime/evolution.js";
 
 export function createMetaTools(
   skills: SkillRegistry,
   tape: Tape,
   memory: { store: MemoryStore; getCurrentSessionId?: () => SessionId | undefined },
   plan?: { runner: PlanRunner; store: PlanStore; getCurrentSessionId: () => SessionId | undefined },
+  evolution?: { learner: Learner; evolutionEngine: EvolutionEngine },
 ): MetaTool[] {
   const skillTools = defineSkillMetaTools({
     write: (input) => skills.write(input),
@@ -53,11 +57,20 @@ export function createMetaTools(
       })
     : [];
 
-  return [...skillTools, ...systemTools, ...memoryTools, ...planTools];
+  const evolutionTools = evolution
+    ? defineEvolutionMetaTools({
+        learner: evolution.learner,
+        evolutionEngine: evolution.evolutionEngine,
+        skills,
+      })
+    : [];
+
+  return [...skillTools, ...systemTools, ...memoryTools, ...planTools, ...evolutionTools];
 }
 
 export { defineSkillMetaTools } from "./skill-tools.js";
 export { defineSystemMetaTools } from "./system-tools.js";
 export { defineMemoryMetaTools } from "./memory-tools.js";
 export { definePlanMetaTools } from "./plan-tools.js";
+export { defineEvolutionMetaTools } from "./evolution-tools.js";
 export { parseMemoryAction } from "./memory-tools.js";

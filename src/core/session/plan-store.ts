@@ -3,6 +3,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Plan, PlanStatus } from "@/core/runtime/plan/types.js";
 
+export interface ValidationMetrics {
+  stepCount: number;
+  failures: number;
+  durationMs: number;
+  status: "completed" | "failed";
+  recordedAt: number;
+}
+
 export class PlanStore {
   private db: Database.Database;
 
@@ -27,6 +35,12 @@ export class PlanStore {
       );
       CREATE INDEX IF NOT EXISTS idx_plans_session ON plans(session_id);
       CREATE INDEX IF NOT EXISTS idx_plans_status ON plans(status);
+
+      CREATE TABLE IF NOT EXISTS validation_baselines (
+        draft_name TEXT PRIMARY KEY,
+        metrics TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
     `);
   }
 
@@ -87,6 +101,27 @@ export class PlanStore {
 
   delete(planId: string): void {
     this.db.prepare("DELETE FROM plans WHERE id = ?").run(planId);
+  }
+
+  // ─── Skill validation baselines ────────────────────────────────
+
+  recordValidationBaseline(draftName: string, metrics: ValidationMetrics): void {
+    const stmt = this.db.prepare(
+      "INSERT OR REPLACE INTO validation_baselines (draft_name, metrics, updated_at) VALUES (?, ?, ?)",
+    );
+    stmt.run(draftName, JSON.stringify(metrics), Date.now());
+  }
+
+  getValidationBaseline(draftName: string): ValidationMetrics | undefined {
+    const row = this.db
+      .prepare("SELECT metrics FROM validation_baselines WHERE draft_name = ?")
+      .get(draftName) as { metrics: string } | undefined;
+    if (!row) return undefined;
+    try {
+      return JSON.parse(row.metrics) as ValidationMetrics;
+    } catch {
+      return undefined;
+    }
   }
 
   close(): void {

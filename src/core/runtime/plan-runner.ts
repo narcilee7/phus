@@ -4,6 +4,7 @@ import type { Plan, Step } from "@/core/runtime/plan/types.js";
 import { Planner } from "@/core/runtime/planner.js";
 import { Executor } from "@/core/runtime/executor.js";
 import { PlanStore } from "@/core/session/plan-store.js";
+import type { EvolutionEngine } from "@/core/runtime/evolution.js";
 import { logger } from "@/infra/logging.js";
 
 export interface PlanRunnerDeps {
@@ -11,10 +12,15 @@ export interface PlanRunnerDeps {
   executor: Executor;
   store: PlanStore;
   hooks: HookRegistry;
+  evolutionEngine?: EvolutionEngine;
 }
 
 export class PlanRunner {
   constructor(private deps: PlanRunnerDeps) {}
+
+  setEvolutionEngine(engine: EvolutionEngine | undefined): void {
+    this.deps.evolutionEngine = engine;
+  }
 
   async createAndRun(goal: string, sessionId: string, context?: string): Promise<Plan> {
     const plan = await this.deps.planner.createPlan(goal, sessionId, context);
@@ -83,6 +89,17 @@ export class PlanRunner {
       }),
       "broadcast",
     );
+
+    if (this.deps.evolutionEngine) {
+      try {
+        await this.deps.evolutionEngine.onPlanCompleted(plan);
+      } catch (err) {
+        logger.warn("plan_runner.evolution_failed", {
+          planId: plan.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     return plan;
   }
