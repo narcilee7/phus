@@ -4,22 +4,33 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { healthCheck } from "../src/commands/health.js";
+import { resetConfigCache } from "../src/infra/config/index.js";
 
 describe("healthCheck", () => {
   let dir: string;
+  let originalPhusHome: string | undefined;
 
   beforeEach(() => {
+    originalPhusHome = process.env.PHUS_HOME;
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-health-"));
+    process.env.PHUS_HOME = dir;
     process.env.PHUS_TAPE_DB = path.join(dir, "tape.sqlite");
     process.env.PHUS_SKILLS_DIR = path.join(dir, "skills");
     process.env.PHUS_LOG_FILE = path.join(dir, "logs", "phus.jsonl");
+    resetConfigCache();
   });
 
   afterEach(() => {
+    if (originalPhusHome === undefined) {
+      delete process.env.PHUS_HOME;
+    } else {
+      process.env.PHUS_HOME = originalPhusHome;
+    }
     delete process.env.PHUS_TAPE_DB;
     delete process.env.PHUS_SKILLS_DIR;
     delete process.env.PHUS_LOG_FILE;
     delete process.env.OPENAI_API_KEY;
+    resetConfigCache();
   });
 
   it("returns ok=false when no provider key is set", () => {
