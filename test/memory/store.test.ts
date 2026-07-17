@@ -165,6 +165,34 @@ describe("MemoryStore.toPromptContext", () => {
     expect(ctx.length).toBeLessThan(lines.length);
     expect(ctx).toMatch(/truncated/i);
   });
+
+  it("selects query-relevant sections instead of dumping the whole file", () => {
+    fs.writeFileSync(
+      filePath,
+      [
+        "## Style",
+        "",
+        "Use Chinese for user-facing output.",
+        "",
+        "## Deploy",
+        "",
+        "Run the smoke tests before deployment.",
+        "",
+        "## Notes",
+        "",
+        "Keep memory concise.",
+        "",
+      ].join("\n"),
+    );
+
+    const store = new MemoryStore(filePath);
+    const ctx = store.toPromptContext("How do I deploy this?");
+
+    expect(ctx).toContain("## Project memory (selected for");
+    expect(ctx).toContain("## Deploy");
+    expect(ctx).not.toContain("## Style");
+    expect(ctx).not.toContain("## Notes");
+  });
 });
 
 describe("MemoryStore size warnings", () => {

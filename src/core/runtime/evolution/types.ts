@@ -4,6 +4,7 @@ import { SessionId } from "@/types/brand";
 import { AgentMessage } from "@mariozechner/pi-agent-core";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { SkillRegistry } from "@/infra/skills/registry";
+import type { MemoryStore } from "@/infra/memory/index.js";
 import { Learner } from "./learner";
 
 export type ReflectionOutcomeStatus = "success" | "partial" | "failure"
@@ -30,5 +31,6 @@ export type EvolutionDeps = {
   learner: Learner;
   skillValidator: SkillValidator;
   skills: SkillRegistry;
+  memoryStore: MemoryStore;
   tape: TapeLike;
 }

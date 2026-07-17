@@ -4,9 +4,9 @@
 import { describe, expect, it, vi } from "vitest";
 import React, { useState } from "react";
 import { render } from "ink-testing-library";
-import { MultiLineInput } from "../../src/tui/components/MultiLineInput.js";
+import { MultiLineInput } from "../../src/tui/components/input-components/MultiLineInput.js";
 
-import type { SuggestionItem } from "../../src/tui/components/MultiLineInput.js";
+import type { SuggestionItem } from "../../src/tui/components/input-components/MultiLineInput.js";
 
 const SUGGESTIONS: SuggestionItem[] = [
   { name: "help", description: "show available commands" },
@@ -15,7 +15,7 @@ const SUGGESTIONS: SuggestionItem[] = [
   { name: "models", description: "list known models" },
   { name: "profiles", description: "list provider profiles" },
 ];
-import type { MentionItem } from "../../src/tui/components/MultiLineInput.js";
+import type { MentionItem } from "../../src/tui/components/input-components/MultiLineInput.js";
 
 const MENTION_SUGGESTIONS: MentionItem[] = [
   { target: "src/foo.ts", type: "file" },

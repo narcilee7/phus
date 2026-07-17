@@ -2,8 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { SessionTree } from "../../src/tui/components/SessionTree.js";
-import type { PlanState, PlanSubagentState } from "../../src/tui/state.js";
+import { SessionTree } from "../../src/tui/components/session-components/SessionTree.js";
+import type { PlanState, PlanSubagentState } from "../../src/tui/state/state.js";
 
 const wait = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 

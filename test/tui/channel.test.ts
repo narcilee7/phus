@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { tuiChannel } from "../../src/tui/channel.js";
-import type { AppAction, ChatItem } from "../../src/tui/state.js";
+import type { AppAction, ChatItem } from "../../src/tui/state/state.js";
 
 describe("tuiChannel", () => {
   it("has name 'tui'", () => {

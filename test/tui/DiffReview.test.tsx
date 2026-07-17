@@ -4,12 +4,12 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { DiffReview } from "../../src/tui/components/DiffReview.js";
+import { DiffReview } from "../../src/tui/components/diff-components/DiffReview.js";
 import {
   DiffReviewContext,
   type DiffReviewAction,
-} from "../../src/tui/components/DiffReviewContext.js";
-import { TuiFocusContext } from "../../src/tui/components/TuiFocusContext.js";
+} from "../../src/tui/components/diff-components/DiffReviewContext.js";
+import { TuiFocusContext } from "../../src/tui/context/tui-focus-context.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

@@ -2,7 +2,7 @@
 // Pure-function tests for @-mention parsing and context-block building.
 
 import { describe, expect, it } from "vitest";
-import { extractMentions, buildContextBlock, readFileMention, formatFileSize } from "../../src/tui/mentions.js";
+import { extractMentions, buildContextBlock, readFileMention, formatFileSize } from "../../src/tui/handler/mentions/mentions.js";
 
 describe("extractMentions", () => {
   it("extracts file mentions with separators", () => {

@@ -21,8 +21,8 @@ describe("Planner", () => {
   it("creates a multi-step plan from model JSON", async () => {
     const model = makeModel(JSON.stringify({
       steps: [
-        { id: "s1", description: "gather requirements", expectedOutput: "requirements doc" },
-        { id: "s2", description: "implement feature", dependsOn: ["s1"] },
+        { id: "s1", description: "gather requirements", phase: "inspect", expectedOutput: "requirements doc" },
+        { id: "s2", description: "implement feature", phase: "edit", dependsOn: ["s1"] },
       ],
     }));
     const planner = new Planner({ skills: stubSkills, model });
@@ -31,8 +31,26 @@ describe("Planner", () => {
     expect(plan.goal).toBe("build a feature");
     expect(plan.steps).toHaveLength(2);
     expect(plan.steps[0]?.description).toBe("gather requirements");
+    expect(plan.steps[0]?.phase).toBe("inspect");
     expect(plan.steps[1]?.dependsOn).toEqual(["s1"]);
+    expect(plan.steps[1]?.phase).toBe("edit");
     expect(plan.status).toBe("pending");
+  });
+
+  it("infers a phase when the model omits it", async () => {
+    const model = makeModel(JSON.stringify({
+      steps: [
+        { id: "s1", description: "inspect the repository structure" },
+        { id: "s2", description: "run the tests" },
+        { id: "s3", description: "repair the failing code" },
+      ],
+    }));
+    const planner = new Planner({ skills: stubSkills, model });
+    const plan = await planner.createPlan("fix code", "session-1");
+
+    expect(plan.steps[0]?.phase).toBe("inspect");
+    expect(plan.steps[1]?.phase).toBe("test");
+    expect(plan.steps[2]?.phase).toBe("repair");
   });
 
   it("falls back to a single-step plan when JSON is invalid", async () => {

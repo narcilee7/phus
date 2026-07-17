@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { ErrorBoundary } from "../../src/tui/components/ErrorBoundary.js";
+import { ErrorBoundary } from "../../src/tui/components/app-common-components/ErrorBoundary.js";
 
 function Boom(): React.ReactElement {
   throw new Error("kaboom");

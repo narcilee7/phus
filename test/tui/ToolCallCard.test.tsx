@@ -4,9 +4,9 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { ToolCallCard } from "../../src/tui/components/ToolCallCard.js";
-import { TuiFocusContext } from "../../src/tui/components/TuiFocusContext.js";
-import type { ChatItem } from "../../src/tui/state.js";
+import { ToolCallCard } from "../../src/tui/components/tool-components/ToolCallCard.js";
+import { TuiFocusContext } from "../../src/tui/context/tui-focus-context.js";
+import type { ChatItem } from "../../src/tui/state/state.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

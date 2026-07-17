@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { Markdown } from "../../src/tui/components/Markdown.js";
+import { Markdown } from "../../src/tui/components/rich-text-components/Markdown.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 

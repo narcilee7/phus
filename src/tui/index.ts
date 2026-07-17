@@ -7,8 +7,8 @@ import { App } from "@/tui/App.js";
 import { PhusAgent } from "@/bridge/pi-agent.js";
 import { logger } from "@/infra/logging.js";
 import { loadConfig, resetConfigCache, configPath } from "@/infra/config/index.js";
-import { BootstrapWizard } from "@/tui/components/BootstrapWizard.js";
-import { KeyWizard } from "@/tui/components/KeyWizard.js";
+import { BootstrapWizard } from "@/tui/components/boot-strap-components/BootstrapWizard.js";
+import { KeyWizard } from "@/tui/components/boot-strap-components/KeyWizard.js";
 import { resolveProfile, apiKeyForProfile } from "@/infra/profile.js";
 
 function profileHasKey(): boolean {

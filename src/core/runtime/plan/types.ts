@@ -9,9 +9,11 @@ import { EvolutionEngine } from "../evolution/engine";
 
 export type PlanStatus = "pending" | "running" | "paused" | "completed" | "failed";
 
-export type StepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+export type StepStatus = "pending" | "running" | "blocked" | "completed" | "failed" | "skipped";
 
 export type VerificationStatus = "proceed" | "retry" | "replan" | "escalate" | "abort";
+
+export type PlanPhase = "inspect" | "edit" | "test" | "repair";
 
 export interface Step {
   id: string;
@@ -23,6 +25,10 @@ export interface Step {
   tool?: string;
   result?: unknown;
   dependsOn?: string[];
+  /** Phase of code work: inspect / edit / test / repair. */
+  phase?: PlanPhase;
+  /** Failure context preserved for repair retries and resume. */
+  repairContext?: string;
   /** Subagent session id responsible for this step, if delegated. */
   subagentSessionId?: string;
   /** Short label for the subagent (e.g. "explore", "verify"). */
@@ -55,6 +61,8 @@ export interface SubAgentOptions {
   task: string;
   parentSessionId: string;
   context?: string;
+  phase?: PlanPhase;
+  repairContext?: string;
   maxSteps?: number;
 }
 

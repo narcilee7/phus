@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
 import { existsSync } from "node:fs";
-import { BootstrapWizard } from "../../src/tui/components/BootstrapWizard.js";
+import { BootstrapWizard } from "../../src/tui/components/boot-strap-components/BootstrapWizard.js";
 
 const wait = (ms = 100) => new Promise((r) => setTimeout(r, ms));
 

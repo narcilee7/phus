@@ -405,6 +405,7 @@ export class PhusAgent implements PhusAgentFacade {
       learner: this.learner,
       skillValidator,
       skills: this.skills,
+      memoryStore: this.memoryStore,
       tape: this.tape,
     });
     this.planRunner.setEvolutionEngine(this.evolutionEngine);
@@ -539,7 +540,6 @@ export class PhusAgent implements PhusAgentFacade {
       memory: this.memoryStore,
       getContextWindow: () => this.piAgent.state.model.contextWindow,
       getCurrentSessionId: () => this.currentSessionId,
-      getMessages: () => this.piAgent.state.messages,
       setSystemPrompt: (prompt) => { this.piAgent.state.systemPrompt = prompt; },
     });
   }

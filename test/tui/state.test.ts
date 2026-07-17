@@ -2,7 +2,7 @@
 // Pure-function tests for `appReducer` and `truncate`.
 
 import { describe, expect, it, vi } from "vitest";
-import { appReducer, initialState, truncate, type AppAction, type AppState } from "../../src/tui/state.js";
+import { appReducer, initialState, truncate, type AppAction, type AppState } from "../../src/tui/state/state.js";
 
 function action(a: AppAction) {
   return appReducer(initialState, a);
@@ -451,6 +451,20 @@ describe("sidebar request", () => {
 
   it("consume_sidebar_request is a no-op when nothing was requested", () => {
     const s = appReducer(initialState, { type: "consume_sidebar_request" });
+    expect(s).toEqual(initialState);
+  });
+});
+
+describe("quit request lifecycle", () => {
+  it("request_quit sets the flag, consume_quit_request clears it", () => {
+    const s1 = appReducer(initialState, { type: "request_quit" });
+    expect(s1.quitRequested).toBe(true);
+    const s2 = appReducer(s1, { type: "consume_quit_request" });
+    expect(s2.quitRequested).toBeUndefined();
+  });
+
+  it("consume_quit_request is a no-op when no request was made", () => {
+    const s = appReducer(initialState, { type: "consume_quit_request" });
     expect(s).toEqual(initialState);
   });
 });

@@ -2,9 +2,9 @@
 import { describe, expect, it, vi } from "vitest";
 import React from "react";
 import { render } from "ink-testing-library";
-import { SubagentCard } from "../../src/tui/components/SubagentCard.js";
-import { TuiFocusContext } from "../../src/tui/components/TuiFocusContext.js";
-import type { PlanSubagentState } from "../../src/tui/state.js";
+import { SubagentCard } from "../../src/tui/components/agent-components/SubagentCard.js";
+import { TuiFocusContext } from "../../src/tui/context/tui-focus-context.js";
+import type { PlanSubagentState } from "../../src/tui/state/state.js";
 
 const wait = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 
