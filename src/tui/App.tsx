@@ -15,7 +15,7 @@ import { TodoPill } from "@/tui/components/TodoPill.js";
 import { PlanPanel } from "@/tui/components/PlanPanel.js";
 import { InputBox } from "@/tui/components/InputBox.js";
 import { TuiLayoutProvider, useTuiLayout } from "@/tui/layout-context.js";
-import { PermissionBar } from "@/tui/components/PermissionBar.js";
+import { PermissionPanel } from "@/tui/components/PermissionPanel.js";
 import { CommandPalette, type PaletteAction } from "@/tui/components/CommandPalette.js";
 import { StatusBar } from "@/tui/components/StatusBar.js";
 import { FileTree } from "@/tui/components/FileTree.js";
@@ -504,7 +504,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
               {state.plan && <PlanPanel plan={state.plan} />}
               <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
               {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
-                <PermissionBar
+                <PermissionPanel
                   request={state.permissionQueue[0]}
                   onResolve={(allow: boolean, remember: RememberChoice) =>
                     dispatch({ type: "resolve_permission", allow, remember })
