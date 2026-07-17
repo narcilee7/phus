@@ -9,7 +9,7 @@ import { EvolutionEngine } from "../evolution/engine";
 
 export type PlanStatus = "pending" | "running" | "paused" | "completed" | "failed";
 
-export type StepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+export type StepStatus = "pending" | "running" | "blocked" | "completed" | "failed" | "skipped";
 
 export type VerificationStatus = "proceed" | "retry" | "replan" | "escalate" | "abort";
 

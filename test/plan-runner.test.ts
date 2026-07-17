@@ -183,4 +183,103 @@ describe("PlanRunner", () => {
     expect(updated.steps.find((step) => step.id === "c")?.status).toBe("pending");
     expect(updated.status).toBe("paused");
   });
+
+  it("resumePlan loads from store and skips already completed steps", async () => {
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+    const planner = {} as unknown as Planner;
+    const calls: string[] = [];
+    const executor = {
+      executeStep: vi.fn().mockImplementation(async (step: Step) => {
+        calls.push(step.id);
+        step.status = "completed";
+        return {
+          step,
+          verification: { ok: true, confidence: 1, reason: "ok", action: "proceed" as const },
+        };
+      }),
+    } as unknown as Executor;
+
+    // Seed a paused plan into the store.
+    const plan = makePlan(
+      [
+        makeStep(0, { id: "a", status: "completed" }),
+        makeStep(1, { id: "b", status: "pending", repairContext: "previous failure: tests broke" }),
+      ],
+      "paused",
+    );
+    store.save(plan);
+
+    const runner = new PlanRunner({ planner, executor, store, hooks });
+    const updated = await runner.resumePlan(plan.id);
+
+    expect(calls).toEqual(["b"]);
+    expect(updated.status).toBe("completed");
+    expect(updated.steps.find((step) => step.id === "b")?.status).toBe("completed");
+  });
+
+  it("resumePlan throws when plan is already completed", async () => {
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+    const plan = makePlan([makeStep(0, { status: "completed" })], "completed");
+    store.save(plan);
+
+    const runner = new PlanRunner({
+      planner: {} as unknown as Planner,
+      executor: {} as unknown as Executor,
+      store,
+      hooks,
+    });
+
+    await expect(runner.resumePlan(plan.id)).rejects.toThrow(/already completed/);
+  });
+
+  it("resumeActive returns undefined when no active plan exists", async () => {
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+
+    const runner = new PlanRunner({
+      planner: {} as unknown as Planner,
+      executor: {} as unknown as Executor,
+      store,
+      hooks,
+    });
+
+    await expect(runner.resumeActive(asSessionId("session-1"))).resolves.toBeUndefined();
+  });
+
+  it("blocked steps stay blocked and are skipped on resume", async () => {
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+    const planner = {} as unknown as Planner;
+    const calls: string[] = [];
+    const executor = {
+      executeStep: vi.fn().mockImplementation(async (step: Step) => {
+        calls.push(step.id);
+        step.status = "completed";
+        return {
+          step,
+          verification: { ok: true, confidence: 1, reason: "ok", action: "proceed" as const },
+        };
+      }),
+    } as unknown as Executor;
+
+    const plan = makePlan(
+      [
+        makeStep(0, { id: "a", status: "blocked", error: "awaiting external approval" }),
+        makeStep(1, { id: "b", status: "pending", dependsOn: ["a"] }),
+      ],
+      "paused",
+    );
+    store.save(plan);
+
+    const runner = new PlanRunner({ planner, executor, store, hooks });
+    const updated = await runner.resumePlan(plan.id);
+
+    // a is blocked -> never executed; b depends on a (failed set), so b is skipped.
+    expect(calls).toEqual([]);
+    expect(updated.steps.find((step) => step.id === "a")?.status).toBe("blocked");
+    expect(updated.steps.find((step) => step.id === "b")?.status).toBe("skipped");
+    expect(updated.status).toBe("failed");
+  });
 });
