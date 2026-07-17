@@ -1,0 +1,53 @@
+/* apps/gui/src/renderer/src/styles.css
+ * Tailwind v4 entry. CSS-first config — declare theme tokens as @theme
+ * variables and the utility classes get generated automatically. We mirror
+ * the src/tui/theme.ts palette here so a future "sync theme" feature is a
+ * one-line import away.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0d10;
+  --color-bg-elevated: #131720;
+  --color-bg-overlay: #1a2030;
+  --color-fg: #e4e6eb;
+  --color-fg-muted: #8b94a8;
+  --color-border: #232a38;
+
+  --color-accent: #7aa2f7;
+  --color-accent-fg: #0b0d10;
+  --color-success: #9ece6a;
+  --color-warn: #e0af68;
+  --color-danger: #f7768e;
+  --color-pending: #bb9af7;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Scrollbar polish (WebKit only — Electron is Chromium). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

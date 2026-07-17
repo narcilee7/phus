@@ -1,0 +1,61 @@
+# apps/gui/electron-builder.yml
+# Build installers for macOS / Windows / Linux. Phus CLI / TUI users keep their
+# $PHUS_HOME; GUI users get redirected to electron's app.getPath('userData').
+#
+# `npmRebuild: true` is critical — better-sqlite3 ships prebuilt for Node ABI;
+# Electron uses a different NODE_MODULE_VERSION and needs @electron/rebuild.
+
+appId: ai.phus.gui
+productName: Phus
+copyright: Copyright © 2026 Phus contributors
+directories:
+  output: dist-app
+  buildResources: build
+
+files:
+  - "out/**/*"
+  - "package.json"
+  - "!**/{__tests__,test,tests}/**"
+  - "!**/*.test.{ts,tsx,js,mjs}"
+  - "!**/*.map"
+
+asar: true
+npmRebuild: true
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  # notarize + signing requires APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
+  # APPLE_TEAM_ID env vars. Without them, electron-builder will skip notarize
+  # gracefully — users get a "right-click → Open" warning, not a hard block.
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+  category: Development
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+# Tell electron-builder which dependencies to skip when packaging. Native
+# modules like better-sqlite3 are rebuilt in-place by `npmRebuild`, so they
+# must NOT be omitted from the asar bundle.
+buildDependenciesFromSource: false

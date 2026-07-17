@@ -34,7 +34,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "logs:pretty": "pino-pretty -f -t $(node -e \"console.log(process.env.PHUS_LOG_FILE || './logs/phus.jsonl')\")"
+    "logs:pretty": "pino-pretty -f -t $(node -e \"console.log(process.env.PHUS_LOG_FILE || './logs/phus.jsonl')\")",
+    "gui:dev": "pnpm -C apps/gui dev",
+    "gui:build": "pnpm -C apps/gui build",
+    "gui:dist": "pnpm -C apps/gui dist",
+    "gui:dist:mac": "pnpm -C apps/gui dist:mac",
+    "gui:dist:win": "pnpm -C apps/gui dist:win",
+    "gui:dist:linux": "pnpm -C apps/gui dist:linux",
+    "gui:typecheck": "pnpm -C apps/gui typecheck",
+    "gui:test": "pnpm -C apps/gui test"
   },
   "keywords": [],
   "author": "",
@@ -79,7 +87,9 @@
       "@biomejs/biome",
       "koffi",
       "protobufjs",
-      "@google/genai"
+      "@google/genai",
+      "electron",
+      "@electron/rebuild"
     ]
   },
   "devDependencies": {
