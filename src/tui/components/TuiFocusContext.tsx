@@ -4,7 +4,7 @@
 
 import { createContext, useContext } from "react";
 
-export type FocusKind = "codeblock" | "diffreview" | "toolcall";
+export type FocusKind = "codeblock" | "diffreview" | "toolcall" | "subagent";
 
 interface TuiFocusContextValue {
   focusedId: string | null;

@@ -40,6 +40,13 @@ export type HookName =
   | "plan_step_started"
   | "plan_step_completed"
   | "plan_step_failed"
+  | "plan_step_output"
+  | "plan_step_retry"
+  | "plan_subagent_started"
+  | "plan_subagent_completed"
+  | "plan_paused"
+  | "plan_resumed"
+  | "plan_cancelled"
   | "plan_completed";
 
 export type HookMode = "first_result" | "chain" | "broadcast";

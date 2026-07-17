@@ -19,6 +19,7 @@ import { PermissionPanel } from "@/tui/components/PermissionPanel.js";
 import { CommandPalette, type PaletteAction } from "@/tui/components/CommandPalette.js";
 import { StatusBar } from "@/tui/components/StatusBar.js";
 import { FileTree } from "@/tui/components/FileTree.js";
+import { SessionTree } from "@/tui/components/SessionTree.js";
 import { eventToAction } from "@/tui/events.js";
 import { runSlash } from "@/tui/commands.js";
 import { tuiChannel } from "@/tui/channel.js";
@@ -35,6 +36,7 @@ import {
 } from "@/tui/components/DiffReviewContext.js";
 import { TuiFocusContext } from "@/tui/components/TuiFocusContext.js";
 import { copyToClipboard, runCode } from "@/tui/code-actions.js";
+import { ErrorBoundary } from "@/tui/components/ErrorBoundary.js";
 
 interface AppProps {
   agent: PhusAgent;
@@ -43,10 +45,13 @@ interface AppProps {
 }
 
 export function App({ agent, sessionId, modelLabel }: AppProps) {
+  const [reloadKey, setReloadKey] = React.useState(0);
   return (
-    <TuiLayoutProvider>
-      <AppInner agent={agent} sessionId={sessionId} modelLabel={modelLabel} />
-    </TuiLayoutProvider>
+    <ErrorBoundary onRecover={() => setReloadKey((k) => k + 1)}>
+      <TuiLayoutProvider>
+        <AppInner key={reloadKey} agent={agent} sessionId={sessionId} modelLabel={modelLabel} />
+      </TuiLayoutProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -57,7 +62,18 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const [input, setInput] = React.useState("");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [sidebarView, setSidebarView] = React.useState<"files" | "sessions">("files");
+  const [planExpanded, setPlanExpanded] = React.useState(false);
   const [focusedId, setFocusedId] = React.useState<string | null>(null);
+
+  // Sidebar request hook: when a slash command (e.g. /subagent) asks for
+  // a particular sidebar view, honor it once and consume the flag.
+  React.useEffect(() => {
+    if (!state.sidebarRequest) return;
+    setSidebarView(state.sidebarRequest);
+    setSidebarOpen(true);
+    dispatch({ type: "consume_sidebar_request" });
+  }, [state.sidebarRequest, dispatch]);
   const [focusedKind, setFocusedKind] = React.useState<import("@/tui/components/TuiFocusContext.js").FocusKind | null>(null);
   const [lastWriteTs, setLastWriteTs] = React.useState<number | undefined>(undefined);
   const writeHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -81,6 +97,45 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
     () => new Set(["bash", "file_write", "startup_write", "skill_write", "skill_delete", "memory_write"]),
     [],
   );
+
+  // ─── Plan control handlers ─────────────────────────────────────
+  const handlePlanPause = React.useCallback(() => {
+    const id = agent.pauseActivePlan();
+    if (id) {
+      dispatch({ type: "add_system", text: `⏸ paused plan ${id.slice(0, 8)}`, level: "info" });
+    }
+  }, [agent, dispatch]);
+
+  const handlePlanResume = React.useCallback(async () => {
+    dispatch({ type: "set_last_op", op: "running plan…" });
+    try {
+      const id = await agent.resumeActivePlan();
+      if (id) {
+        dispatch({ type: "add_system", text: `▶ resumed plan ${id.slice(0, 8)}`, level: "info" });
+      }
+    } finally {
+      dispatch({ type: "set_last_op", op: "idle" });
+    }
+  }, [agent, dispatch]);
+
+  const handlePlanCancel = React.useCallback(() => {
+    const id = agent.cancelActivePlan();
+    if (id) {
+      dispatch({ type: "add_system", text: `✗ cancelled plan ${id.slice(0, 8)}`, level: "warn" });
+    }
+  }, [agent, dispatch]);
+
+  const handlePlanRetryStep = React.useCallback((stepId: string) => {
+    if (!state.plan) return;
+    const ok = agent.retryStep(state.plan.id, stepId);
+    if (ok) {
+      dispatch({
+        type: "add_system",
+        text: `↻ step ${stepId.slice(0, 6)} queued for retry — run /plan resume`,
+        level: "info",
+      });
+    }
+  }, [agent, state.plan, dispatch]);
 
   // ─── Code block actions ────────────────────────────────────────
   const handleCodeAction = React.useCallback(
@@ -186,7 +241,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const HEADER_ROWS = 4;
   const INPUT_ROWS = 3;
   const STATUS_ROWS = 1;
-  const PLAN_ROWS = state.plan ? 6 : 0;
+  const PLAN_ROWS = state.plan ? (planExpanded ? 16 : 6) : 0;
   const TODO_ROWS =
     state.busy || state.items.some((it) => it.kind === "tool_call" && it.isError === undefined) ? 1 : 0;
   const PERMISSION_ROWS = state.permissionQueue[0] ? 4 : 0;
@@ -207,7 +262,9 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
           ? "Enter/Space expand · Esc input"
           : state.permissionQueue[0]
             ? "Y yes · S session · A always · N no · Esc"
-            : lastWriteTs
+            : sidebarView === "sessions"
+              ? "↑↓ navigate · Enter open · q back"
+              : lastWriteTs
               ? "Ctrl+Z undo · /checkpoint list"
               : undefined;
 
@@ -257,17 +314,79 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   useEffect(() => {
     const unsub = agent.subscribeToPlanEvents((event) => {
       const currentPlan = planRef.current;
-      if (event.type === "plan_completed") {
-        dispatch({
-          type: "set_plan",
-          plan: {
-            id: event.planId,
-            goal: event.goal,
-            status: event.planStatus,
-            steps: currentPlan?.id === event.planId ? currentPlan.steps : [],
-          },
-        });
-        return;
+      switch (event.type) {
+        case "plan_completed":
+          dispatch({
+            type: "set_plan",
+            plan: {
+              id: event.planId,
+              goal: event.goal,
+              status: event.planStatus,
+              steps: currentPlan?.id === event.planId ? currentPlan.steps : [],
+              subagents: currentPlan?.id === event.planId ? currentPlan.subagents : [],
+            },
+          });
+          return;
+        case "plan_paused":
+        case "plan_resumed":
+        case "plan_cancelled":
+          dispatch({ type: "set_plan_status", status: event.planStatus });
+          return;
+        case "plan_subagent_started":
+          if (event.subagent) {
+            dispatch({
+              type: "upsert_plan_subagent",
+              subagent: {
+                sessionId: event.subagent.sessionId,
+                label: event.subagent.label,
+                goal: event.subagent.goal,
+                status: "running",
+              },
+            });
+          }
+          return;
+        case "plan_subagent_completed":
+          if (event.subagent?.sessionId) {
+            // Find existing subagent and mark it completed/failed.
+            const existing = currentPlan?.subagents.find(
+              (a) => a.sessionId === event.subagent!.sessionId,
+            );
+            if (existing) {
+              dispatch({
+                type: "upsert_plan_subagent",
+                subagent: {
+                  ...existing,
+                  status: "completed",
+                },
+              });
+            }
+          }
+          return;
+        case "plan_step_output": {
+          const step = event.step;
+          if (!step) return;
+          dispatch({
+            type: "set_plan_step_output",
+            stepId: step.id,
+            output: event.output ?? "",
+          });
+          return;
+        }
+        case "plan_step_retry": {
+          const step = event.step;
+          if (!step) return;
+          const prev = currentPlan?.steps.find((s) => s.id === step.id);
+          dispatch({
+            type: "update_plan_step_meta",
+            stepId: step.id,
+            meta: {
+              status: "pending",
+              retryCount: (prev?.retryCount ?? 0) + (event.retryDelta ?? 1),
+              error: undefined,
+            },
+          });
+          return;
+        }
       }
       const step = event.step;
       if (!step) return;
@@ -281,6 +400,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
               status: event.planStatus,
               steps: [{ id: step.id, description: step.description, status: "running" }],
               currentStepId: step.id,
+              subagents: [],
             },
           });
         } else {
@@ -469,6 +589,10 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
       void runSlash("/undo", agent, state, dispatch);
       return;
     }
+    if (key.ctrl && input === "t" && state.plan) {
+      setPlanExpanded((e) => !e);
+      return;
+    }
     if (key.pageUp) {
       dispatch({ type: "scroll_up", lines: Math.max(1, chatHeight - 1) });
     }
@@ -504,7 +628,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
             lastOp={state.lastOp}
           />
           <Box flexDirection="row" flexGrow={1} overflow="hidden">
-            {sidebarOpen && (
+            {sidebarOpen && sidebarView === "files" && (
               <Box width={34}>
                 <FileTree
                   height={sidebarHeight}
@@ -515,6 +639,24 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
                   onPreview={(text: string) =>
                     dispatch({ type: "add_system", text, level: "info" })
                   }
+                  onClose={() => setSidebarOpen(false)}
+                />
+              </Box>
+            )}
+            {sidebarOpen && sidebarView === "sessions" && (
+              <Box width={42}>
+                <SessionTree
+                  currentSessionId={sessionId}
+                  subagents={state.plan?.subagents}
+                  plan={state.plan}
+                  height={sidebarHeight}
+                  onFocusSubagent={(sid) => {
+                    dispatch({
+                      type: "add_system",
+                      text: `↳ subagent session ${sid.slice(0, 8)} (read-only)`,
+                      level: "info",
+                    });
+                  }}
                   onClose={() => setSidebarOpen(false)}
                 />
               </Box>
@@ -531,7 +673,17 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
                   height={chatHeight}
                 />
               </Box>
-              {state.plan && <PlanPanel plan={state.plan} />}
+              {state.plan && (
+                <PlanPanel
+                  plan={state.plan}
+                  expanded={planExpanded}
+                  onToggleExpand={() => setPlanExpanded((e) => !e)}
+                  onPause={handlePlanPause}
+                  onResume={handlePlanResume}
+                  onCancel={handlePlanCancel}
+                  onRetryStep={handlePlanRetryStep}
+                />
+              )}
               <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
               {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
                 <PermissionPanel

@@ -148,3 +148,80 @@ assertModelReady(): void {
 - [x] 已配置 key 的用户体验完全不变。
 - [x] 新增/更新测试覆盖无 key 启动路径。
 - [x] `pnpm typecheck` 和 `pnpm test` 全部通过。
+
+---
+
+## 6. TUI 能力索引（Phase 5 / 6 已落地）
+
+> 这一节是 TUI 改造的当前能力清单。文档 `TUI-Shortcuts.md` 收录所有快捷键。
+
+### 6.1 输入与补全
+
+| 能力 | 入口 |
+|---|---|
+| Slash 命令 fuzzy + 描述 | 输入 `/` 触发自动补全 |
+| @ 文件 / skill / session mention | 输入 `@` 触发补全 |
+| 多行输入 + CJK 折行 | `MultiLineInput` |
+| 历史与粘贴保护 | `MultiLineInput` |
+| 粘贴超过 50 行 / 5000 字弹出确认 | 输入框内置 |
+
+### 6.2 渲染
+
+| 能力 | 组件 |
+|---|---|
+| 消息卡片（user / assistant / tool_call / tool_result） | `ChatItemView.tsx` |
+| Assistant message 元数据（model / tokens / cost） | `AssistantMessage.tsx` |
+| Tool call inline card（spinner + 参数 + 结果） | `ToolCallCard.tsx` |
+| File write diff review（accept / reject / edit） | `DiffReview.tsx` |
+| Code block 操作（copy / run / insert） | `CodeBlock.tsx` |
+
+### 6.3 审批与可控性
+
+| 能力 | 入口 |
+|---|---|
+| 独立 PermissionPanel + diff preview | 危险工具触发 |
+| `/undo` / `/checkpoint list\|create\|restore` | slash 命令 |
+| 已 always 授权工具列表 | `/policy` |
+
+### 6.4 导航
+
+| 快捷键 | 作用 |
+|---|---|
+| `Ctrl+K` | 命令面板（命令 / 文件 / skill / 会话） |
+| `Ctrl+P` | 快速打开文件 |
+| `Ctrl+B` | 侧边栏（文件 / sessions 切换） |
+| `Ctrl+T` | 展开计划时间线（plan active 时） |
+| `Ctrl+L` | 清屏 |
+| `Ctrl+Z` | undo（恢复到上一次 checkpoint） |
+| `Ctrl+C` | 终止当前 turn / 退出 |
+| `PgUp / PgDn` | 滚动聊天 |
+| `Ctrl+↑ / Ctrl+↓` | 按行滚动 |
+| `Ctrl+End` | 滚到底部 |
+| `Esc` | 收回焦点到输入框 |
+
+### 6.5 计划与子代理（Phase 5）
+
+| 能力 | 入口 |
+|---|---|
+| 计划进度条 + step 状态 | `PlanPanel.tsx`（默认） |
+| 可展开时间线 + pause/resume/cancel/retry | `Ctrl+T` 展开后按 `p` `r` `c` / Enter retry |
+| 子代理卡片（运行时 inline） | `SubagentCard.tsx` |
+| Sessions 树视图 | `/subagent` 或 `Ctrl+B` 切换侧栏 |
+| `plan_step_output / plan_step_retry / plan_paused / plan_cancelled` | `subscribeToPlanEvents` |
+
+### 6.6 启动引导（Phase 6）
+
+| 能力 | 组件 |
+|---|---|
+| Bootstrap wizard（首次配置） | `BootstrapWizard.tsx` |
+| **Secure API key 输入**（• 掩码） | `BootstrapWizard` `keyMode` 步骤 |
+| **apiKeyEnv 推荐**（默认选项） | `BootstrapWizard` 模式选择 |
+| Mini-wizard（配置存在但 key 缺失） | `KeyWizard.tsx` |
+| Theme 支持（dark / light / high-contrast） | `theme.ts` + `PHUS_THEME` |
+| 动画降级 | `PHUS_NO_ANIM=1` 或 `ui.animations: false` |
+| ErrorBoundary + Enter /reload | `ErrorBoundary.tsx` |
+
+### 6.7 完整快捷键参考
+
+详见 `documents/TUI-Shortcuts.md`。
+

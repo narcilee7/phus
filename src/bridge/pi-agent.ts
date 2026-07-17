@@ -98,13 +98,30 @@ export interface PhusAgentDeps {
 
 /** Plan lifecycle event forwarded from the plan runner to TUI observers. */
 export interface PlanEvent {
-  type: "plan_step_started" | "plan_step_completed" | "plan_step_failed" | "plan_completed";
+  type:
+    | "plan_step_started"
+    | "plan_step_completed"
+    | "plan_step_failed"
+    | "plan_step_output"
+    | "plan_step_retry"
+    | "plan_subagent_started"
+    | "plan_subagent_completed"
+    | "plan_paused"
+    | "plan_resumed"
+    | "plan_cancelled"
+    | "plan_completed";
   planId: string;
   sessionId: string;
   goal: string;
   planStatus: PlanStatus;
   step?: Step;
   error?: string;
+  /** Optional intermediate output (plan_step_output). */
+  output?: string;
+  /** Subagent session metadata (plan_subagent_started). */
+  subagent?: { sessionId: string; label: string; goal: string };
+  /** Retry count delta (plan_step_retry). */
+  retryDelta?: number;
 }
 
 export type PlanEventHandler = (event: PlanEvent) => void;
@@ -247,6 +264,24 @@ export interface PhusAgentFacade {
   /** Subscribe to plan lifecycle events (step started/completed/failed,
    *  plan completed). Returns an unsubscribe function. */
   subscribeToPlanEvents(handler: PlanEventHandler): () => void;
+  /** Pause the active plan (sets plan.status to "paused" and emits the
+   *  corresponding event). Returns the affected plan id, or undefined
+   *  if there is no active plan. */
+  pauseActivePlan(): string | undefined;
+  /** Resume a paused plan by re-running it from the store. Returns the
+   *  updated plan id, or undefined if no paused plan was found. */
+  resumeActivePlan(): Promise<string | undefined>;
+  /** Mark the active plan as cancelled. The runner does not currently
+   *  support hard-aborting an in-flight turn, so this stops further
+   *  step execution and tags the plan so the TUI can render it. */
+  cancelActivePlan(): string | undefined;
+  /** Reset a failed step back to pending and bump its retryCount. The
+   *  next /plan resume picks it up. */
+  retryStep(planId: string, stepId: string): boolean;
+  /** Forward a subagent spawn announcement from the runtime to TUI
+   *  observers. Called by SubAgent dispatching code when available. */
+  notifySubagentStarted(planId: string, info: { sessionId: string; label: string; goal: string }): void;
+  notifySubagentCompleted(planId: string, sessionId: string, status: "completed" | "failed"): void;
   /**
    * Re-load plugins from disk into the live HookRegistry, plus the
    * supplied channels. Returns a summary suitable for `,reload`.
@@ -1003,6 +1038,145 @@ export class PhusAgent implements PhusAgentFacade {
     return () => {
       this.planEventHandlers.delete(handler);
     };
+  }
+
+  pauseActivePlan(): string | undefined {
+    const sid = this.currentSessionId as string | undefined;
+    if (!sid) return undefined;
+    const store = this.planStore;
+    if (!store) return undefined;
+    const plan = store.loadActiveForSession(sid);
+    if (!plan || plan.status !== "running") return undefined;
+    plan.status = "paused";
+    plan.updatedAt = Date.now();
+    store.save(plan);
+    this.emitPlanEvent({
+      type: "plan_paused",
+      planId: plan.id,
+      sessionId: plan.sessionId,
+      goal: plan.goal,
+      planStatus: plan.status,
+    });
+    return plan.id;
+  }
+
+  async resumeActivePlan(): Promise<string | undefined> {
+    const sid = this.currentSessionId as string | undefined;
+    if (!sid || !this.planRunner || !this.planStore) return undefined;
+    const plan = this.planStore.loadActiveForSession(sid);
+    if (!plan || plan.status !== "paused") return undefined;
+    plan.status = "running";
+    plan.updatedAt = Date.now();
+    this.planStore.save(plan);
+    this.emitPlanEvent({
+      type: "plan_resumed",
+      planId: plan.id,
+      sessionId: plan.sessionId,
+      goal: plan.goal,
+      planStatus: plan.status,
+    });
+    // Re-run synchronously; the runner is fire-and-forget so we await
+    // the returned promise to keep caller bookkeeping consistent.
+    try {
+      const updated = await this.planRunner.runPlan(plan);
+      return updated.id;
+    } catch (err) {
+      logger.warn("plan_resume.failed", {
+        planId: plan.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return plan.id;
+    }
+  }
+
+  cancelActivePlan(): string | undefined {
+    const sid = this.currentSessionId as string | undefined;
+    if (!sid) return undefined;
+    const store = this.planStore;
+    if (!store) return undefined;
+    const plan = store.loadActiveForSession(sid);
+    if (!plan) return undefined;
+    plan.status = "failed";
+    plan.updatedAt = Date.now();
+    // Mark any still-running step as skipped so the TUI can render
+    // the cancellation cleanly. The runner can't be hard-aborted from
+    // here, but flipping the plan status prevents downstream steps
+    // from being picked up on resume.
+    for (const s of plan.steps) {
+      if (s.status === "running" || s.status === "pending") s.status = "skipped";
+    }
+    store.save(plan);
+    this.emitPlanEvent({
+      type: "plan_cancelled",
+      planId: plan.id,
+      sessionId: plan.sessionId,
+      goal: plan.goal,
+      planStatus: plan.status,
+    });
+    return plan.id;
+  }
+
+  retryStep(planId: string, stepId: string): boolean {
+    const store = this.planStore;
+    if (!store) return false;
+    const plan = store.load(planId);
+    if (!plan) return false;
+    const step = plan.steps.find((s) => s.id === stepId);
+    if (!step || step.status !== "failed") return false;
+    step.status = "pending";
+    step.retryCount = (step.retryCount ?? 0) + 1;
+    step.error = undefined;
+    plan.status = "paused";
+    plan.updatedAt = Date.now();
+    store.save(plan);
+    this.emitPlanEvent({
+      type: "plan_step_retry",
+      planId: plan.id,
+      sessionId: plan.sessionId,
+      goal: plan.goal,
+      planStatus: plan.status,
+      step,
+      retryDelta: 1,
+    });
+    return true;
+  }
+
+  notifySubagentStarted(planId: string, info: { sessionId: string; label: string; goal: string }): void {
+    const plan = this.planStore?.load(planId);
+    if (!plan) return;
+    // Attach to the active step for backwards compatibility with existing
+    // step.subagentSessionId consumers.
+    const running = plan.steps.find((s) => s.status === "running");
+    if (running) {
+      running.subagentSessionId = info.sessionId;
+      running.subagentLabel = info.label;
+      this.planStore?.save(plan);
+    }
+    this.emitPlanEvent({
+      type: "plan_subagent_started",
+      planId: plan.id,
+      sessionId: plan.sessionId,
+      goal: plan.goal,
+      planStatus: plan.status,
+      subagent: info,
+      step: running,
+    });
+  }
+
+  notifySubagentCompleted(planId: string, sessionId: string, status: "completed" | "failed"): void {
+    const plan = this.planStore?.load(planId);
+    if (!plan) return;
+    this.emitPlanEvent({
+      type: "plan_subagent_completed",
+      planId: plan.id,
+      sessionId: plan.sessionId,
+      goal: plan.goal,
+      planStatus: plan.status,
+      subagent: { sessionId, label: "", goal: "" },
+      // Reuse the step to communicate subagent completion downstream.
+      step: plan.steps.find((s) => s.subagentSessionId === sessionId),
+    });
+    void status;
   }
 
   private emitPlanEvent(event: PlanEvent): void {

@@ -8,6 +8,7 @@ import { PhusAgent } from "@/bridge/pi-agent.js";
 import { logger } from "@/infra/logging.js";
 import { loadConfig, resetConfigCache, configPath } from "@/infra/config/index.js";
 import { BootstrapWizard } from "@/tui/components/BootstrapWizard.js";
+import { KeyWizard } from "@/tui/components/KeyWizard.js";
 import { resolveProfile, apiKeyForProfile } from "@/infra/profile.js";
 
 function profileHasKey(): boolean {
@@ -33,6 +34,19 @@ async function runBootstrapWizard(): Promise<boolean> {
   });
 }
 
+async function runKeyWizard(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const { unmount } = render(
+      React.createElement(KeyWizard, {
+        onDone: (success) => {
+          unmount();
+          resolve(success);
+        },
+      }),
+    );
+  });
+}
+
 export async function startTui(): Promise<void> {
   let config = loadConfig();
 
@@ -48,21 +62,35 @@ export async function startTui(): Promise<void> {
     config = loadConfig();
   }
 
-  // Config exists but no API key → prompt the user to set one. We do not
-  // re-run the bootstrap wizard here because it is designed for first-run
-  // config creation; editing an existing profile is a different flow.
+  // Config exists but no API key → launch a mini-wizard that only
+  // collects the key (env var or inline) and writes it back. We do not
+  // re-run the full bootstrap wizard here because it is designed for
+  // first-run config creation; editing an existing profile is a
+  // different flow.
   if (!profileHasKey()) {
-    const profile = resolveProfile(config.profileName, config.providers);
-    const envVar = profile.apiKeyEnv
-      ? profile.apiKeyEnv
-      : `${profile.provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
-    // eslint-disable-next-line no-console
-    console.log("[phus] no API key configured.");
-    // eslint-disable-next-line no-console
-    console.log(`       Add apiKey to ${configPath()} or set:`);
-    // eslint-disable-next-line no-console
-    console.log(`         export ${envVar}=<your-key>`);
-    return;
+    const configured = await runKeyWizard();
+    if (!configured) {
+      const profile = resolveProfile(config.profileName, config.providers);
+      const envVar = profile.apiKeyEnv
+        ? profile.apiKeyEnv
+        : `${profile.provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+      // eslint-disable-next-line no-console
+      console.log("[phus] no API key configured.");
+      // eslint-disable-next-line no-console
+      console.log(`       Add apiKey to ${configPath()} or set:`);
+      // eslint-disable-next-line no-console
+      console.log(`         export ${envVar}=<your-key>`);
+      return;
+    }
+    resetConfigCache();
+    config = loadConfig();
+    // Re-check: if the user picked inline but left the field blank,
+    // there is still no usable key. Bail out gracefully.
+    if (!profileHasKey()) {
+      // eslint-disable-next-line no-console
+      console.log("[phus] key still missing; aborting.");
+      return;
+    }
   }
 
   const handle = await PhusAgent.create({ config });
