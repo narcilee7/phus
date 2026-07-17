@@ -5,7 +5,7 @@
 
 import React, { useEffect, useReducer, useRef } from "react";
 import { Box, useApp, useInput, useStdout } from "ink";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 import { appReducer, initialState } from "@/tui/state.js";
@@ -29,6 +29,10 @@ import {
   CodeActionContext,
   type CodeBlockAction,
 } from "@/tui/components/CodeActionContext.js";
+import {
+  DiffReviewContext,
+  type DiffReviewAction,
+} from "@/tui/components/DiffReviewContext.js";
 import { copyToClipboard, runCode } from "@/tui/code-actions.js";
 
 interface AppProps {
@@ -53,6 +57,7 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [focusedCodeBlockId, setFocusedCodeBlockId] = React.useState<string | null>(null);
+  const [focusedDiffReviewId, setFocusedDiffReviewId] = React.useState<string | null>(null);
   const [stats, setStats] = React.useState({
     entries: 0,
     skills: 0,
@@ -121,6 +126,48 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
     [handleCodeAction, focusedCodeBlockId],
   );
 
+  const handleDiffReviewAction = React.useCallback(
+    async (action: DiffReviewAction) => {
+      if (action.type === "accept") {
+        dispatch({
+          type: "add_system",
+          text: `✓ accepted changes to ${action.path}`,
+          level: "info",
+        });
+      } else if (action.type === "reject") {
+        try {
+          await writeFile(action.path, action.oldContent);
+          dispatch({ type: "add_system", text: `✓ reverted ${action.path}`, level: "info" });
+        } catch (err: any) {
+          dispatch({
+            type: "add_system",
+            text: `revert failed: ${err.message ?? err}`,
+            level: "error",
+          });
+        }
+      } else if (action.type === "edit") {
+        setInput((prev) => prev + action.newContent);
+        dispatch({
+          type: "add_system",
+          text: `✓ copied ${action.path} to input`,
+          level: "info",
+        });
+      }
+    },
+    [dispatch],
+  );
+
+  const diffReviewValue = React.useMemo(
+    () => ({
+      onAction: handleDiffReviewAction,
+      focusedId: focusedDiffReviewId,
+      setFocusedId: setFocusedDiffReviewId,
+    }),
+    [handleDiffReviewAction, focusedDiffReviewId],
+  );
+
+  const anyInteractiveFocused = focusedCodeBlockId !== null || focusedDiffReviewId !== null;
+
   // ─── Layout heights ────────────────────────────────────────────
   // Reserve rows for every bottom UI element so that dynamic overlays
   // (suggestion/mention dropdowns) can expand without covering the chat.
@@ -142,9 +189,11 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
     ? "↑↓ navigate · Enter select · Esc close"
     : focusedCodeBlockId
       ? "c copy · r run · i insert · Esc input"
-      : state.permissionQueue[0]
-        ? "Y yes · S session · A always · N no · Esc"
-        : undefined;
+      : focusedDiffReviewId
+        ? "a accept · r reject · e edit · Esc input"
+        : state.permissionQueue[0]
+          ? "Y yes · S session · A always · N no · Esc"
+          : undefined;
 
   // ─── Subscribe to Pi Agent events ─────────────────────────────
   useEffect(() => {
@@ -356,11 +405,12 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
       return;
     }
     if (sidebarOpen) return;
-    if (focusedCodeBlockId && key.escape) {
+    if (anyInteractiveFocused && key.escape) {
       setFocusedCodeBlockId(null);
+      setFocusedDiffReviewId(null);
       return;
     }
-    if (focusedCodeBlockId && !key.ctrl && !key.meta) return;
+    if (anyInteractiveFocused && !key.ctrl && !key.meta) return;
     if ((key.ctrl || key.meta) && input === "k" && state.permissionQueue.length === 0) {
       setPaletteOpen(true);
       return;
@@ -403,81 +453,83 @@ function AppInner({ agent, sessionId, modelLabel }: AppProps) {
 
   return (
     <CodeActionContext.Provider value={codeActionValue}>
-      <Box flexDirection="column" height={terminalRows} overflow="hidden">
-        <Header
-          model={modelLabel}
-          session={sessionId}
-          stats={stats}
-          lastOp={state.lastOp}
-        />
-        <Box flexDirection="row" flexGrow={1} overflow="hidden">
-          {sidebarOpen && (
-            <Box width={34}>
-              <FileTree
-                height={sidebarHeight}
-                onInsert={(value: string) => {
-                  setInput((prev) => prev + value);
-                  setSidebarOpen(false);
-                }}
-                onPreview={(text: string) =>
-                  dispatch({ type: "add_system", text, level: "info" })
-                }
-                onClose={() => setSidebarOpen(false)}
-              />
-            </Box>
-          )}
-          <Box flexDirection="column" flexGrow={1} overflow="hidden">
-            <Box flexGrow={1} overflow="hidden">
-              <ChatViewport
-                items={state.items}
-                busy={state.busy}
-                scrollOffset={state.scroll.offset}
-                hasNew={state.scroll.hasNew}
-                lastOp={state.lastOp}
-                fileSnapshots={fileSnapshots.current}
-                height={chatHeight}
-              />
-            </Box>
-            {state.plan && <PlanPanel plan={state.plan} />}
-            <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
-            {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
-              <PermissionBar
-                request={state.permissionQueue[0]}
-                onResolve={(allow: boolean, remember: RememberChoice) =>
-                  dispatch({ type: "resolve_permission", allow, remember })
-                }
-              />
-            )}
-            {paletteOpen && (
-              <CommandPalette
-                agent={agent}
-                onSelect={(value: string, action: PaletteAction) => {
-                  setPaletteOpen(false);
-                  if (action === "insert") {
-                    setInput((prev) => prev + value);
-                  } else {
-                    void submit(value);
-                  }
-                }}
-                onClose={() => setPaletteOpen(false)}
-              />
-            )}
-            <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} hint={statusHint} />
-            <InputBox
-              value={input}
-              busy={state.busy}
-              showHint={state.showHint}
-              onChange={setInput}
-              onSubmit={submit}
-              isActive={state.permissionQueue.length === 0 && !paletteOpen && !sidebarOpen && !focusedCodeBlockId}
-              agent={agent}
-              mentions={extractMentions(input)
-                .filter((m) => m.type === "file")
-              .map((m) => ({ path: m.target, size: 0 }))}
+      <DiffReviewContext.Provider value={diffReviewValue}>
+        <Box flexDirection="column" height={terminalRows} overflow="hidden">
+          <Header
+            model={modelLabel}
+            session={sessionId}
+            stats={stats}
+            lastOp={state.lastOp}
           />
+          <Box flexDirection="row" flexGrow={1} overflow="hidden">
+            {sidebarOpen && (
+              <Box width={34}>
+                <FileTree
+                  height={sidebarHeight}
+                  onInsert={(value: string) => {
+                    setInput((prev) => prev + value);
+                    setSidebarOpen(false);
+                  }}
+                  onPreview={(text: string) =>
+                    dispatch({ type: "add_system", text, level: "info" })
+                  }
+                  onClose={() => setSidebarOpen(false)}
+                />
+              </Box>
+            )}
+            <Box flexDirection="column" flexGrow={1} overflow="hidden">
+              <Box flexGrow={1} overflow="hidden">
+                <ChatViewport
+                  items={state.items}
+                  busy={state.busy}
+                  scrollOffset={state.scroll.offset}
+                  hasNew={state.scroll.hasNew}
+                  lastOp={state.lastOp}
+                  fileSnapshots={fileSnapshots.current}
+                  height={chatHeight}
+                />
+              </Box>
+              {state.plan && <PlanPanel plan={state.plan} />}
+              <TodoPill items={state.items} busy={state.busy} lastOp={state.lastOp} />
+              {state.permissionQueue[0] && !paletteOpen && !sidebarOpen && (
+                <PermissionBar
+                  request={state.permissionQueue[0]}
+                  onResolve={(allow: boolean, remember: RememberChoice) =>
+                    dispatch({ type: "resolve_permission", allow, remember })
+                  }
+                />
+              )}
+              {paletteOpen && (
+                <CommandPalette
+                  agent={agent}
+                  onSelect={(value: string, action: PaletteAction) => {
+                    setPaletteOpen(false);
+                    if (action === "insert") {
+                      setInput((prev) => prev + value);
+                    } else {
+                      void submit(value);
+                    }
+                  }}
+                  onClose={() => setPaletteOpen(false)}
+                />
+              )}
+              <StatusBar modelLabel={modelLabel} skills={stats.skills} entries={stats.entries} hint={statusHint} />
+              <InputBox
+                value={input}
+                busy={state.busy}
+                showHint={state.showHint}
+                onChange={setInput}
+                onSubmit={submit}
+                isActive={state.permissionQueue.length === 0 && !paletteOpen && !sidebarOpen && !anyInteractiveFocused}
+                agent={agent}
+                mentions={extractMentions(input)
+                  .filter((m) => m.type === "file")
+                .map((m) => ({ path: m.target, size: 0 }))}
+            />
+          </Box>
         </Box>
       </Box>
-    </Box>
+    </DiffReviewContext.Provider>
   </CodeActionContext.Provider>
   );
 }

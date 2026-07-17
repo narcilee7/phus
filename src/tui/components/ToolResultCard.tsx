@@ -8,6 +8,7 @@ import { truncate } from "@/tui/state.js";
 import { Markdown } from "@/tui/components/Markdown.js";
 import { ToolPill } from "@/tui/components/ToolPill.js";
 import { DiffView } from "@/tui/components/DiffView.js";
+import { DiffReview } from "@/tui/components/DiffReview.js";
 
 export interface FileSnapshot {
   path: string;
@@ -114,7 +115,7 @@ export function ToolResultCard({ item, items, fileSnapshots }: ToolResultCardPro
       <ToolPill name={item.toolName || "?"} status={status} durationMs={item.durationMs} />
       {isFileWrite && snapshot && newContent !== undefined ? (
         <Box marginTop={1}>
-          <DiffView oldText={snapshot.content} newText={newContent} />
+          <DiffReview path={snapshot.path} oldContent={snapshot.content} newContent={newContent} />
         </Box>
       ) : (
         <Box marginTop={1}>
