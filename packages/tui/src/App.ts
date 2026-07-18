@@ -100,6 +100,10 @@ export class App extends Container {
 	private inputListenerUnsub: (() => void) | undefined;
 	private inputBuffer = "";
 	private readonly onQuit?: () => void;
+	/** Messages typed while a turn is running — flushed one-per-turn as
+	 *  each turn completes, instead of being silently dropped (the old
+	 *  busy guard ate them after the editor had already cleared). */
+	private readonly pendingInputs: string[] = [];
 
 	constructor(deps: AppDeps) {
 		super();
@@ -136,6 +140,13 @@ export class App extends Container {
 				this.wasBusy = busyNow;
 				if (busyNow) this.animator.start();
 				else this.animator.stop();
+			}
+			// Flush queued input when a turn finishes. One at a time — each
+			// submission re-enters busy state, so the rest drain on the
+			// following transitions. Deferred to escape the dispatch stack.
+			if (!busyNow && this.pendingInputs.length > 0) {
+				const next = this.pendingInputs.shift()!;
+				queueMicrotask(() => this.submitUserInput(next));
 			}
 			// /subagent show dispatches request_sidebar — consume it here.
 			const sidebarRequest = this.store.getState().sidebarRequest;
@@ -330,6 +341,18 @@ export class App extends Container {
 				const result = await runSlash(text, this.agent, state, this.store.dispatch);
 				if (result === "quit") this.store.dispatch({ type: "request_quit" });
 			})();
+			return;
+		}
+		// Busy: queue instead of dropping — submitMessage's busy guard would
+		// silently eat the text the editor just cleared. The queue drains
+		// one message per completed turn (see the render trigger).
+		if (state.busy) {
+			this.pendingInputs.push(text);
+			this.store.dispatch({
+				type: "add_system",
+				text: `⏳ queued (${this.pendingInputs.length}) — the stone picks it up next · /interrupt aborts the current turn`,
+				level: "info",
+			});
 			return;
 		}
 		void submitMessage(text, {
