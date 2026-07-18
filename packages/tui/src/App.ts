@@ -16,6 +16,7 @@ import { ChatViewport } from "@/components/chat/ChatViewport.js";
 import { PlanPanel } from "@/components/agent/PlanPanel.js";
 import { TodoPill } from "@/components/todo/TodoPill.js";
 import { PermissionPanel } from "@/components/permission/PermissionPanel.js";
+import { InputBox } from "@/components/input/InputBox.js";
 import {
 	HEADER_ROWS,
 	STATUS_ROWS,
@@ -82,6 +83,7 @@ export class App extends Container {
 	private todoChild: TodoPill;
 	private planChild?: PlanPanel;
 	private permissionChild?: PermissionPanel;
+	private inputBox!: InputBox;
 	private sidebarOpen = false;
 	private paletteOpen = false;
 	private planExpanded = false;
@@ -122,6 +124,12 @@ export class App extends Container {
 			tui.requestRender();
 		});
 		this.terminalRows = tui.terminal.rows;
+		this.inputBox = new InputBox({
+			tui,
+			onSubmit: (text) => this.submitUserInput(text),
+		});
+		this.insertBefore(this.statusBar, this.inputBox);
+		tui.setFocus(this.inputBox);
 		this.viewportHeight = this.computeChatHeight();
 		this.viewport.setHeight(this.viewportHeight);
 		this.rebuildDynamicChildren();
@@ -323,13 +331,20 @@ export class App extends Container {
 				const next = new PermissionPanel(state.permissionQueue[0], (allow, remember) =>
 					this.store.dispatch({ type: "resolve_permission", allow, remember }),
 				);
-				this.insertBefore(this.statusBar, next);
+				this.insertBefore(this.inputBox, next);
 				this.permissionChild = next;
-				if (this.tui) this.tui.setFocus(next);
+				if (this.tui) {
+					this.inputBox.releaseFocus();
+					this.tui.setFocus(next);
+				}
 			}
 		} else if (this.permissionChild) {
 			this.removeChild(this.permissionChild);
 			this.permissionChild = undefined;
+			if (this.tui) {
+				this.tui.setFocus(this.inputBox);
+				this.inputBox.claimFocus();
+			}
 		}
 		// PlanPanel — show only when there is a plan.
 		if (state.plan) {
