@@ -1,8 +1,14 @@
 // src/tui/index.ts
-// `phus tui` — launch the interactive ink-based TUI.
+// `phus tui` — launch the interactive TUI.
+//
+// M1 wiring: we boot the Bootstrap / Key wizards via React/ink
+// (unchanged from the pre-migration entry), then hand off to the new
+// pi-tui App class for the main TUI. M4 will rewrite the wizards as
+// pi-tui Components too and drop the React boot path.
 
 import React from "react";
-import { render } from "ink";
+import { render as inkRender } from "ink";
+import { TUI } from "@/vendor/pi-tui/tui.js";
 import { App } from "@/App.js";
 import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import { logger } from "@phus/runtime/infra/logging.js";
@@ -10,130 +16,122 @@ import { loadConfig, resetConfigCache, configPath } from "@phus/runtime/infra/co
 import { BootstrapWizard } from "@/components/boot-strap-components/BootstrapWizard.js";
 import { KeyWizard } from "@/components/boot-strap-components/KeyWizard.js";
 import { resolveProfile, apiKeyForProfile } from "@phus/runtime/infra/profile.js";
+import { createManagedTerminal } from "@/runtime/terminal.js";
 
 function profileHasKey(): boolean {
-  try {
-    const config = loadConfig();
-    const profile = resolveProfile(config.profileName, config.providers);
-    return !!apiKeyForProfile(profile);
-  } catch {
-    return false;
-  }
+	try {
+		const config = loadConfig();
+		const profile = resolveProfile(config.profileName, config.providers);
+		return !!apiKeyForProfile(profile);
+	} catch {
+		return false;
+	}
 }
 
 async function runBootstrapWizard(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const { unmount } = render(
-      React.createElement(BootstrapWizard, {
-        onDone: (success) => {
-          unmount();
-          resolve(success);
-        },
-      }),
-    );
-  });
+	return new Promise((resolve) => {
+		const { unmount } = inkRender(
+			React.createElement(BootstrapWizard, {
+				onDone: (success: boolean) => {
+					unmount();
+					resolve(success);
+				},
+			}),
+		);
+	});
 }
 
 async function runKeyWizard(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const { unmount } = render(
-      React.createElement(KeyWizard, {
-        onDone: (success) => {
-          unmount();
-          resolve(success);
-        },
-      }),
-    );
-  });
+	return new Promise((resolve) => {
+		const { unmount } = inkRender(
+			React.createElement(KeyWizard, {
+				onDone: (success: boolean) => {
+					unmount();
+					resolve(success);
+				},
+			}),
+		);
+	});
 }
 
 export async function startTui(): Promise<void> {
-  let config = loadConfig();
+	let config = loadConfig();
 
-  // No config file yet → run the bootstrap wizard to create one.
-  if (!config.source.present) {
-    const configured = await runBootstrapWizard();
-    if (!configured) {
-      // eslint-disable-next-line no-console
-      console.log(`[phus] bootstrap cancelled; create ${configPath()} manually to use the TUI.`);
-      return;
-    }
-    resetConfigCache();
-    config = loadConfig();
-  }
+	if (!config.source.present) {
+		const configured = await runBootstrapWizard();
+		if (!configured) {
+			// eslint-disable-next-line no-console
+			console.log(`[phus] bootstrap cancelled; create ${configPath()} manually to use the TUI.`);
+			return;
+		}
+		resetConfigCache();
+		config = loadConfig();
+	}
 
-  // Config exists but no API key → launch a mini-wizard that only
-  // collects the key (env var or inline) and writes it back. We do not
-  // re-run the full bootstrap wizard here because it is designed for
-  // first-run config creation; editing an existing profile is a
-  // different flow.
-  if (!profileHasKey()) {
-    const configured = await runKeyWizard();
-    if (!configured) {
-      const profile = resolveProfile(config.profileName, config.providers);
-      const envVar = profile.apiKeyEnv
-        ? profile.apiKeyEnv
-        : `${profile.provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
-      // eslint-disable-next-line no-console
-      console.log("[phus] no API key configured.");
-      // eslint-disable-next-line no-console
-      console.log(`       Add apiKey to ${configPath()} or set:`);
-      // eslint-disable-next-line no-console
-      console.log(`         export ${envVar}=<your-key>`);
-      return;
-    }
-    resetConfigCache();
-    config = loadConfig();
-    // Re-check: if the user picked inline but left the field blank,
-    // there is still no usable key. Bail out gracefully.
-    if (!profileHasKey()) {
-      // eslint-disable-next-line no-console
-      console.log("[phus] key still missing; aborting.");
-      return;
-    }
-  }
+	if (!profileHasKey()) {
+		const configured = await runKeyWizard();
+		if (!configured) {
+			const profile = resolveProfile(config.profileName, config.providers);
+			const envVar = profile.apiKeyEnv
+				? profile.apiKeyEnv
+				: `${profile.provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
+			// eslint-disable-next-line no-console
+			console.log("[phus] no API key configured.");
+			// eslint-disable-next-line no-console
+			console.log(`       Add apiKey to ${configPath()} or set:`);
+			// eslint-disable-next-line no-console
+			console.log(`         export ${envVar}=<your-key>`);
+			return;
+		}
+		resetConfigCache();
+		config = loadConfig();
+		if (!profileHasKey()) {
+			// eslint-disable-next-line no-console
+			console.log("[phus] key still missing; aborting.");
+			return;
+		}
+	}
 
-  const handle = await PhusAgent.create({ config });
-  // App.tsx currently consumes the concrete `PhusAgent` so it can read
-  // internals during the migration to facade. Pass the internals.
-  const agent = handle.internals;
-  const sessionId = "tui:user";
-  const model = agent.getCurrentModel();
-  const modelLabel = `${model.provider}/${model.id}`;
+	const handle = await PhusAgent.create({ config });
+	const agent = handle.internals;
+	const sessionId = "tui:user";
+	const model = agent.getCurrentModel();
+	const modelLabel = `${model.provider}/${model.id}`;
 
-  // Enable terminal-level features that improve TUI input handling:
-  // bracketed paste (so paste is distinguishable from typing), alternate
-  // screen buffer (so the user's scrollback is preserved), and CSI 2026
-  // synchronized output (so each render is one atomic update). We install
-  // these BEFORE rendering ink, then restore on exit.
-  const { enableTerminalModes, restoreTerminalModes } = await import(
-    "@/runtime/terminal-modes.js"
-  );
-  const { installSyncOutput } = await import("@/runtime/sync-output.js");
-  const stdout = process.stdout;
-  enableTerminalModes(stdout);
-  const uninstallSync = installSyncOutput(stdout);
+	// M1: bring up the pi-tui runtime + new App skeleton.
+	const managed = createManagedTerminal();
+	managed.start();
+	const tui = new TUI(managed.terminal);
+	const app = new App({ sessionId, modelLabel });
+	tui.addChild(app);
+	app.attach(tui);
 
-  const restore = () => {
-    uninstallSync();
-    restoreTerminalModes(stdout);
-  };
-  process.on("SIGINT", () => {
-    restore();
-    process.exit(0);
-  });
-  process.on("SIGTERM", () => {
-    restore();
-    process.exit(0);
-  });
+	const onExit = () => {
+		// Defer the stop until the render loop has flushed so the cursor
+		// lands below the last content (mirrors TUI.stop's behavior).
+		setImmediate(() => {
+			tui.stop();
+			managed.stop();
+		});
+	};
+	process.once("SIGINT", onExit);
+	process.once("SIGTERM", onExit);
 
-  const { waitUntilExit } = render(
-    React.createElement(App, { agent, sessionId, modelLabel }),
-  );
-
-  logger.info("tui.started", { sessionId, model: modelLabel });
-  await waitUntilExit();
-  restore();
-  await handle.dispose();
-  logger.info("tui.exited", { sessionId });
+	logger.info("tui.started", { sessionId, model: modelLabel });
+	tui.start();
+	await new Promise<void>((resolve) => {
+		// pi-tui's TUI doesn't expose a waitUntilExit like ink does.
+		// We resolve on SIGINT/SIGTERM via `onExit` plus a polling
+		// fallback once the App requests a quit through the store.
+		const onSignal = () => {
+			resolve();
+		};
+		process.once("SIGINT", onSignal);
+		process.once("SIGTERM", onSignal);
+		// The store's request_quit action will be wired in M3 — until
+		// then, the only exit path is SIGINT/SIGTERM.
+	});
+	managed.stop();
+	await handle.dispose();
+	logger.info("tui.exited", { sessionId });
 }

@@ -1,0 +1,6 @@
+packages:
+  - "packages/*"
+  # - "apps/*"   # temporarily excluded: apps/gui requires Node ≥22.12 (electron/rebuild).
+                # Re-enable when running on Node 22+. The apps/gui folder is
+                # self-contained — its own package.json + pnpm-lock.yaml keep
+                # it installable independently.
