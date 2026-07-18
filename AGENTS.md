@@ -15,11 +15,15 @@ The full design intent and inspirations (Bub / Pi / OpenClaw) live in [`document
 npm install
 cp .env.example .env        # fill in at least one provider key
 
-# Dev / run
-pnpm dev                    # tsx src/phus.ts (default TUI)
-pnpm chat                   # tsx src/phus.ts chat
+# Dev / run (root scripts run tsx directly with cwd=repo root — relative
+# paths in phus.config.yaml (./skills, ./tape.sqlite) resolve there. Do
+# NOT re-route these through `pnpm --filter`: it changes cwd to the
+# package dir and skills/tape/file-writes land in the wrong place.)
+pnpm dev                    # tsx packages/runtime/src/phus.ts (default TUI)
+pnpm tui                    # tsx packages/tui/src/index.ts
+pnpm chat                   # tsx packages/runtime/src/phus.ts chat
 pnpm run "..."              # one-shot prompt
-pnpm gateway                # tsx src/phus.ts gateway (multi-channel)
+pnpm gateway                # tsx packages/runtime/src/phus.ts gateway (multi-channel)
 
 # Build
 pnpm build                  # tsdown bundle + tsc declarations → dist/
@@ -58,7 +62,7 @@ Bridge    (bridge/)                     ← PhusAgent wraps Pi Agent
 Core      (core/)                       ← Hook / Tape / Skill / Policy / Mesh
 ```
 
-**Channels** convert inbound bytes to `Envelope` and outbound `Outbound[]` to transport sends. They never see the LLM, Tape, or Skill registry directly. Built-in: `cli.ts`, `telegram.ts`, `websocket.ts`, `sse.ts`, plus the ink-based TUI in `tui/`.
+**Channels** convert inbound bytes to `Envelope` and outbound `Outbound[]` to transport sends. They never see the LLM, Tape, or Skill registry directly. Built-in: `cli.ts`, `telegram.ts`, `websocket.ts`, `sse.ts`, plus the pi-tui–based TUI in `packages/tui/`.
 
 **Bridge** — `src/bridge/pi-agent.ts` — owns one Pi `Agent`, the `HookRegistry`, and runs the Bub-style turn pipeline.
 
@@ -118,7 +122,11 @@ The public surface is `PhusAgentFacade` (interface) — channels, TUI, and CLI c
 - **Logs**: every runtime event goes to `$PHUS_LOG_FILE` (default `./logs/phus.jsonl`) as one JSON object per line with `{ ts, level, event, sessionId?, ...fields }`. Query via `phus logs` (filter by `--event`, `--level`, `--session`).
 - **Plugin CLI commands**: plugins register CLI commands via `registerCliCommand` which queues them; `src/cli/program.ts::registerPluginCliCommands` drains the queue and also fires the `register_cli_commands` hook. To add a new top-level built-in command, add a file under `src/cli/commands/` and call its `register(program)` from `cli/program.ts`.
 - **Test layout**: `test/**/*.test.ts`, `environment: node`. Many tests live next to subsystems (`test/hook.test.ts`, `test/tape.test.ts`, `test/policy.test.ts`, `test/provider-mesh.test.ts`, `test/internal-commands.test.ts`, `test/tui/`).
-- **TUI**: `src/tui/` is an ink (React 19) app. Commands typed into the TUI flow through `tui/commands.ts`; slash-commands are distinct from CLI subcommands.
+- **TUI**: `packages/tui/` is a pi-tui app (vendored `@mariozechner/pi-tui` primitives under `packages/tui/src/vendor/pi-tui/`, no React, no ink). Slash commands live in `packages/tui/src/handler/commands/`; the input box wires `/` autocomplete via `CombinedAutocompleteProvider`. Frame layout is row-budgeted in `App.computeChatHeight()` — every component's rendered row count must match its budget or the differential repaint corrupts (measure, don't assume).
+- **Sisyphus theme**: all busy/loading surfaces share one rolling-stone animation — `src/runtime/sisyphus.ts` (`SisyphusAnimator`, 150ms ticks, started on busy / stopped on idle by the App). The single busy line is `TodoPill` ("RollingLine"); the chat viewport renders content only (no spinner rows). Themed beats: streaming = "the stone rolls…", abort = "the stone slipped", quit prints "Sisyphus rests". Keep new waiting states on this system instead of inventing new spinners.
+- **Busy input**: messages typed while a turn runs are queued in the App (`pendingInputs`) and flushed one-per-turn — never drop user input silently. Long-running slash handlers (`/plan create|run|resume`) must dispatch `set_busy` so the animation, the queue, and the Ctrl+C-abort path all engage.
+- **Plan abort**: `PlanRunner.abort()` is cooperative — it stops the run at the next step boundary (in-flight steps can't be killed) and leaves the plan `paused` + resumable. `PhusAgent.abort()` calls both `piAgent.abort()` and `planRunner.abort()`; anything else that runs work outside the Pi loop must wire into the same path or Ctrl+C looks like a hang.
+- **Durable plans**: plans are first-class persistent citizens (`plans.sqlite`), addressable across sessions by id. Two rules keep that sane: (1) NO implicit resume/create in `runPlanFlowIfRequested` — only `/plan` commands and the `plan_create`/`plan_run` meta tools drive plans, never bare messages or regex heuristics; (2) at construction, `PhusAgent.reconcileInterruptedPlans()` flips orphaned `running` rows (older than process start) to `paused`, and the TUI's startup `ResumePrompt` (Enter resume / x abandon / d dismiss) offers them explicitly. Single-writer assumption: two live processes on one PHUS_HOME will flap each other's plans.
 - **No module-level state for `PhusAgent`**: lifecycle is explicit. The only module-level state is the internal-command default registry (`core/runtime/internal-commands/index.ts`) — use `_resetInternalCommands()` between tests.
 
 ## Where to look

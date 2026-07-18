@@ -1,0 +1,44 @@
+{
+	"name": "@phus/tui",
+	"version": "0.1.0",
+	"description": "Phus terminal UI: pi-tui based chat interface (vendored @mariozechner/pi-tui primitives, no React, no ink).",
+	"license": "ISC",
+	"type": "module",
+	"main": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": "./dist/index.mjs"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsdown && tsc --emitDeclarationOnly --declaration --outDir dist",
+		"build:js": "tsdown",
+		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+		"dev": "tsx src/index.ts",
+		"typecheck": "tsc --noEmit",
+		"lint": "oxlint --quiet src test",
+		"test": "vitest run",
+		"smoke": "tsx ../../scripts/smoke-pi-tui.ts"
+	},
+	"dependencies": {
+		"@mariozechner/pi-agent-core": "^0.73.1",
+		"@mariozechner/pi-ai": "^0.73.1",
+		"@phus/runtime": "workspace:*",
+		"diff": "^9.0.0",
+		"fuse.js": "^7.5.0",
+		"get-east-asian-width": "1.6.0",
+		"marked": "^18.0.6",
+		"prismjs": "^1.30.0",
+		"yaml": "^2.9.0"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^26.1.1",
+		"@types/prismjs": "^1.26.6"
+	}
+}
