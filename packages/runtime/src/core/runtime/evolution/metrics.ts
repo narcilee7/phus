@@ -141,7 +141,7 @@ export class IntelligenceMetricsAggregator {
         IntelligenceMetrics,
         "plansRun" | "plansCompleted" | "plansFailed" | "plansPaused" | "plansWithRetries" | "totalStepRetries"
     > {
-        let plansRun = plans.length;
+        const plansRun = plans.length;
         let plansCompleted = 0;
         let plansFailed = 0;
         let plansPaused = 0;

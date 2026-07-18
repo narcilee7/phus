@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { DiffTracker } from "@/core/session/diff-tracker";
+import { DiffTracker } from "@/core/session/diff-tracker.js";
 
 describe("DiffTracker", () => {
     let dir: string;
