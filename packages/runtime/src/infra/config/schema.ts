@@ -8,6 +8,7 @@
 import type { ProviderConfig } from "@/infra/profile.js";
 import type { Schedule } from "@/types/scheduler/index.js";
 import type { LogLevelLiteral } from "./defaults.js";
+import { RobustnessConfig } from "../llm-fuse.js";
 
 /** Resolved filesystem paths. */
 export interface PathsConfig {
@@ -100,6 +101,8 @@ export interface ResolvedConfig {
   schedules: Schedule[];
   /** Project memory autonomy + storage config. */
   memory: MemoryConfig;
+  /** LLM runaway guards: timeouts, call budgets, billing fuse. */
+  robustness: RobustnessConfig;
   /** Active profile name (env > YAML > default). */
   profileName: string;
   /** Interpolated YAML tree, exposed for plugin `register(ctx)` to read arbitrary sections. */

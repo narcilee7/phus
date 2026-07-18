@@ -39,8 +39,10 @@ import {
   resolveProfile,
   modelFromProfile,
   apiKeyForProfile,
+  getLlmFuse,
   type ProviderProfile,
 } from "@/infra/profile.js";
+import { loadConfig } from "@/infra/config/index.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@/core/session/checkpoint.js";
@@ -641,6 +643,24 @@ export class PhusAgent implements PhusAgentFacade {
     const startedAt = Date.now();
     let sessionId: SessionId | undefined;
 
+    // Runaway guards: reset the per-turn LLM call counter, fail fast
+    // when the billing fuse is open (zero requests sent), and arm the
+    // wall-clock watchdog — pi-agent-core's loop is `while(true)` with
+    // no iteration cap, so this timer is the hard upper bound.
+    const fuse = getLlmFuse();
+    fuse.resetTurn();
+    fuse.check("turn");
+    const watchdogMs = loadConfig().robustness.turnTimeoutMs;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    if (watchdogMs > 0) {
+      watchdog = setTimeout(() => {
+        logger.warn("turn.watchdog_fired", { sessionId, timeoutMs: watchdogMs });
+        this.abort();
+      }, watchdogMs);
+      // Never keep the process alive for a watchdog.
+      watchdog.unref?.();
+    }
+
     try {
       // 1. resolve_session
       const resolvedRaw = await this.hooks.execute<string>(
@@ -794,6 +814,9 @@ export class PhusAgent implements PhusAgentFacade {
 
       return turn;
     } catch (err: any) {
+      // Classify LLM failures into the fuse (402 opens the billing
+      // fuse; 429 is logged). Non-LLM errors are ignored by report().
+      fuse.report(err);
       await this.hooks.execute(
         "on_error",
         makeCtx({
@@ -808,6 +831,8 @@ export class PhusAgent implements PhusAgentFacade {
       );
       logger.error("turn.failed", { sessionId, stage: "turn", error: err.message });
       throw err;
+    } finally {
+      if (watchdog) clearTimeout(watchdog);
     }
   }
 

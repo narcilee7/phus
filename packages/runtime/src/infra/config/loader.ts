@@ -19,6 +19,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "yaml";
 import { DEFAULTS, LOG_LEVELS, type LogLevelLiteral } from "./defaults.js";
+import { DEFAULT_ROBUSTNESS } from "@/infra/llm-fuse.js";
 import { interpolateEnv } from "./interpolate.js";
 import type {
   ChannelConfig,
@@ -143,6 +144,10 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   // so existing users get an explicit-permission workflow without changes.
   const memory = parseMemoryConfig(interpolated, warn);
 
+  // LLM runaway guards (timeouts / budgets / billing fuse) — every key
+  // optional, conservative defaults from DEFAULT_ROBUSTNESS.
+  const robustness = parseRobustness(interpolated);
+
   // Build log config (env overrides still win for ops vars)
   const logFile = envOrYaml(
     "PHUS_LOG_FILE",
@@ -201,6 +206,7 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     channels,
     schedules,
     memory,
+    robustness,
     profileName,
     raw: interpolated,
     source: { path: cfgPath, mtimeMs, present },
@@ -496,6 +502,26 @@ function resolveModelFields(
     typeof raw.modelId === "string" && raw.modelId.length > 0 ? raw.modelId : undefined;
   if (!provider || !modelId) return null;
   return { provider, modelId };
+}
+
+function parseRobustness(tree: unknown): import("@/infra/llm-fuse.js").RobustnessConfig {
+  const raw = (tree as { robustness?: unknown } | undefined)?.robustness;
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const num = (key: keyof typeof DEFAULT_ROBUSTNESS): number => {
+    const v = obj[key];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) return Math.floor(v);
+    return DEFAULT_ROBUSTNESS[key];
+  };
+  return {
+    llmTimeoutMs: num("llmTimeoutMs"),
+    turnTimeoutMs: num("turnTimeoutMs"),
+    subagentTimeoutMs: num("subagentTimeoutMs"),
+    planTimeoutMs: num("planTimeoutMs"),
+    planMaxSteps: num("planMaxSteps"),
+    llmCallsPerTurn: num("llmCallsPerTurn"),
+    llmCallsPerHour: num("llmCallsPerHour"),
+    billingFuseMs: num("billingFuseMs"),
+  };
 }
 
 function parseMemoryConfig(

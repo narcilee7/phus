@@ -62,6 +62,28 @@ log:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Robustness — LLM runaway guards (all optional, defaults shown)
+# ─────────────────────────────────────────────────────────────────────
+#
+# Hard bounds so a stuck loop can't burn your API balance:
+#   - timeoutMs per HTTP call
+#   - wall-clock watchdogs per turn / sub-agent / plan run
+#   - call budgets per turn and per rolling hour (0 disables)
+#   - billing fuse: a 402-class error fails every call fast for
+#     billingFuseMs — a dead account is never retried into more spend.
+#
+# robustness:
+#   llmTimeoutMs: 120000      # 2 min per HTTP request
+#   turnTimeoutMs: 600000     # 10 min per turn
+#   subagentTimeoutMs: 300000 # 5 min per plan-step sub-agent
+#   planTimeoutMs: 900000     # 15 min per plan run
+#   planMaxSteps: 25          # executed steps per plan run
+#   llmCallsPerTurn: 50       # LLM requests per turn (0 = unlimited)
+#   llmCallsPerHour: 500      # LLM requests per rolling hour
+#   billingFuseMs: 600000     # 10 min cool-down after a 402
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Provider profiles
 # ─────────────────────────────────────────────────────────────────────
 #

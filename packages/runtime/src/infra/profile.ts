@@ -27,7 +27,22 @@ import yaml from "yaml";
 import { getEnvApiKey } from "@mariozechner/pi-ai";
 import type { Model } from "@mariozechner/pi-ai";
 import { logger } from "@/infra/logging.js";
-import { resolveAndCache, validateModelString } from "@/infra/config/index.js";
+import { LlmFuse } from "@/infra/llm-fuse.js";
+import { resolveAndCache, validateModelString, loadConfig } from "@/infra/config/index.js";
+
+/** Process-wide LLM fuse (billing circuit + call budgets). Lazily built
+ *  so config is read on first use; tests can reset between cases. */
+let _llmFuse: LlmFuse | undefined;
+export function getLlmFuse(): LlmFuse {
+  if (!_llmFuse) {
+    _llmFuse = new LlmFuse(() => loadConfig().robustness);
+  }
+  return _llmFuse;
+}
+/** Test hook: drop the cached fuse so the next getLlmFuse() re-reads config. */
+export function _resetLlmFuse(): void {
+  _llmFuse = undefined;
+}
 
 export interface ProviderProfile {
   name: string;
@@ -234,7 +249,26 @@ export function modelFromProfile(profile: ProviderProfile): Model<any> {
   if (wireId !== profile.modelId) overrides.id = wireId;
   if (profile.headers) overrides.headers = { ...base.headers, ...profile.headers };
 
-  return Object.keys(overrides).length > 0 ? { ...base, ...overrides } : base;
+  const model = Object.keys(overrides).length > 0 ? { ...base, ...overrides } : base;
+
+  // Robustness layer — every model Phus builds (main loop, mesh
+  // endpoints, planner/verifier/learner) carries:
+  //   1. an HTTP timeout (pi-ai Model.timeoutMs), and
+  //   2. a pre-flight fuse check via onPayload, which pi-ai invokes
+  //      before every send (including SDK retries). Tripping the fuse
+  //      throws before the request leaves the process — zero burn.
+  // Fuse errors are reported by the callers (turn catch / planner wrap).
+  const robustness = loadConfig().robustness;
+  const fuse = getLlmFuse();
+  const label = `${profile.provider}/${wireId}`;
+  return {
+    ...model,
+    timeoutMs: robustness.llmTimeoutMs,
+    onPayload: (payload: unknown, m: Model<any>) => {
+      fuse.check(label);
+      return model.onPayload ? model.onPayload(payload, m) : payload;
+    },
+  };
 }
 
 /** Read the API key for a profile (explicit key > env var > Pi auto-detect). */
