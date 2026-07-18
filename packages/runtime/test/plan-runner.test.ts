@@ -1,10 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import { Planner } from "@/core/runtime/plan/planner";
 import { Executor } from "@/core/runtime/executor/index";
 import { ReplanNeededError } from "@/core/runtime/executor/error";
 import { PlanStore } from "@/core/session/plan-store";
 import { HookRegistry } from "@/core/runtime/hook/registry";
+import { resetConfigCache } from "@/infra/config/index";
 import type { Plan, Step } from "@/core/runtime/plan/types";
 import { asSessionId } from "@/types/brand";
 
@@ -337,6 +341,89 @@ describe("PlanRunner", () => {
     const runner = new PlanRunner({ planner, executor, store, hooks });
     runner.abort(); // nothing running — must not poison the next run
     const plan = await runner.createAndRun("goal", "session-1");
+    expect(plan.status).toBe("completed");
+  });
+});
+
+describe("PlanRunner runaway budgets", () => {
+  let dir: string;
+  let prevHome: string | undefined;
+
+  beforeEach(() => {
+    prevHome = process.env.PHUS_HOME;
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-plan-budget-"));
+    process.env.PHUS_HOME = dir;
+    resetConfigCache();
+  });
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.PHUS_HOME;
+    else process.env.PHUS_HOME = prevHome;
+    resetConfigCache();
+  });
+
+  const writeRobustness = (yamlBody: string) => {
+    fs.writeFileSync(path.join(dir, "phus.config.yaml"), yamlBody);
+    resetConfigCache();
+  };
+
+  const completingExecutor = (delayMs = 0) => ({
+    executeStep: vi.fn().mockImplementation(async (step: Step) => {
+      if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+      step.status = "completed";
+      return {
+        step,
+        verification: { ok: true, confidence: 1, reason: "", action: "proceed" as const },
+      };
+    }),
+  }) as unknown as Executor;
+
+  const threeStepPlanner = () =>
+    ({
+      createPlan: vi.fn().mockResolvedValue(
+        makePlan([makeStep(0, { id: "a" }), makeStep(1, { id: "b" }), makeStep(2, { id: "c" })]),
+      ),
+    }) as unknown as Planner;
+
+  it("stops at planMaxSteps, marks the rest skipped, and pauses", async () => {
+    writeRobustness("robustness:\n  planMaxSteps: 1\n");
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+    const executor = completingExecutor();
+
+    const runner = new PlanRunner({ planner: threeStepPlanner(), executor, store, hooks });
+    const plan = await runner.createAndRun("goal", "session-1");
+
+    expect(plan.status).toBe("paused");
+    expect(plan.steps.find((s) => s.id === "a")?.status).toBe("completed");
+    expect(plan.steps.find((s) => s.id === "b")?.status).toBe("skipped");
+    expect(plan.steps.find((s) => s.id === "b")?.error).toContain("budget exceeded");
+    expect(plan.steps.find((s) => s.id === "c")?.status).toBe("skipped");
+  });
+
+  it("stops when the wall-clock budget is blown", async () => {
+    writeRobustness("robustness:\n  planTimeoutMs: 1\n  planMaxSteps: 0\n");
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+    const executor = completingExecutor(5); // each step burns >1ms
+
+    const runner = new PlanRunner({ planner: threeStepPlanner(), executor, store, hooks });
+    const plan = await runner.createAndRun("goal", "session-1");
+
+    expect(plan.status).toBe("paused");
+    expect(plan.steps.some((s) => s.status === "skipped")).toBe(true);
+    expect(plan.steps.find((s) => s.status === "skipped")?.error).toContain("wall-clock");
+  });
+
+  it("0 disables the step budget", async () => {
+    writeRobustness("robustness:\n  planMaxSteps: 0\n  planTimeoutMs: 0\n");
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+    const executor = completingExecutor();
+
+    const runner = new PlanRunner({ planner: threeStepPlanner(), executor, store, hooks });
+    const plan = await runner.createAndRun("goal", "session-1");
+
     expect(plan.status).toBe("completed");
   });
 });

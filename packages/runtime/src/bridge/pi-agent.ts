@@ -378,6 +378,29 @@ export class PhusAgent implements PhusAgentFacade {
         tools,
         messages: [],
       },
+      // Runaway guards at the single LLM choke point: every request
+      // (main loop + retries) is fuse-checked before sending and carries
+      // an HTTP timeout; failures are classified back into the fuse so
+      // a 402 anywhere opens the billing fuse for everyone.
+      streamFn: async (model, context, options) => {
+        const fuse = getLlmFuse();
+        fuse.check(`${model.provider}/${model.id}`);
+        const timeoutMs = loadConfig().robustness.llmTimeoutMs;
+        const response = await streamSimple(model, context, { ...options, timeoutMs }).catch(
+          (err: unknown) => {
+            fuse.report(err);
+            throw err;
+          },
+        );
+        return (async function* () {
+          try {
+            for await (const event of response) yield event;
+          } catch (err) {
+            fuse.report(err);
+            throw err;
+          }
+        })();
+      },
       transformContext: async (messages) => this.injectContext(messages),
       beforeToolCall: async (ctx, signal) => this.beforeToolCall(ctx, signal),
       afterToolCall: async (ctx, signal) => this.afterToolCall(ctx, signal),

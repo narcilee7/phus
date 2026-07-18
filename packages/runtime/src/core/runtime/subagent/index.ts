@@ -3,6 +3,11 @@ import { type PlanPhase, type SubAgentOptions } from "../plan/types";
 import { SubAgentAgentLike } from "./types";
 import { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import { extractText } from "@/utils/pi-text";
+import { loadConfig } from "@/infra/config/index.js";
+
+export class SubAgentTimeoutError extends Error {
+  override readonly name = "SubAgentTimeoutError";
+}
 
 const PHASE_GUIDANCE: Record<PlanPhase, string> = {
   inspect: "Inspect the relevant code, config, and tests before changing anything.",
@@ -40,7 +45,25 @@ export class SubAgent {
         timestamp: Date.now(),
       });
 
-      await this.deps.agent.waitForIdle();
+      // Wall-clock bound: pi-agent-core's loop is `while(true)` — a
+      // stuck sub-agent (endless tool calls, hung request) must not
+      // stall the whole plan. On timeout: abort the loop and throw;
+      // the Executor treats it as one failed attempt.
+      const timeoutMs = loadConfig().robustness.subagentTimeoutMs;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const idle = this.deps.agent.waitForIdle();
+        const timeout = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            this.deps.agent.abort?.();
+            reject(new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+          timer.unref?.();
+        });
+        await Promise.race([idle, timeout]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
 
       const lastAssistant = [...capturedMessages]
         .reverse()

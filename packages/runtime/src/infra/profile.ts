@@ -249,26 +249,7 @@ export function modelFromProfile(profile: ProviderProfile): Model<any> {
   if (wireId !== profile.modelId) overrides.id = wireId;
   if (profile.headers) overrides.headers = { ...base.headers, ...profile.headers };
 
-  const model = Object.keys(overrides).length > 0 ? { ...base, ...overrides } : base;
-
-  // Robustness layer — every model Phus builds (main loop, mesh
-  // endpoints, planner/verifier/learner) carries:
-  //   1. an HTTP timeout (pi-ai Model.timeoutMs), and
-  //   2. a pre-flight fuse check via onPayload, which pi-ai invokes
-  //      before every send (including SDK retries). Tripping the fuse
-  //      throws before the request leaves the process — zero burn.
-  // Fuse errors are reported by the callers (turn catch / planner wrap).
-  const robustness = loadConfig().robustness;
-  const fuse = getLlmFuse();
-  const label = `${profile.provider}/${wireId}`;
-  return {
-    ...model,
-    timeoutMs: robustness.llmTimeoutMs,
-    onPayload: (payload: unknown, m: Model<any>) => {
-      fuse.check(label);
-      return model.onPayload ? model.onPayload(payload, m) : payload;
-    },
-  };
+  return Object.keys(overrides).length > 0 ? { ...base, ...overrides } : base;
 }
 
 /** Read the API key for a profile (explicit key > env var > Pi auto-detect). */

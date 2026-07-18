@@ -2,6 +2,7 @@ import { HookName } from "@/types";
 import { EvolutionEngine } from "../evolution/engine";
 import { Plan, PlanRunnerDeps, Step } from "./types";
 import { logger } from "@/infra/logging";
+import { loadConfig } from "@/infra/config/index.js";
 import { makeCtx } from "@/core/runtime/hook/ctx-builder";
 import { ReplanNeededError } from "@/core/runtime/executor/error";
 
@@ -71,23 +72,28 @@ export class PlanRunner {
     let replanRequested = false;
     this.running = true;
     this.abortRequested = false;
-    let aborted = false;
+    let stoppedEarly = false;
+    const runStartedAt = Date.now();
+    let executedSteps = 0;
 
     for (const step of steps) {
-      // Cooperative abort: stop between steps, mark everything not yet
-      // done as skipped, and leave the plan resumable (status "paused").
-      if (this.abortRequested) {
-        aborted = true;
+      // Cooperative stops — user abort AND runaway budgets. Both halt
+      // between steps, mark everything not yet done as skipped, and
+      // leave the plan resumable (status "paused").
+      const budgetReason = this.budgetHit(runStartedAt, executedSteps, plan.id);
+      if (this.abortRequested || budgetReason) {
+        stoppedEarly = true;
+        const reason = this.abortRequested ? "aborted by user" : budgetReason!;
         this.abortRequested = false;
         for (const s of steps) {
           if (s.status === "pending" || s.status === "running") {
             s.status = "skipped";
-            s.error = "aborted by user";
+            s.error = reason;
           }
         }
         plan.updatedAt = Date.now();
         this.deps.store.save(plan);
-        this.emitStep("plan_step_failed", plan, step, { reason: "aborted by user" });
+        this.emitStep("plan_step_failed", plan, step, { reason });
         break;
       }
 
@@ -164,17 +170,18 @@ export class PlanRunner {
         }
       }
 
+      executedSteps++;
       plan.updatedAt = Date.now();
       this.deps.store.save(plan);
     }
 
     const allCompleted = plan.steps.every((s) => s.status === "completed");
-    plan.status = aborted ? "paused" : replanRequested ? "paused" : allCompleted ? "completed" : "failed";
+    plan.status = stoppedEarly ? "paused" : replanRequested ? "paused" : allCompleted ? "completed" : "failed";
     plan.updatedAt = Date.now();
     this.deps.store.save(plan);
     this.running = false;
 
-    if (!aborted) {
+    if (!stoppedEarly) {
       this.deps.hooks.execute(
         "plan_completed",
         makeCtx({
@@ -185,7 +192,7 @@ export class PlanRunner {
       );
     }
 
-    if (!aborted && this.deps.evolutionEngine) {
+    if (!stoppedEarly && this.deps.evolutionEngine) {
       try {
         await this.deps.evolutionEngine.onPlanCompleted(plan);
       } catch (err) {
@@ -197,6 +204,26 @@ export class PlanRunner {
     }
 
     return plan;
+  }
+
+  /** Budget check between steps. Returns the stop reason when a guard
+   *  trips, undefined otherwise. Cheap enough to run per iteration. */
+  private budgetHit(runStartedAt: number, executedSteps: number, planId: string): string | undefined {
+    let cfg;
+    try {
+      cfg = loadConfig().robustness;
+    } catch {
+      return undefined;
+    }
+    if (cfg.planMaxSteps > 0 && executedSteps >= cfg.planMaxSteps) {
+      logger.warn("plan.budget_exceeded", { planId, scope: "steps", limit: cfg.planMaxSteps });
+      return `budget exceeded: ${cfg.planMaxSteps} steps executed`;
+    }
+    if (cfg.planTimeoutMs > 0 && Date.now() - runStartedAt > cfg.planTimeoutMs) {
+      logger.warn("plan.budget_exceeded", { planId, scope: "wall-clock", limitMs: cfg.planTimeoutMs });
+      return `budget exceeded: ${Math.round(cfg.planTimeoutMs / 60_000)}m wall-clock`;
+    }
+    return undefined;
   }
 
   private sortSteps(steps: Step[]): Step[] {

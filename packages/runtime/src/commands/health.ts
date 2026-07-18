@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadConfig } from "@/infra/config/index.js";
+import { getLlmFuse } from "@/infra/profile.js";
 
 export interface HealthStatus {
   ok: boolean;
@@ -27,6 +28,16 @@ export function healthCheck(): HealthStatus {
   const providers = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY"];
   const hasKey = providers.some((p) => !!process.env[p]);
   checks.provider_key = { ok: hasKey, detail: providers.filter((p) => !!process.env[p]).join(",") || "(none)" };
+
+  // LLM billing fuse — open means every call fails fast (top up first).
+  // Counts toward health: with an open fuse the agent cannot work.
+  const fuse = getLlmFuse().status();
+  checks.llm_fuse = {
+    ok: !fuse.open,
+    detail: fuse.open
+      ? `OPEN (${fuse.reason ?? "billing"}) until ${new Date(fuse.untilMs ?? 0).toTimeString().slice(0, 5)}`
+      : `closed · ${fuse.callsThisHour} calls/h`,
+  };
 
   // Log file writable?
   const logFile = config.log.file;
