@@ -1,19 +1,13 @@
 // src/tui/runtime/terminal.ts
 // Owns the terminal lifecycle for the TUI: composes pi-tui's
 // ProcessTerminal (raw mode, bracketed paste, Kitty keyboard protocol,
-// resize handler) with two extra responsibilities the existing
-// `runtime/terminal-modes.ts` and `runtime/sync-output.ts` handled:
+// resize handler) with two extra responsibilities:
 //
 //   1. Alternate screen buffer so the user's scrollback is preserved
 //      while the TUI runs (`\x1b[?1049h` / `\x1b[?1049l`).
 //   2. Synchronized output wrapping via CSI 2026 around every write so
 //      each render lands atomically (avoids mid-frame tearing on slow
 //      terminals).
-//
-// We keep the existing helper modules (`runtime/terminal-modes.ts` and
-// `runtime/sync-output.ts`) untouched for now — they're still used by
-// the React-era index.ts. They'll be deleted in M4 once the entry point
-// fully migrates through this class.
 //
 // Lifecycle note: pi-tui's `TUI.start()` calls `terminal.start()` on
 // our behalf, and `TUI.stop()` calls `terminal.stop()`. We therefore
@@ -76,9 +70,6 @@ export function createManagedTerminal(opts: ManagedTerminalOptions = {}): Manage
 /**
  * Monkey-patch `stdout.write` so every chunk is wrapped in CSI 2026
  * (synchronized output). Returns an uninstall function.
- *
- * Mirrors the behavior of `runtime/sync-output.ts::installSyncOutput`
- * but lives here so M4 can delete the older file.
  */
 function installSyncOutput(stdout: NodeJS.WritableStream): () => void {
 	const original = stdout.write.bind(stdout) as typeof stdout.write;

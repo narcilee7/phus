@@ -1,22 +1,21 @@
 // src/tui/index.ts
-// `phus tui` — launch the interactive TUI.
-//
-// M1 wiring: we boot the Bootstrap / Key wizards via React/ink
-// (unchanged from the pre-migration entry), then hand off to the new
-// pi-tui App class for the main TUI. M4 will rewrite the wizards as
-// pi-tui Components too and drop the React boot path.
+// `phus tui` — launch the interactive TUI. If the config or API key
+// is missing, runs the Bootstrap / Key wizard in a transient pi-tui
+// session first; once the wizard resolves, the main App takes over.
 
-import React from "react";
-import { render as inkRender } from "ink";
 import { TUI } from "@/vendor/pi-tui/tui.js";
 import { App } from "@/App.js";
+import { BootstrapWizard } from "@/components/wizard/BootstrapWizard.js";
+import { KeyWizard } from "@/components/wizard/KeyWizard.js";
+import { createManagedTerminal } from "@/runtime/terminal.js";
 import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import { logger } from "@phus/runtime/infra/logging.js";
-import { loadConfig, resetConfigCache, configPath } from "@phus/runtime/infra/config/index.js";
-import { BootstrapWizard } from "@/components/boot-strap-components/BootstrapWizard.js";
-import { KeyWizard } from "@/components/boot-strap-components/KeyWizard.js";
+import {
+	loadConfig,
+	resetConfigCache,
+	configPath,
+} from "@phus/runtime/infra/config/index.js";
 import { resolveProfile, apiKeyForProfile } from "@phus/runtime/infra/profile.js";
-import { createManagedTerminal } from "@/runtime/terminal.js";
 
 function profileHasKey(): boolean {
 	try {
@@ -28,38 +27,39 @@ function profileHasKey(): boolean {
 	}
 }
 
-async function runBootstrapWizard(): Promise<boolean> {
-	return new Promise((resolve) => {
-		const { unmount } = inkRender(
-			React.createElement(BootstrapWizard, {
-				onDone: (success: boolean) => {
-					unmount();
-					resolve(success);
-				},
-			}),
-		);
+/**
+ * Run a wizard Component in a transient TUI session. Returns when
+ * `onDone` fires (or after `timeoutMs` as a safety net). Restores the
+ * terminal between the wizard and the next phase.
+ */
+async function runWizard(
+	factory: (onDone: (success: boolean) => void) => import("@/vendor/pi-tui/tui.js").Component,
+	timeoutMs = 60_000,
+): Promise<boolean> {
+	const managed = createManagedTerminal();
+	managed.start();
+	const tui = new TUI(managed.terminal);
+	let resolveDone: ((v: boolean) => void) | undefined;
+	const done = new Promise<boolean>((r) => {
+		resolveDone = r;
 	});
-}
-
-async function runKeyWizard(): Promise<boolean> {
-	return new Promise((resolve) => {
-		const { unmount } = inkRender(
-			React.createElement(KeyWizard, {
-				onDone: (success: boolean) => {
-					unmount();
-					resolve(success);
-				},
-			}),
-		);
-	});
+	const wizard = factory((success) => resolveDone?.(success));
+	tui.addChild(wizard);
+	tui.setFocus(wizard);
+	tui.start();
+	const safetyTimer = new Promise<boolean>((r) => setTimeout(() => r(false), timeoutMs));
+	const result = await Promise.race([done, safetyTimer]);
+	tui.stop();
+	managed.stop();
+	return result;
 }
 
 export async function startTui(): Promise<void> {
 	let config = loadConfig();
 
 	if (!config.source.present) {
-		const configured = await runBootstrapWizard();
-		if (!configured) {
+		const ok = await runWizard((onDone) => new BootstrapWizard(onDone));
+		if (!ok) {
 			// eslint-disable-next-line no-console
 			console.log(`[phus] bootstrap cancelled; create ${configPath()} manually to use the TUI.`);
 			return;
@@ -69,8 +69,8 @@ export async function startTui(): Promise<void> {
 	}
 
 	if (!profileHasKey()) {
-		const configured = await runKeyWizard();
-		if (!configured) {
+		const ok = await runWizard((onDone) => new KeyWizard(onDone));
+		if (!ok) {
 			const profile = resolveProfile(config.profileName, config.providers);
 			const envVar = profile.apiKeyEnv
 				? profile.apiKeyEnv
@@ -98,17 +98,14 @@ export async function startTui(): Promise<void> {
 	const model = agent.getCurrentModel();
 	const modelLabel = `${model.provider}/${model.id}`;
 
-	// M1: bring up the pi-tui runtime + new App skeleton.
 	const managed = createManagedTerminal();
 	managed.start();
 	const tui = new TUI(managed.terminal);
-	const app = new App({ sessionId, modelLabel });
+	const app = new App({ agent, sessionId, modelLabel });
 	tui.addChild(app);
 	app.attach(tui);
 
 	const onExit = () => {
-		// Defer the stop until the render loop has flushed so the cursor
-		// lands below the last content (mirrors TUI.stop's behavior).
 		setImmediate(() => {
 			tui.stop();
 			managed.stop();
@@ -120,16 +117,9 @@ export async function startTui(): Promise<void> {
 	logger.info("tui.started", { sessionId, model: modelLabel });
 	tui.start();
 	await new Promise<void>((resolve) => {
-		// pi-tui's TUI doesn't expose a waitUntilExit like ink does.
-		// We resolve on SIGINT/SIGTERM via `onExit` plus a polling
-		// fallback once the App requests a quit through the store.
-		const onSignal = () => {
-			resolve();
-		};
+		const onSignal = () => resolve();
 		process.once("SIGINT", onSignal);
 		process.once("SIGTERM", onSignal);
-		// The store's request_quit action will be wired in M3 — until
-		// then, the only exit path is SIGINT/SIGTERM.
 	});
 	managed.stop();
 	await handle.dispose();

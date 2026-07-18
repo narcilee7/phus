@@ -1,7 +1,7 @@
 {
 	"name": "@phus/tui",
 	"version": "0.1.0",
-	"description": "Phus terminal UI: ink-based chat interface with pi-tui runtime primitives (paste-burst, sync-output, terminal modes).",
+	"description": "Phus terminal UI: pi-tui based chat interface (vendored @mariozechner/pi-tui primitives, no React, no ink).",
 	"license": "ISC",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -30,10 +30,8 @@
 		"diff": "^9.0.0",
 		"fuse.js": "^7.5.0",
 		"get-east-asian-width": "1.6.0",
-		"ink": "^6.8.0",
 		"marked": "^18.0.6",
 		"prismjs": "^1.30.0",
-		"react": "^19.2.7",
 		"yaml": "^2.9.0"
 	},
 	"engines": {
@@ -41,7 +39,6 @@
 	},
 	"devDependencies": {
 		"@types/node": "^26.1.1",
-		"@types/prismjs": "^1.26.6",
-		"ink-testing-library": "4.0.0"
+		"@types/prismjs": "^1.26.6"
 	}
 }

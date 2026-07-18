@@ -1,14 +1,29 @@
 // packages/tui/scripts/smoke-app-m1.ts
-// M1 verification: bring up the new pi-tui-based App and assert the
-// frame contains the Header title and StatusBar default hint. We
-// don't need a real PhusAgent — App's M1 surface only reads
-// sessionId + modelLabel for the title.
+// M1+M2 verification: bring up the pi-tui-based App with a stub
+// agent and assert the frame contains the Header title, StatusBar
+// default hint, and the chat viewport's empty-state placeholder.
 //
 // Run: pnpm --filter @phus/tui exec tsx scripts/smoke-app-m1.ts
 
 import { TUI } from "../src/vendor/pi-tui/index.js";
-import { App } from "../src/App.js";
+import { App, type AppDeps } from "../src/App.js";
 import { createManagedTerminal } from "../src/runtime/terminal.js";
+import type { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
+
+function stubAgent(): PhusAgent {
+	// The methods App.attach calls on the agent are all no-ops for the
+	// purpose of this smoke — we only verify rendering, not event flow.
+	return {
+		subscribeToAgentEvents: () => () => {},
+		subscribeToPlanEvents: () => () => {},
+		setToolPermissionHandler: () => {},
+		replayTape: () => [],
+		getTapeTotalEntries: () => 0,
+		getSkillCount: () => 0,
+		getMessageCount: () => 0,
+		getAutonomyGate: () => ({ decide: async () => "auto" as const }),
+	} as unknown as PhusAgent;
+}
 
 async function main(): Promise<void> {
 	const captured: string[] = [];
@@ -22,7 +37,12 @@ async function main(): Promise<void> {
 	const managed = createManagedTerminal({ altScreen: false, syncOutput: true });
 	managed.start();
 	const tui = new TUI(managed.terminal);
-	const app = new App({ sessionId: "tui:user", modelLabel: "anthropic/claude-sonnet-4-5" });
+	const deps: AppDeps = {
+		agent: stubAgent(),
+		sessionId: "tui:user",
+		modelLabel: "anthropic/claude-sonnet-4-5",
+	};
+	const app = new App(deps);
 	tui.addChild(app);
 	app.attach(tui);
 
@@ -33,10 +53,10 @@ async function main(): Promise<void> {
 
 	process.stdout.write = originalWrite;
 	const frame = captured.join("");
-	const expected = ["Phus", "tui:user", "Ctrl+C quit", "chat viewport"];
+	const expected = ["Phus", "tui:user", "Ctrl+C quit", "type to start"];
 	const missing = expected.filter((s) => !frame.includes(s));
 	if (missing.length === 0) {
-		console.log("OK · M1 frame contains all expected text");
+		console.log("OK · M1+M2 frame contains all expected text");
 		process.exit(0);
 	} else {
 		console.log(`FAIL · missing: ${missing.join(", ")}`);
