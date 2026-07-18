@@ -133,6 +133,8 @@ export async function startTui(): Promise<void> {
 	managed.stop();
 	await handle.dispose();
 	logger.info("tui.exited", { sessionId });
+	// eslint-disable-next-line no-console
+	console.log("⛰  Sisyphus rests — the stone stays put.");
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]!).href) {

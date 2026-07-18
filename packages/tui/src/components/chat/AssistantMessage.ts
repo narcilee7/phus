@@ -22,15 +22,22 @@ function buildMetadataLine(model?: string, usage?: ChatItem["usage"]): string | 
 
 export class AssistantMessage implements Component {
 	private readonly item: ChatItem;
-	constructor(item: ChatItem) {
+	private readonly stoneFrame: string;
+	constructor(item: ChatItem, stoneFrame?: string) {
 		this.item = item;
+		this.stoneFrame = stoneFrame ?? "●";
 	}
 	invalidate(): void {}
 	render(width: number): string[] {
 		const out: string[] = [];
 		const peak = colorize("●", "cyan");
 		if (this.item.isStreaming) {
-			out.push(`${peak} ${colorize("streaming…", "dim", "italic")}`);
+			// The stone rolls while tokens stream in. This is a STATUS line —
+			// it must not receive the content peak below (that produced the
+			// `● ● streaming…` double bullet).
+			out.push(
+				`${colorize(this.stoneFrame, "cyan")} ${colorize("the stone rolls…", "dim", "italic")}`,
+			);
 		}
 		if (this.item.reasoning) {
 			const reasoning = this.item.reasoning.length > 120
@@ -47,8 +54,10 @@ export class AssistantMessage implements Component {
 		}
 		const meta = buildMetadataLine(this.item.model, this.item.usage);
 		if (meta) out.push(colorize(meta, "dim"));
-		// Prepend the peak to the first content line.
-		if (out.length > 0) out[0] = `${peak} ${out[0]}`;
+		// Prepend the peak to the first CONTENT line (index 0 normally,
+		// index 1 when the streaming status line occupies index 0).
+		const firstContent = this.item.isStreaming ? 1 : 0;
+		if (out.length > firstContent) out[firstContent] = `${peak} ${out[firstContent]}`;
 		return out;
 	}
 }

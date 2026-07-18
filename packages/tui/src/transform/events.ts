@@ -41,6 +41,12 @@ export function eventToAction(event: any): AppAction | null {
       return { type: "finalize_streaming" };
     case "turn_end": {
       if (event.message?.errorMessage) {
+        // User-initiated aborts already surface as "⚠ the stone slipped"
+        // from handleAbort — the trailing "Request was aborted" error is
+        // the same event from the agent's side. Don't double-report.
+        if (/abort/i.test(String(event.message.errorMessage))) {
+          return null;
+        }
         return {
           type: "add_system",
           text: `error: ${event.message.errorMessage}`,

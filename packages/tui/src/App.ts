@@ -17,6 +17,7 @@ import { PlanPanel } from "@/components/agent/PlanPanel.js";
 import { TodoPill } from "@/components/todo/TodoPill.js";
 import { PermissionPanel } from "@/components/permission/PermissionPanel.js";
 import { CommandPalette } from "@/components/command-components/CommandPalette.js";
+import { SessionsPanel } from "@/components/session-components/SessionsPanel.js";
 import { InputBox } from "@/components/input/InputBox.js";
 import {
 	HEADER_ROWS,
@@ -31,7 +32,7 @@ import {
 	DANGEROUS_TOOLS,
 } from "@/constants.js";
 import { createAppStore, type AppStore } from "@/runtime/app-state.js";
-import { Spinner } from "@/runtime/spinner.js";
+import { SisyphusAnimator } from "@/runtime/sisyphus.js";
 import { eventToAction } from "@/transform/events.js";
 import { planEventToAction, type PlanRef } from "@/transform/plan-events.js";
 import { describeMemoryAction, buildMemoryPreview } from "@/transform/memory.js";
@@ -76,9 +77,10 @@ export class App extends Container {
 	private readonly statusBar: StatusBar;
 	private readonly viewport: ChatViewport;
 	private readonly fileSnapshots = new Map<string, FileSnapshot>();
-	private readonly spinner = new Spinner();
+	private readonly animator = new SisyphusAnimator();
 	private headerStats: HeaderStats = emptyStats();
 	private lastOp = "idle";
+	private wasBusy = false;
 	private terminalRows = 24;
 	private terminalCols = 80;
 	private statsInterval: ReturnType<typeof setInterval> | undefined;
@@ -90,6 +92,7 @@ export class App extends Container {
 	private planChild?: PlanPanel;
 	private permissionChild?: PermissionPanel;
 	private paletteChild?: CommandPalette;
+	private sidebarChild?: SessionsPanel;
 	private inputBox!: InputBox;
 	private sidebarOpen = false;
 	private paletteOpen = false;
@@ -109,25 +112,38 @@ export class App extends Container {
 		this.statusBar = new StatusBar(this.modelLabel, 0, 0);
 		this.viewport = new ChatViewport({
 			items: [],
-			busy: false,
 			scrollOffset: 0,
 			hasNew: false,
-			lastOp: "idle",
 			fileSnapshots: this.fileSnapshots,
 		});
-		this.todoChild = new TodoPill([], false, "idle");
+		this.todoChild = new TodoPill([], false, this.animator);
 
 		this.addChild(this.header);
 		this.addChild(this.viewport);
 		this.addChild(this.todoChild);
 		this.addChild(this.statusBar);
 
-		this.spinner.onTick(() => this.tui?.requestRender());
+		this.animator.onTick(() => this.tui?.requestRender());
 	}
 
 	attach(tui: TUI): void {
 		this.tui = tui;
 		this.store.setRenderTrigger(() => {
+			// Drive the rolling-stone animation off busy transitions:
+			// animate at 150ms while a turn runs, freeze on idle.
+			const busyNow = this.store.getState().busy;
+			if (busyNow !== this.wasBusy) {
+				this.wasBusy = busyNow;
+				if (busyNow) this.animator.start();
+				else this.animator.stop();
+			}
+			// /subagent show dispatches request_sidebar — consume it here.
+			const sidebarRequest = this.store.getState().sidebarRequest;
+			if (sidebarRequest) {
+				if (sidebarRequest === "sessions") this.openSidebar();
+				else this.closeSidebar();
+				queueMicrotask(() => this.store.dispatch({ type: "consume_sidebar_request" }));
+			}
 			this.rebuildDynamicChildren();
 			this.invalidate();
 			tui.requestRender();
@@ -188,7 +204,43 @@ export class App extends Container {
 	}
 
 	private toggleSidebar(): void {
-		this.sidebarOpen = !this.sidebarOpen;
+		if (this.sidebarOpen) this.closeSidebar();
+		else this.openSidebar();
+	}
+
+	private openSidebar(): void {
+		if (this.sidebarOpen) return;
+		this.sidebarOpen = true;
+		const stats = this.agent.getTapeStats();
+		const panel = new SessionsPanel(
+			stats.sessions,
+			this.agent.getCurrentSessionId(),
+			(sid) => {
+				this.closeSidebar();
+				void runSlash(`/use ${sid}`, this.agent, this.store.getState(), this.store.dispatch);
+			},
+			() => this.closeSidebar(),
+		);
+		this.sidebarChild = panel;
+		this.insertBefore(this.inputBox, panel);
+		if (this.tui) {
+			this.inputBox.releaseFocus();
+			this.tui.setFocus(panel);
+		}
+		this.rebuildDynamicChildren();
+		this.invalidate();
+	}
+
+	private closeSidebar(): void {
+		this.sidebarOpen = false;
+		if (this.sidebarChild) {
+			this.removeChild(this.sidebarChild);
+			this.sidebarChild = undefined;
+		}
+		if (this.tui) {
+			this.tui.setFocus(this.inputBox);
+			this.inputBox.claimFocus();
+		}
 		this.rebuildDynamicChildren();
 		this.invalidate();
 	}
@@ -202,7 +254,9 @@ export class App extends Container {
 		const palette = new CommandPalette(
 			SLASH_COMMANDS,
 			(name) => {
-				this.inputBox.insertText(`/${name} `);
+				// Replace, don't append: picking a command from the palette
+				// means that command is what the input should become.
+				this.inputBox.setText(`/${name} `);
 				this.closePalette();
 			},
 			() => this.closePalette(),
@@ -249,11 +303,19 @@ export class App extends Container {
 			this.closePalette();
 			return;
 		}
+		if (this.sidebarOpen) {
+			this.closeSidebar();
+			return;
+		}
 		const state = this.store.getState();
 		if (state.busy) {
 			void this.agent.abort?.();
 			this.store.dispatch({ type: "set_busy", busy: false });
-			this.store.dispatch({ type: "add_system", text: "✓ aborted by user", level: "info" });
+			this.store.dispatch({
+				type: "add_system",
+				text: "⚠ the stone slipped — turn aborted",
+				level: "warn",
+			});
 		} else {
 			this.store.dispatch({ type: "request_quit" });
 		}
@@ -285,7 +347,7 @@ export class App extends Container {
 		this.agentUnsub?.();
 		this.planUnsub?.();
 		this.inputListenerUnsub?.();
-		this.spinner.stop();
+		this.animator.stop();
 		if (this.statsInterval) clearInterval(this.statsInterval);
 		this.statsInterval = undefined;
 	}
@@ -417,8 +479,9 @@ export class App extends Container {
 			this.removeChild(this.planChild);
 			this.planChild = undefined;
 		}
-		// TodoPill — refresh contents every event so busy pill is live.
-		const nextTodo = new TodoPill(state.items, state.busy, state.lastOp);
+		// TodoPill — refresh contents every event so the rolling stone and
+		// the running-tool pill stay live.
+		const nextTodo = new TodoPill(state.items, state.busy, this.animator);
 		this.replaceChildByRef(this.todoChild, nextTodo);
 		this.todoChild = nextTodo;
 	}
@@ -437,7 +500,6 @@ export class App extends Container {
 		super.invalidate();
 		this.header.invalidate();
 		this.statusBar.invalidate();
-		this.spinner.invalidate();
 		if (this.tui) {
 			// Track terminal resizes — the TUI re-renders on SIGWINCH, and
 			// the chat height math must follow or the frame overflows.
@@ -447,11 +509,10 @@ export class App extends Container {
 			const s = this.store.getState();
 			this.viewport.setDeps({
 				items: s.items,
-				busy: s.busy,
 				scrollOffset: s.scroll.offset,
 				hasNew: s.scroll.hasNew,
-				lastOp: s.lastOp,
 				fileSnapshots: this.fileSnapshots,
+				stoneFrame: this.animator.frame(),
 			});
 		}
 	}
@@ -481,6 +542,7 @@ export class App extends Container {
 				? this.measureRows(this.permissionChild, PERMISSION_ROWS)
 				: 0;
 		const paletteRows = this.paletteOpen ? this.measureRows(this.paletteChild, 0) : 0;
+		const sidebarRows = this.sidebarOpen ? this.measureRows(this.sidebarChild, 0) : 0;
 		// The editor grows as the input wraps — measure it instead of
 		// assuming INPUT_ROWS, or every extra input row pushes the frame
 		// one row past the terminal bottom.
@@ -494,12 +556,9 @@ export class App extends Container {
 				planRows -
 				todoRows -
 				permRows -
-				paletteRows,
+				paletteRows -
+				sidebarRows,
 		);
-	}
-
-	getSpinner(): Spinner {
-		return this.spinner;
 	}
 
 	getStore(): AppStore {

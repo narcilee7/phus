@@ -67,6 +67,15 @@ describe("eventToAction", () => {
     expect(a).toEqual({ type: "add_system", text: "error: boom", level: "error" });
   });
 
+  it("suppresses turn_end abort errors (handleAbort already reports them)", () => {
+    expect(
+      eventToAction({ type: "turn_end", message: { errorMessage: "Request was aborted" } }),
+    ).toBeNull();
+    expect(
+      eventToAction({ type: "turn_end", message: { errorMessage: "The operation was aborted" } }),
+    ).toBeNull();
+  });
+
   it("maps turn_end usage → set_assistant_metadata", () => {
     const a = eventToAction({
       type: "turn_end",

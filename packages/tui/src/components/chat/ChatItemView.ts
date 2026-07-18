@@ -16,6 +16,7 @@ export class ChatItemView implements Component {
 	constructor(
 		private readonly item: ChatItem,
 		private readonly snapshot?: FileSnapshot,
+		private readonly stoneFrame?: string,
 	) {}
 
 	invalidate(): void {}
@@ -25,7 +26,7 @@ export class ChatItemView implements Component {
 			case "user":
 				return new UserMessage(this.item.text ?? "").render(width);
 			case "assistant":
-				return new AssistantMessage(this.item).render(width);
+				return new AssistantMessage(this.item, this.stoneFrame).render(width);
 			case "tool_call":
 				return new ToolCallCard({ item: this.item, snapshot: this.snapshot }).render(width);
 			case "tool_result":

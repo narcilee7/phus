@@ -1,9 +1,10 @@
 // src/tui/components/chat/ChatViewport.ts
 // Bottom-anchored scrollable viewport for chat history. Reads
-// `items`, `busy`, `scrollOffset`, `hasNew`, `lastOp`, `fileSnapshots`
+// `items`, `scrollOffset`, `hasNew`, `stoneFrame`, `fileSnapshots`
 // from props (driven by the store). Renders each item via ChatItemView.
 //
-// M2 surface: read-only. M3 wires keyboard scrolling (PgUp/PgDn/arrows).
+// The viewport renders chat content ONLY — the busy/rolling-stone
+// indicator lives in TodoPill (one busy surface, no duplicates).
 
 import type { Component } from "@/vendor/pi-tui/tui.js";
 import type { ChatItem, AppState } from "@/state/state.js";
@@ -14,11 +15,11 @@ import { colorize, padRight, sliceByColumn, visibleWidth } from "@/runtime/text-
 
 export interface ChatViewportDeps {
 	readonly items: ChatItem[];
-	readonly busy: boolean;
 	readonly scrollOffset: number;
 	readonly hasNew: boolean;
-	readonly lastOp: string;
 	readonly fileSnapshots: Map<string, FileSnapshot>;
+	/** Current rolling-stone frame, shown on the streaming status line. */
+	readonly stoneFrame?: string;
 }
 
 export class ChatViewport implements Component {
@@ -43,9 +44,9 @@ export class ChatViewport implements Component {
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		const { items, scrollOffset, hasNew, busy, lastOp } = this.deps;
+		const { items, scrollOffset, hasNew } = this.deps;
 		if (items.length === 0) {
-			return this.emptyState(width, busy, lastOp);
+			return this.emptyState(width);
 		}
 
 		// Render each item; remember rendered heights.
@@ -53,7 +54,7 @@ export class ChatViewport implements Component {
 		const heights: number[] = [];
 		for (const item of items) {
 			const snap = this.lookupSnapshot(item);
-			const view = new ChatItemView(item, snap);
+			const view = new ChatItemView(item, snap, this.deps.stoneFrame);
 			const rows = view.render(width);
 			rendered.push({ rows, item });
 			heights.push(rows.length);
@@ -77,13 +78,9 @@ export class ChatViewport implements Component {
 			if (out.length >= this.height) break;
 		}
 
-		// Fill remaining rows; the last row shows a busy spinner.
+		// Fill remaining rows with blanks (bottom-anchored content).
 		while (out.length < this.height) {
-			if (busy && out.length === this.height - 1) {
-				out.push(padRight(colorize(`⠋ ${lastOp}`, "cyan"), width));
-			} else {
-				out.push(padRight("", width));
-			}
+			out.push(padRight("", width));
 		}
 
 		// "New messages" pill if scrolled up.
@@ -96,15 +93,20 @@ export class ChatViewport implements Component {
 		return out.slice(0, this.height);
 	}
 
-	private emptyState(width: number, busy: boolean, lastOp: string): string[] {
+	private emptyState(width: number): string[] {
 		const out: string[] = [];
-		const pad = Math.max(0, Math.floor((this.height - 2) / 2));
+		// Sisyphus vignette: the stone, the climb, the tagline.
+		const art = [
+			centerText(colorize("  ╱╲  ", "dim"), width),
+			centerText(colorize("●╱  ╲", "dim"), width),
+			centerText(colorize("· type to start ·", "dim"), width),
+			centerText(colorize("Push the stone up the mountain.", "dim"), width),
+		];
+		const pad = Math.max(0, Math.floor((this.height - art.length) / 2));
 		for (let i = 0; i < pad; i++) out.push(padRight("", width));
-		out.push(padRight(centerText(colorize("· type to start ·", "dim"), width), width));
-		if (busy) out.push(padRight(centerText(colorize(`⠋ ${lastOp}`, "cyan"), width), width));
-		else out.push(padRight(centerText(colorize("Push the stone up the mountain.", "dim"), width), width));
+		for (const line of art) out.push(padRight(line, width));
 		while (out.length < this.height) out.push(padRight("", width));
-		return out;
+		return out.slice(0, this.height);
 	}
 
 	private lookupSnapshot(item: ChatItem): FileSnapshot | undefined {

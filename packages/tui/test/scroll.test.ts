@@ -47,13 +47,11 @@ describe("bottomAnchoredSlice", () => {
 });
 
 describe("ChatViewport windowing", () => {
-	const render = (items: ChatItem[], height: number, scrollOffset = 0, busy = false) => {
+	const render = (items: ChatItem[], height: number, scrollOffset = 0) => {
 		const viewport = new ChatViewport({
 			items,
-			busy,
 			scrollOffset,
 			hasNew: false,
-			lastOp: "idle",
 			fileSnapshots: new Map(),
 		});
 		viewport.setHeight(height);

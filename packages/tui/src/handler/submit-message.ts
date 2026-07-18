@@ -48,7 +48,7 @@ export async function submitMessage(text: string, ctx: SubmitContext): Promise<S
 
   ctx.dispatch({ type: "scroll_bottom" });
   ctx.dispatch({ type: "set_busy", busy: true });
-  ctx.dispatch({ type: "set_last_op", op: "thinking…" });
+  ctx.dispatch({ type: "set_last_op", op: "pushing the stone…" });
   ctx.dispatch({ type: "add_user", text });
 
   const content = await expandFileMentions(text, ctx);
