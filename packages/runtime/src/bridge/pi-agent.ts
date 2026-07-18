@@ -15,7 +15,7 @@ import {
   type AfterToolCallContext,
   type AfterToolCallResult,
 } from "@mariozechner/pi-agent-core";
-import { type Model } from "@mariozechner/pi-ai";
+import { streamSimple, type Model } from "@mariozechner/pi-ai";
 import type { Envelope, Outbound } from "@/types/channel/index.js";
 import { Planner } from '@/core/runtime/plan/planner';
 import type { Plan, PlanStatus, Step, StepStatus } from "@/core/runtime/plan/types.js";
@@ -382,17 +382,22 @@ export class PhusAgent implements PhusAgentFacade {
       // (main loop + retries) is fuse-checked before sending and carries
       // an HTTP timeout; failures are classified back into the fuse so
       // a 402 anywhere opens the billing fuse for everyone.
-      streamFn: async (model, context, options) => {
+      streamFn: async (model, context, options = {}) => {
         const fuse = getLlmFuse();
         fuse.check(`${model.provider}/${model.id}`);
         const timeoutMs = loadConfig().robustness.llmTimeoutMs;
-        const response = await streamSimple(model, context, { ...options, timeoutMs }).catch(
-          (err: unknown) => {
-            fuse.report(err);
-            throw err;
-          },
-        );
-        return (async function* () {
+        let response;
+        try {
+          response = await streamSimple(model, context, { ...options, timeoutMs });
+        } catch (e) {
+          fuse.report(e)
+          throw e
+        };
+        // Wrap the response async-iterator so we can report errors to the
+        // fuse while preserving any extra stream methods/properties the
+        // underlying streamSimple implementation exposes (e.g. isComplete,
+        // extractResult, queue, waiting).
+        const gen = (async function* () {
           try {
             for await (const event of response) yield event;
           } catch (err) {
@@ -400,6 +405,21 @@ export class PhusAgent implements PhusAgentFacade {
             throw err;
           }
         })();
+        // Copy any enumerable properties from the original response onto
+        // the generated async-iterator so the returned object satisfies
+        // AssistantMessageEventStream shape expected by pi-agent-core.
+        try {
+          for (const k of Object.keys(response as any)) {
+            try {
+              (gen as any)[k] = (response as any)[k];
+            } catch (_) {
+              // ignore property copy failures
+            }
+          }
+        } catch (_) {
+          // ignore
+        }
+        return gen as any;
       },
       transformContext: async (messages) => this.injectContext(messages),
       beforeToolCall: async (ctx, signal) => this.beforeToolCall(ctx, signal),
@@ -766,7 +786,7 @@ export class PhusAgent implements PhusAgentFacade {
       } else {
         await this.piAgent.prompt(userMsg);
         const lastAssistant = [...this.piAgent.state.messages]
-          .reverse()
+          .toReversed()
           .find((m) => m.role === "assistant");
         modelOutput = extractText(lastAssistant);
       }
