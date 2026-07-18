@@ -15,6 +15,7 @@ import { StatusBar } from "@/components/base/StatusBar.js";
 import { ChatViewport } from "@/components/chat/ChatViewport.js";
 import { PlanPanel } from "@/components/agent/PlanPanel.js";
 import { TodoPill } from "@/components/todo/TodoPill.js";
+import { PermissionPanel } from "@/components/permission/PermissionPanel.js";
 import {
 	HEADER_ROWS,
 	STATUS_ROWS,
@@ -22,6 +23,7 @@ import {
 	STATS_TICK_MS,
 	PLAN_ROWS_COLLAPSED,
 	TODO_ROWS,
+	PERMISSION_ROWS,
 	DANGEROUS_TOOLS,
 } from "@/constants.js";
 import { createAppStore, type AppStore } from "@/runtime/app-state.js";
@@ -30,6 +32,10 @@ import { eventToAction } from "@/transform/events.js";
 import { planEventToAction, type PlanRef } from "@/transform/plan-events.js";
 import { describeMemoryAction, buildMemoryPreview } from "@/transform/memory.js";
 import { parseMemoryAction } from "@phus/runtime/infra/meta/index.js";
+import { runSlash } from "@/handler/commands/commands.js";
+import { buildShortcutListener, type GlobalShortcutCallbacks } from "@/runtime/keybindings.js";
+import { submitMessage } from "@/handler/submit-message.js";
+import { tuiChannel } from "@/channel.js";
 import type { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import type { AppState, PermissionRequest } from "@/state/state.js";
 
@@ -75,6 +81,12 @@ export class App extends Container {
 	private viewportHeight = MIN_CHAT_HEIGHT;
 	private todoChild: TodoPill;
 	private planChild?: PlanPanel;
+	private permissionChild?: PermissionPanel;
+	private sidebarOpen = false;
+	private paletteOpen = false;
+	private planExpanded = false;
+	private inputListenerUnsub: (() => void) | undefined;
+	private inputBuffer = "";
 
 	constructor(deps: AppDeps) {
 		super();
@@ -134,11 +146,83 @@ export class App extends Container {
 		this.agent.setToolPermissionHandler((req) => this.permissionGate(req));
 		this.tickStats();
 		this.statsInterval = setInterval(() => this.tickStats(), STATS_TICK_MS);
+
+		const shortcuts: GlobalShortcutCallbacks = {
+			onToggleSidebar: () => this.toggleSidebar(),
+			onOpenPalette: () => this.openPalette(),
+			onClear: () => this.store.dispatch({ type: "clear_items" }),
+			onAbort: () => this.handleAbort(),
+			onQuit: () => this.store.dispatch({ type: "request_quit" }),
+			onTogglePlan: () => this.togglePlan(),
+			onUndo: () => void runSlash("/undo", this.agent, this.store.getState(), this.store.dispatch),
+			onScrollUp: (lines) => this.store.dispatch({ type: "scroll_up", lines }),
+			onScrollDown: (lines) => this.store.dispatch({ type: "scroll_down", lines }),
+			onScrollBottom: () => this.store.dispatch({ type: "scroll_bottom" }),
+		};
+		const listener = buildShortcutListener(shortcuts, () => this.computeChatHeight());
+		this.inputListenerUnsub = tui.addInputListener(listener);
+	}
+
+	private toggleSidebar(): void {
+		this.sidebarOpen = !this.sidebarOpen;
+		this.rebuildDynamicChildren();
+		this.invalidate();
+	}
+
+	private openPalette(): void {
+		this.paletteOpen = !this.paletteOpen;
+		this.rebuildDynamicChildren();
+		this.invalidate();
+	}
+
+	private togglePlan(): void {
+		if (!this.store.getState().plan) return;
+		this.planExpanded = !this.planExpanded;
+		if (this.planChild) {
+			const next = new PlanPanel(this.store.getState().plan!, this.planExpanded);
+			this.replaceChildByRef(this.planChild, next);
+			this.planChild = next;
+		}
+		this.invalidate();
+	}
+
+	private handleAbort(): void {
+		const state = this.store.getState();
+		if (state.busy) {
+			void this.agent.abort?.();
+			this.store.dispatch({ type: "set_busy", busy: false });
+			this.store.dispatch({ type: "add_system", text: "✓ aborted by user", level: "info" });
+		} else {
+			this.store.dispatch({ type: "request_quit" });
+		}
+	}
+
+	/** Submit free-form user input. M4 will route through the Editor. */
+	submitUserInput(text: string): void {
+		const state = this.store.getState();
+		if (!text.trim()) return;
+		if (text.startsWith("/") || text.startsWith(",")) {
+			void (async () => {
+				const result = await runSlash(text, this.agent, state, this.store.dispatch);
+				if (result === "quit") this.store.dispatch({ type: "request_quit" });
+			})();
+			return;
+		}
+		void submitMessage(text, {
+			agent: this.agent,
+			state,
+			dispatch: this.store.dispatch,
+			setInput: () => {},
+			channel: (d, getItems) => tuiChannel(d, () => ({ items: getItems() })),
+			getItems: () => this.store.getState().items,
+			clearChat: () => this.store.dispatch({ type: "clear_items" }),
+		});
 	}
 
 	detach(): void {
 		this.agentUnsub?.();
 		this.planUnsub?.();
+		this.inputListenerUnsub?.();
 		if (this.statsInterval) clearInterval(this.statsInterval);
 		this.statsInterval = undefined;
 	}
@@ -231,10 +315,26 @@ export class App extends Container {
 
 	private rebuildDynamicChildren(): void {
 		const state = this.store.getState();
+		// PermissionPanel — show only when there's a pending request and
+		// no sidebar / palette overlay.
+		const wantPermission = !!state.permissionQueue[0] && !this.paletteOpen && !this.sidebarOpen;
+		if (wantPermission && state.permissionQueue[0]) {
+			if (!this.permissionChild) {
+				const next = new PermissionPanel(state.permissionQueue[0], (allow, remember) =>
+					this.store.dispatch({ type: "resolve_permission", allow, remember }),
+				);
+				this.insertBefore(this.statusBar, next);
+				this.permissionChild = next;
+				if (this.tui) this.tui.setFocus(next);
+			}
+		} else if (this.permissionChild) {
+			this.removeChild(this.permissionChild);
+			this.permissionChild = undefined;
+		}
 		// PlanPanel — show only when there is a plan.
 		if (state.plan) {
-			if (!this.planChild || this.planChild["plan"] !== state.plan) {
-				const next = new PlanPanel(state.plan, false);
+			if (!this.planChild || (this.planChild as unknown as { plan: unknown }).plan !== state.plan) {
+				const next = new PlanPanel(state.plan, this.planExpanded);
 				if (this.planChild) this.replaceChildByRef(this.planChild, next);
 				else this.insertBefore(this.todoChild, next);
 				this.planChild = next;
@@ -286,9 +386,13 @@ export class App extends Container {
 			state.items.some((it) => it.kind === "tool_call" && it.isError === undefined)
 				? TODO_ROWS
 				: 0;
+		const permRows =
+			state.permissionQueue[0] && !this.paletteOpen && !this.sidebarOpen
+				? PERMISSION_ROWS
+				: 0;
 		return Math.max(
 			MIN_CHAT_HEIGHT,
-			this.terminalRows - HEADER_ROWS - STATUS_ROWS - planRows - todoRows,
+			this.terminalRows - HEADER_ROWS - STATUS_ROWS - planRows - todoRows - permRows,
 		);
 	}
 
