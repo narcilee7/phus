@@ -1,0 +1,44 @@
+// src/tui/components/chat/ChatItemView.ts
+// Maps a ChatItem to its rendered string[]. Switches on `kind` and
+// delegates to the appropriate sub-component. The viewport passes a
+// snapshot map so file_write results can show a diff against the
+// pre-write contents.
+
+import type { Component } from "@/vendor/pi-tui/tui.js";
+import type { ChatItem } from "@/state/state.js";
+import type { FileSnapshot } from "@/components/chat/ToolResultCard.js";
+import { UserMessage } from "@/components/chat/UserMessage.js";
+import { AssistantMessage } from "@/components/chat/AssistantMessage.js";
+import { ToolCallCard } from "@/components/chat/ToolCallCard.js";
+import { colorize } from "@/runtime/text-utils.js";
+
+export class ChatItemView implements Component {
+	constructor(
+		private readonly item: ChatItem,
+		private readonly snapshot?: FileSnapshot,
+	) {}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		switch (this.item.kind) {
+			case "user":
+				return new UserMessage(this.item.text ?? "").render(width);
+			case "assistant":
+				return new AssistantMessage(this.item).render(width);
+			case "tool_call":
+				return new ToolCallCard({ item: this.item, snapshot: this.snapshot }).render(width);
+			case "tool_result":
+				// Legacy kind kept in the union for forward compat. Render
+				// the same as a tool_call with snapshot lookup.
+				return new ToolCallCard({ item: this.item, snapshot: this.snapshot }).render(width);
+			case "system": {
+				const level = this.item.level ?? "info";
+				const color = level === "error" ? "red" : level === "warn" ? "yellow" : "gray";
+				return [colorize(`· ${this.item.text ?? ""}`, color)];
+			}
+			default:
+				return [colorize(`(unknown item kind: ${(this.item as { kind: string }).kind})`, "red")];
+		}
+	}
+}
