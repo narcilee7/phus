@@ -104,8 +104,9 @@ export async function runOnce(prompt: string, profileName?: string): Promise<voi
   if (!hasText) {
     process.stderr.write(
       "\n⚠️  Agent returned no text. Common causes:\n" +
-        "   • Wrong PHUS_MODEL_ID (gateway doesn't recognize the model name)\n" +
-        "   • Wrong PHUS_BASE_URL or DEEPSEEK_API_KEY\n" +
+        "   • Wrong provider/modelId in $PHUS_HOME/phus.config.yaml\n" +
+        "   • Missing or wrong API key (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY)\n" +
+        "   • Wrong PHUS_PROFILE or --profile <name>\n" +
         "   • Provider rejected the request (check `phus logs --follow`)\n\n",
     );
   }

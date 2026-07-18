@@ -10,7 +10,7 @@ import type { FileSnapshot } from "@/components/chat/ToolResultCard.js";
 import { UserMessage } from "@/components/chat/UserMessage.js";
 import { AssistantMessage } from "@/components/chat/AssistantMessage.js";
 import { ToolCallCard } from "@/components/chat/ToolCallCard.js";
-import { colorize } from "@/runtime/text-utils.js";
+import { colorize, wrapTextWithAnsi } from "@/runtime/text-utils.js";
 
 export class ChatItemView implements Component {
 	constructor(
@@ -35,7 +35,15 @@ export class ChatItemView implements Component {
 			case "system": {
 				const level = this.item.level ?? "info";
 				const color = level === "error" ? "red" : level === "warn" ? "yellow" : "gray";
-				return [colorize(`· ${this.item.text ?? ""}`, color)];
+				// Multi-line notices (e.g. /help, ,help, /health JSON) must be
+				// split + wrapped here: a single string with embedded \n counts
+				// as one row in the viewport but occupies many on screen, which
+				// corrupts the differential frame.
+				const wrapped = wrapTextWithAnsi(
+					colorize(this.item.text ?? "", color),
+					Math.max(1, width - 2),
+				);
+				return wrapped.map((line, i) => (i === 0 ? colorize("· ", color) + line : "  " + line));
 			}
 			default:
 				return [colorize(`(unknown item kind: ${(this.item as { kind: string }).kind})`, "red")];

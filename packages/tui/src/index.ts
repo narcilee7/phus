@@ -10,6 +10,7 @@ import { KeyWizard } from "@/components/wizard/KeyWizard.js";
 import { createManagedTerminal } from "@/runtime/terminal.js";
 import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import { logger } from "@phus/runtime/infra/logging.js";
+import { pathToFileURL } from "node:url";
 import {
 	loadConfig,
 	resetConfigCache,
@@ -101,27 +102,43 @@ export async function startTui(): Promise<void> {
 	const managed = createManagedTerminal();
 	managed.start();
 	const tui = new TUI(managed.terminal);
-	const app = new App({ agent, sessionId, modelLabel });
+
+	// Resolved by an OS signal OR by the in-app quit path (/quit, /exit,
+	// idle Ctrl+C → App.onQuit). Promise resolution is idempotent.
+	let resolveMain!: () => void;
+	const mainDone = new Promise<void>((resolve) => {
+		resolveMain = resolve;
+	});
+	const app = new App({
+		agent,
+		sessionId,
+		modelLabel,
+		onQuit: () => resolveMain(),
+	});
 	tui.addChild(app);
 	app.attach(tui);
 
-	const onExit = () => {
-		setImmediate(() => {
-			tui.stop();
-			managed.stop();
-		});
-	};
-	process.once("SIGINT", onExit);
-	process.once("SIGTERM", onExit);
+	const onSignal = () => resolveMain();
+	process.once("SIGINT", onSignal);
+	process.once("SIGTERM", onSignal);
 
 	logger.info("tui.started", { sessionId, model: modelLabel });
 	tui.start();
-	await new Promise<void>((resolve) => {
-		const onSignal = () => resolve();
-		process.once("SIGINT", onSignal);
-		process.once("SIGTERM", onSignal);
-	});
+	await mainDone;
+	// detach BEFORE stopping the terminal: it clears the stats interval
+	// and unsubscribes listeners — leftover timers would keep the event
+	// loop alive and the process would never exit after /quit.
+	app.detach();
+	tui.stop();
 	managed.stop();
 	await handle.dispose();
 	logger.info("tui.exited", { sessionId });
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
+	startTui().catch((err) => {
+		// eslint-disable-next-line no-console
+		console.error("[phus] fatal:", err);
+		process.exit(1);
+	});
 }

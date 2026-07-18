@@ -8,6 +8,10 @@
 // M4: replaces the old MultiLineInput.tsx (React/ink) entirely.
 
 import { Editor, type EditorTheme } from "@/vendor/pi-tui/components/editor.js";
+import {
+	CombinedAutocompleteProvider,
+	type SlashCommand,
+} from "@/vendor/pi-tui/autocomplete.js";
 import type { Component, Focusable, TUI } from "@/vendor/pi-tui/tui.js";
 
 export interface InputBoxOptions {
@@ -15,6 +19,10 @@ export interface InputBoxOptions {
 	readonly onSubmit: (text: string) => void;
 	readonly onChange?: (text: string) => void;
 	readonly placeholder?: string;
+	/** Slash commands shown in the `/` autocomplete dropdown. */
+	readonly slashCommands?: SlashCommand[];
+	/** Base path for `@file` / path completion (defaults to cwd). */
+	readonly basePath?: string;
 }
 
 export class InputBox implements Component, Focusable {
@@ -40,6 +48,14 @@ export class InputBox implements Component, Focusable {
 			}
 		};
 		if (opts.onChange) this.editor.onChange = opts.onChange;
+		// Wire the `/` command dropdown + `@file` path completion — the
+		// editor supports it natively, it just never had a provider.
+		this.editor.setAutocompleteProvider(
+			new CombinedAutocompleteProvider(
+				opts.slashCommands ?? [],
+				opts.basePath ?? process.cwd(),
+			),
+		);
 	}
 
 	focus(): void {

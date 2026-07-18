@@ -10,7 +10,7 @@ import type { ChatItem, AppState } from "@/state/state.js";
 import { ChatItemView } from "@/components/chat/ChatItemView.js";
 import type { FileSnapshot } from "@/components/chat/ToolResultCard.js";
 import { bottomAnchoredSlice } from "@/runtime/scroll.js";
-import { colorize, padRight, sliceByColumn } from "@/runtime/text-utils.js";
+import { colorize, padRight, sliceByColumn, visibleWidth } from "@/runtime/text-utils.js";
 
 export interface ChatViewportDeps {
 	readonly items: ChatItem[];
@@ -59,19 +59,28 @@ export class ChatViewport implements Component {
 			heights.push(rows.length);
 		}
 
-		const { startIndex, totalRows } = bottomAnchoredSlice(items, heights, this.height, scrollOffset);
-		const slice = rendered.slice(startIndex);
+		const { startIndex, skipRows } = bottomAnchoredSlice(items, heights, this.height, scrollOffset);
 
+		// Flatten the window's items, drop the partial rows above the
+		// window's top edge, then take exactly `height` rows.
 		const out: string[] = [];
-		for (const { rows } of slice) {
-			for (const line of rows) out.push(padRight(line, width));
+		let skipping = skipRows;
+		for (const { rows } of rendered.slice(startIndex)) {
+			for (const line of rows) {
+				if (skipping > 0) {
+					skipping--;
+					continue;
+				}
+				out.push(padRight(line, width));
+				if (out.length >= this.height) break;
+			}
 			if (out.length >= this.height) break;
 		}
 
-		// Bottom anchor: if there are leftover rows and busy, fill with spinner.
+		// Fill remaining rows; the last row shows a busy spinner.
 		while (out.length < this.height) {
 			if (busy && out.length === this.height - 1) {
-				out[out.length - 1] = padRight(colorize(`⠋ ${lastOp}`, "cyan"), width);
+				out.push(padRight(colorize(`⠋ ${lastOp}`, "cyan"), width));
 			} else {
 				out.push(padRight("", width));
 			}
@@ -81,13 +90,9 @@ export class ChatViewport implements Component {
 		if (hasNew && scrollOffset > 0) {
 			const pill = colorize(" ↓ new messages ", "inverse");
 			const lastIdx = this.height - 1;
-			const base = out[lastIdx] ?? "";
-			const centered = sliceByColumn(centerText(pill, width), 0, width);
-			out[lastIdx] = centered;
-			void base;
+			out[lastIdx] = sliceByColumn(centerText(pill, width), 0, width);
 		}
 
-		void totalRows;
 		return out.slice(0, this.height);
 	}
 
@@ -97,7 +102,7 @@ export class ChatViewport implements Component {
 		for (let i = 0; i < pad; i++) out.push(padRight("", width));
 		out.push(padRight(centerText(colorize("· type to start ·", "dim"), width), width));
 		if (busy) out.push(padRight(centerText(colorize(`⠋ ${lastOp}`, "cyan"), width), width));
-		else out.push(padRight("", width));
+		else out.push(padRight(centerText(colorize("Push the stone up the mountain.", "dim"), width), width));
 		while (out.length < this.height) out.push(padRight("", width));
 		return out;
 	}
@@ -111,7 +116,9 @@ export class ChatViewport implements Component {
 }
 
 function centerText(s: string, width: number): string {
-	const visible = [...s].length;
+	// visibleWidth ignores ANSI escapes; string length would count them
+	// and shove the pill off-center (or off-screen for inverse labels).
+	const visible = visibleWidth(s);
 	const v = Math.max(0, Math.floor((width - visible) / 2));
 	return " ".repeat(v) + s;
 }

@@ -6,6 +6,9 @@ import type { ChatItem } from "@/state/state.js";
 export interface ScrollPosition {
 	/** Index into the rendered item list that the top row corresponds to. */
 	startIndex: number;
+	/** Rows to skip inside `items[startIndex]` so the window's top edge
+	 *  aligns to the middle of that item. 0 when the boundary is exact. */
+	skipRows: number;
 	/** Total number of rows the rendered item list would occupy if the
 	 *  viewport were tall enough. Used for "↑ N more" indicators. */
 	totalRows: number;
@@ -15,11 +18,12 @@ export interface ScrollPosition {
  * Compute which items fit into a viewport of `height` rows, anchored to
  * the bottom, given a scroll offset (lines from the bottom).
  *
- *   const { startIndex, totalRows } = bottomAnchoredSlice(items, itemHeights, height, offset);
+ *   const { startIndex, skipRows, totalRows } = bottomAnchoredSlice(items, itemHeights, height, offset);
  *
- * `itemHeights[i]` is the rendered height (rows) of item `i`. Returns
- * `{ startIndex, totalRows }` so the caller can render `items.slice(startIndex)`
- * and report "scroll position X / totalRows" in the UI.
+ * `itemHeights[i]` is the rendered height (rows) of item `i`. The visible
+ * window is the row range `[totalRows - height - offset, totalRows - offset)`;
+ * `startIndex` + `skipRows` locate the window's top edge inside the item
+ * list (item-granular, so partial items at the edge are expected).
  */
 export function bottomAnchoredSlice(
 	items: ChatItem[],
@@ -28,33 +32,31 @@ export function bottomAnchoredSlice(
 	offset: number,
 ): ScrollPosition {
 	const total = itemHeights.reduce((a, h) => a + h, 0);
-	if (height <= 0 || items.length === 0) {
-		return { startIndex: 0, totalRows: total };
-	}
-	if (total <= height) {
-		// Everything fits — no scrolling needed.
-		return { startIndex: 0, totalRows: total };
+	if (height <= 0 || items.length === 0 || total <= height) {
+		// Everything fits (or nothing to show) — no scrolling needed.
+		return { startIndex: 0, skipRows: 0, totalRows: total };
 	}
 
-	// Walk from the bottom, accumulating rows until we've filled `height`.
-	// Then optionally back up by `offset` rows.
-	const overshoot = total - height - offset;
-	if (overshoot <= 0) {
-		// Scrolled to (or past) the bottom of the visible window.
-		return { startIndex: 0, totalRows: total };
-	}
-
+	// Rows the window must cover, measured up from the bottom of the
+	// content: the viewport height plus the rows scrolled away below.
+	const want = height + Math.max(0, offset);
 	let rowsFromBottom = 0;
-	let start = items.length;
+	let start = 0;
 	for (let i = items.length - 1; i >= 0; i--) {
 		rowsFromBottom += itemHeights[i] ?? 0;
-		if (rowsFromBottom > overshoot) {
+		if (rowsFromBottom >= want) {
 			start = i;
-			break;
+			// Skip the rows of `items[i]` that lie above the window's top
+			// edge. Negative (scrolled past the top) clamps to 0.
+			return {
+				startIndex: start,
+				skipRows: Math.max(0, rowsFromBottom - want),
+				totalRows: total,
+			};
 		}
-		start = i;
 	}
-	return { startIndex: Math.max(0, start), totalRows: total };
+	// Scrolled past the very top — show from the first item.
+	return { startIndex: 0, skipRows: 0, totalRows: total };
 }
 
 /** Render a single visual item (item + leading separator) into rows. */

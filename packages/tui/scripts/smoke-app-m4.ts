@@ -22,7 +22,6 @@ function stubAgent(): PhusAgent {
 		getAutonomyGate: () => ({ decide: async () => "auto" as const }),
 		abort: () => {},
 		getDiagnostics: () => ({}),
-		getMessageCount: () => 0,
 		getSessionCount: () => 0,
 	} as unknown as PhusAgent;
 }

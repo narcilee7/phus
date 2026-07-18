@@ -16,13 +16,16 @@ import { ChatViewport } from "@/components/chat/ChatViewport.js";
 import { PlanPanel } from "@/components/agent/PlanPanel.js";
 import { TodoPill } from "@/components/todo/TodoPill.js";
 import { PermissionPanel } from "@/components/permission/PermissionPanel.js";
+import { CommandPalette } from "@/components/command-components/CommandPalette.js";
 import { InputBox } from "@/components/input/InputBox.js";
 import {
 	HEADER_ROWS,
 	STATUS_ROWS,
+	INPUT_ROWS,
 	MIN_CHAT_HEIGHT,
 	STATS_TICK_MS,
 	PLAN_ROWS_COLLAPSED,
+	PLAN_ROWS_EXPANDED,
 	TODO_ROWS,
 	PERMISSION_ROWS,
 	DANGEROUS_TOOLS,
@@ -33,7 +36,7 @@ import { eventToAction } from "@/transform/events.js";
 import { planEventToAction, type PlanRef } from "@/transform/plan-events.js";
 import { describeMemoryAction, buildMemoryPreview } from "@/transform/memory.js";
 import { parseMemoryAction } from "@phus/runtime/infra/meta/index.js";
-import { runSlash } from "@/handler/commands/commands.js";
+import { runSlash, SLASH_COMMANDS } from "@/handler/commands/commands.js";
 import { buildShortcutListener, type GlobalShortcutCallbacks } from "@/runtime/keybindings.js";
 import { submitMessage } from "@/handler/submit-message.js";
 import { tuiChannel } from "@/channel.js";
@@ -44,6 +47,8 @@ export interface AppDeps {
 	readonly agent: PhusAgent;
 	readonly sessionId: string;
 	readonly modelLabel: string;
+	/** Fired when state.quitRequested appears (/quit, /exit, idle Ctrl+C). */
+	readonly onQuit?: () => void;
 }
 
 interface FileSnapshot {
@@ -75,6 +80,7 @@ export class App extends Container {
 	private headerStats: HeaderStats = emptyStats();
 	private lastOp = "idle";
 	private terminalRows = 24;
+	private terminalCols = 80;
 	private statsInterval: ReturnType<typeof setInterval> | undefined;
 	private agentUnsub: (() => void) | undefined;
 	private planUnsub: (() => void) | undefined;
@@ -83,18 +89,21 @@ export class App extends Container {
 	private todoChild: TodoPill;
 	private planChild?: PlanPanel;
 	private permissionChild?: PermissionPanel;
+	private paletteChild?: CommandPalette;
 	private inputBox!: InputBox;
 	private sidebarOpen = false;
 	private paletteOpen = false;
 	private planExpanded = false;
 	private inputListenerUnsub: (() => void) | undefined;
 	private inputBuffer = "";
+	private readonly onQuit?: () => void;
 
 	constructor(deps: AppDeps) {
 		super();
 		this.agent = deps.agent;
 		this.sessionId = deps.sessionId;
 		this.modelLabel = deps.modelLabel;
+		this.onQuit = deps.onQuit;
 		this.store = createAppStore();
 		this.header = new Header(this.modelLabel, this.sessionId, emptyStats(), "idle");
 		this.statusBar = new StatusBar(this.modelLabel, 0, 0);
@@ -122,11 +131,18 @@ export class App extends Container {
 			this.rebuildDynamicChildren();
 			this.invalidate();
 			tui.requestRender();
+			// /quit, /exit and idle Ctrl+C all land here — nothing else
+			// consumes the flag, so the TUI would never actually exit.
+			if (this.store.getState().quitRequested) {
+				this.onQuit?.();
+			}
 		});
 		this.terminalRows = tui.terminal.rows;
+		this.terminalCols = tui.terminal.columns;
 		this.inputBox = new InputBox({
 			tui,
 			onSubmit: (text) => this.submitUserInput(text),
+			slashCommands: SLASH_COMMANDS,
 		});
 		this.insertBefore(this.statusBar, this.inputBox);
 		tui.setFocus(this.inputBox);
@@ -178,7 +194,39 @@ export class App extends Container {
 	}
 
 	private openPalette(): void {
-		this.paletteOpen = !this.paletteOpen;
+		if (this.paletteOpen) {
+			this.closePalette();
+			return;
+		}
+		this.paletteOpen = true;
+		const palette = new CommandPalette(
+			SLASH_COMMANDS,
+			(name) => {
+				this.inputBox.insertText(`/${name} `);
+				this.closePalette();
+			},
+			() => this.closePalette(),
+		);
+		this.paletteChild = palette;
+		this.insertBefore(this.inputBox, palette);
+		if (this.tui) {
+			this.inputBox.releaseFocus();
+			this.tui.setFocus(palette);
+		}
+		this.rebuildDynamicChildren();
+		this.invalidate();
+	}
+
+	private closePalette(): void {
+		this.paletteOpen = false;
+		if (this.paletteChild) {
+			this.removeChild(this.paletteChild);
+			this.paletteChild = undefined;
+		}
+		if (this.tui) {
+			this.tui.setFocus(this.inputBox);
+			this.inputBox.claimFocus();
+		}
 		this.rebuildDynamicChildren();
 		this.invalidate();
 	}
@@ -195,6 +243,12 @@ export class App extends Container {
 	}
 
 	private handleAbort(): void {
+		// While an overlay owns focus, Ctrl+C cancels the overlay instead
+		// of quitting — the global listener runs before focused input.
+		if (this.paletteOpen) {
+			this.closePalette();
+			return;
+		}
 		const state = this.store.getState();
 		if (state.busy) {
 			void this.agent.abort?.();
@@ -231,6 +285,7 @@ export class App extends Container {
 		this.agentUnsub?.();
 		this.planUnsub?.();
 		this.inputListenerUnsub?.();
+		this.spinner.stop();
 		if (this.statsInterval) clearInterval(this.statsInterval);
 		this.statsInterval = undefined;
 	}
@@ -319,6 +374,10 @@ export class App extends Container {
 		(this as unknown as { header: Header }).header = newHeader;
 		(this as unknown as { statusBar: StatusBar }).statusBar = newStatus;
 		this.invalidate();
+		// tickStats runs on a timer, outside any dispatch — without an
+		// explicit render request the swapped header/status never paints
+		// (frozen "thinking…" + stale counters after the turn ends).
+		this.tui?.requestRender();
 	}
 
 	private rebuildDynamicChildren(): void {
@@ -380,6 +439,10 @@ export class App extends Container {
 		this.statusBar.invalidate();
 		this.spinner.invalidate();
 		if (this.tui) {
+			// Track terminal resizes — the TUI re-renders on SIGWINCH, and
+			// the chat height math must follow or the frame overflows.
+			this.terminalRows = this.tui.terminal.rows;
+			this.terminalCols = this.tui.terminal.columns;
 			this.viewport.setHeight(this.computeChatHeight());
 			const s = this.store.getState();
 			this.viewport.setDeps({
@@ -393,21 +456,45 @@ export class App extends Container {
 		}
 	}
 
+	/** Measure a child's real rendered height so the frame budget always
+	 *  matches what actually lands on screen. Falls back to the static
+	 *  constant when the child isn't mounted yet. */
+	private measureRows(child: Component | undefined, fallback: number): number {
+		if (!child) return fallback;
+		try {
+			return child.render(this.terminalCols).length;
+		} catch {
+			return fallback;
+		}
+	}
+
 	private computeChatHeight(): number {
 		const state = this.store.getState();
-		const planRows = state.plan ? PLAN_ROWS_COLLAPSED : 0;
-		const todoRows =
-			state.busy ||
-			state.items.some((it) => it.kind === "tool_call" && it.isError === undefined)
-				? TODO_ROWS
-				: 0;
+		const planRows = state.plan
+			? this.measureRows(this.planChild, this.planExpanded ? PLAN_ROWS_EXPANDED : PLAN_ROWS_COLLAPSED)
+			: 0;
+		// Measured unconditionally: TodoPill renders 0 rows when idle and
+		// 1 when busy — the budget must track the real height either way.
+		const todoRows = this.measureRows(this.todoChild, TODO_ROWS);
 		const permRows =
 			state.permissionQueue[0] && !this.paletteOpen && !this.sidebarOpen
-				? PERMISSION_ROWS
+				? this.measureRows(this.permissionChild, PERMISSION_ROWS)
 				: 0;
+		const paletteRows = this.paletteOpen ? this.measureRows(this.paletteChild, 0) : 0;
+		// The editor grows as the input wraps — measure it instead of
+		// assuming INPUT_ROWS, or every extra input row pushes the frame
+		// one row past the terminal bottom.
+		const inputRows = this.measureRows(this.inputBox, INPUT_ROWS);
 		return Math.max(
 			MIN_CHAT_HEIGHT,
-			this.terminalRows - HEADER_ROWS - STATUS_ROWS - planRows - todoRows - permRows,
+			this.terminalRows -
+				HEADER_ROWS -
+				STATUS_ROWS -
+				inputRows -
+				planRows -
+				todoRows -
+				permRows -
+				paletteRows,
 		);
 	}
 

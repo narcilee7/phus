@@ -4,10 +4,10 @@
 	"description": "Phus terminal UI: pi-tui based chat interface (vendored @mariozechner/pi-tui primitives, no React, no ink).",
 	"license": "ISC",
 	"type": "module",
-	"main": "./dist/index.js",
+	"main": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
 	"exports": {
-		".": "./dist/index.js"
+		".": "./dist/index.mjs"
 	},
 	"files": [
 		"dist",

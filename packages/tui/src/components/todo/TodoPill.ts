@@ -26,6 +26,10 @@ export class TodoPill implements Component {
 			}
 			return [padRight(colorize(`⠋ ${this.lastOp}`, "cyan"), width)];
 		}
-		return [padRight("", width)];
+		// Idle → zero rows. Rendering a blank row here makes the frame one
+		// row taller than the layout budget (which only counts the pill
+		// while busy), and a constantly-overflowing frame corrupts the
+		// differential repaint (header border scrolled off, stale rows).
+		return [];
 	}
 }

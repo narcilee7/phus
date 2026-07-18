@@ -122,6 +122,13 @@ export function planEventToAction(event: unknown): AppAction | null {
   const status = String(e.planStatus ?? "pending");
   const stepId = typeof e.step?.id === "string" ? e.step.id : undefined;
 
+  // Note: planId / sessionId / goal / status are available for richer
+  // actions if/when the renderer reducer grows a set_plan path.
+  void planId;
+  void sessionId;
+  void goal;
+  void status;
+
   switch (e.type) {
     case "plan_step_started":
       // The full plan is built elsewhere (e.g. by /plan in TUI). For now
@@ -193,12 +200,4 @@ export function planEventToAction(event: unknown): AppAction | null {
     default:
       return null;
   }
-
-  // Note: planId / sessionId / goal / status are available for richer
-  // actions if/when the reducer grows a set_plan path that synthesizes the
-  // full Plan from these events.
-  void planId;
-  void sessionId;
-  void goal;
-  void status;
 }

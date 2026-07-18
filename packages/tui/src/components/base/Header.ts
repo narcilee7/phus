@@ -48,7 +48,7 @@ export class Header implements Component {
 					}`
 				: "";
 		const titleLine =
-			colorize("⛰  Phus", "bold", "cyan") + "  ·  " + this.model;
+			colorize("⛰  Phus", "bold", "cyan") + "  ·  " + this.model + "  ·  push the stone up the mountain";
 		const detailLine = colorize(
 			`session=${this.session} · ${this.stats.skills} skills · ${this.stats.entries} tape entries${checkpointHint} · ${this.lastOp}`,
 			"dim",
