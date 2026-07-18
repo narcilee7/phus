@@ -18,6 +18,9 @@ export function registerPlan(): CommandRegistry {
         if (!restArg) return notify(dispatch, "usage: /plan create <goal>", "warn");
         const sid = agent.getCurrentSessionId();
         if (!sid) return notify(dispatch, "no active session", "warn");
+        // Mark busy for the whole run: the rolling stone animates, input
+        // queues instead of dropping, and Ctrl+C aborts (not quits).
+        dispatch({ type: "set_busy", busy: true });
         dispatch({ type: "set_last_op", op: "planning…" });
         try {
           const plan = await runner.createAndRun(restArg, sid);
@@ -29,6 +32,7 @@ export function registerPlan(): CommandRegistry {
         } catch (err) {
           notify(dispatch, `plan failed: ${errorMessage(err)}`, "error");
         } finally {
+          dispatch({ type: "set_busy", busy: false });
           dispatch({ type: "set_last_op", op: "idle" });
         }
         return;
@@ -40,6 +44,7 @@ export function registerPlan(): CommandRegistry {
         if (!planId) return notify(dispatch, "usage: /plan run <planId>", "warn");
         const plan = store.load(planId);
         if (!plan) return notify(dispatch, `plan not found: ${planId}`, "warn");
+        dispatch({ type: "set_busy", busy: true });
         dispatch({ type: "set_last_op", op: "running plan…" });
         try {
           const updated = await runner.runPlan(plan);
@@ -51,6 +56,7 @@ export function registerPlan(): CommandRegistry {
         } catch (err) {
           notify(dispatch, `plan failed: ${errorMessage(err)}`, "error");
         } finally {
+          dispatch({ type: "set_busy", busy: false });
           dispatch({ type: "set_last_op", op: "idle" });
         }
         return;
@@ -87,6 +93,7 @@ export function registerPlan(): CommandRegistry {
         if (!sid) return notify(dispatch, "no active session", "warn");
         const active = store.loadActiveForSession(sid);
         if (!active) return notify(dispatch, "no active plan", "warn");
+        dispatch({ type: "set_busy", busy: true });
         dispatch({ type: "set_last_op", op: "running plan…" });
         try {
           const updated = await runner.runPlan(active);
@@ -98,6 +105,7 @@ export function registerPlan(): CommandRegistry {
         } catch (err) {
           notify(dispatch, `plan failed: ${errorMessage(err)}`, "error");
         } finally {
+          dispatch({ type: "set_busy", busy: false });
           dispatch({ type: "set_last_op", op: "idle" });
         }
         return;
