@@ -14,6 +14,7 @@ import { Header, type HeaderStats } from "@/components/base/Header.js";
 import { StatusBar } from "@/components/base/StatusBar.js";
 import { ChatViewport } from "@/components/chat/ChatViewport.js";
 import { PlanPanel } from "@/components/agent/PlanPanel.js";
+import { ResumePrompt } from "@/components/agent/ResumePrompt.js";
 import { TodoPill } from "@/components/todo/TodoPill.js";
 import { PermissionPanel } from "@/components/permission/PermissionPanel.js";
 import { CommandPalette } from "@/components/command-components/CommandPalette.js";
@@ -93,6 +94,7 @@ export class App extends Container {
 	private permissionChild?: PermissionPanel;
 	private paletteChild?: CommandPalette;
 	private sidebarChild?: SessionsPanel;
+	private resumeChild?: ResumePrompt;
 	private inputBox!: InputBox;
 	private sidebarOpen = false;
 	private paletteOpen = false;
@@ -212,6 +214,101 @@ export class App extends Container {
 		};
 		const listener = buildShortcutListener(shortcuts, () => this.computeChatHeight());
 		this.inputListenerUnsub = tui.addInputListener(listener);
+
+		// Durable-plan check: interrupted (or deliberately paused) plans are
+		// offered for explicit resume at startup. This replaces the old
+		// implicit resume — a bare message must never resurrect a plan.
+		const interrupted = this.agent.getInterruptedPlans();
+		if (interrupted.length > 0) {
+			this.openResumePrompt(interrupted);
+		}
+	}
+
+	private openResumePrompt(plans: import("@phus/runtime/core/runtime/plan/types.js").Plan[]): void {
+		if (this.resumeChild) return;
+		const prompt = new ResumePrompt(
+			plans,
+			(planId) => {
+				this.closeResumePrompt();
+				this.resumePlanById(planId);
+			},
+			(planId) => {
+				this.abandonPlanById(planId);
+				// Refresh the prompt with what's left (or close when empty).
+				const remaining = this.agent.getInterruptedPlans();
+				if (remaining.length === 0) this.closeResumePrompt();
+				else {
+					this.closeResumePrompt();
+					this.openResumePrompt(remaining);
+				}
+			},
+			() => this.closeResumePrompt(),
+		);
+		this.resumeChild = prompt;
+		this.insertBefore(this.inputBox, prompt);
+		if (this.tui) {
+			this.inputBox.releaseFocus();
+			this.tui.setFocus(prompt);
+		}
+		this.invalidate();
+	}
+
+	private closeResumePrompt(): void {
+		if (this.resumeChild) {
+			this.removeChild(this.resumeChild);
+			this.resumeChild = undefined;
+		}
+		if (this.tui) {
+			this.tui.setFocus(this.inputBox);
+			this.inputBox.claimFocus();
+		}
+		this.invalidate();
+	}
+
+	private resumePlanById(planId: string): void {
+		const runner = this.agent.getPlanRunner();
+		const store = this.agent.getPlanStore();
+		if (!runner || !store) return;
+		const plan = store.load(planId);
+		if (!plan) return;
+		this.store.dispatch({ type: "set_busy", busy: true });
+		this.store.dispatch({ type: "set_last_op", op: "resuming plan…" });
+		void (async () => {
+			try {
+				const updated = await runner.runPlan(plan);
+				this.store.dispatch({
+					type: "add_system",
+					text: `plan ${updated.id} ${updated.status}`,
+					level: updated.status === "completed" ? "info" : "warn",
+				});
+			} catch (err) {
+				this.store.dispatch({
+					type: "add_system",
+					text: `plan failed: ${err instanceof Error ? err.message : String(err)}`,
+					level: "error",
+				});
+			} finally {
+				this.store.dispatch({ type: "set_busy", busy: false });
+				this.store.dispatch({ type: "set_last_op", op: "idle" });
+			}
+		})();
+	}
+
+	private abandonPlanById(planId: string): void {
+		const store = this.agent.getPlanStore();
+		const plan = store?.load(planId);
+		if (!store || !plan) return;
+		plan.status = "failed";
+		plan.updatedAt = Date.now();
+		for (const s of plan.steps) {
+			if (s.status === "pending" || s.status === "running") s.status = "skipped";
+		}
+		store.save(plan);
+		this.store.dispatch({
+			type: "add_system",
+			text: `plan ${planId.slice(0, 8)} abandoned`,
+			level: "warn",
+		});
 	}
 
 	private toggleSidebar(): void {
@@ -316,6 +413,10 @@ export class App extends Container {
 		}
 		if (this.sidebarOpen) {
 			this.closeSidebar();
+			return;
+		}
+		if (this.resumeChild) {
+			this.closeResumePrompt();
 			return;
 		}
 		const state = this.store.getState();
@@ -566,6 +667,7 @@ export class App extends Container {
 				: 0;
 		const paletteRows = this.paletteOpen ? this.measureRows(this.paletteChild, 0) : 0;
 		const sidebarRows = this.sidebarOpen ? this.measureRows(this.sidebarChild, 0) : 0;
+		const resumeRows = this.resumeChild ? this.measureRows(this.resumeChild, 0) : 0;
 		// The editor grows as the input wraps — measure it instead of
 		// assuming INPUT_ROWS, or every extra input row pushes the frame
 		// one row past the terminal bottom.
@@ -580,7 +682,8 @@ export class App extends Container {
 				todoRows -
 				permRows -
 				paletteRows -
-				sidebarRows,
+				sidebarRows -
+				resumeRows,
 		);
 	}
 

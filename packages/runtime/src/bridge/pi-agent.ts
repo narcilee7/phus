@@ -266,6 +266,10 @@ export interface PhusAgentFacade {
   getPlanRunner(): PlanRunner | undefined;
   /** Get the plan store, if one is configured. */
   getPlanStore(): PlanStore | undefined;
+  /** Paused (resumable) plans across all sessions, newest first. Plans
+   *  are durable citizens — interrupted ones are reconciled to `paused`
+   *  at startup and surfaced here for the TUI's resume prompt. */
+  getInterruptedPlans(): Plan[];
   /** Subscribe to plan lifecycle events (step started/completed/failed,
    *  plan completed). Returns an unsubscribe function. */
   subscribeToPlanEvents(handler: PlanEventHandler): () => void;
@@ -333,6 +337,9 @@ export class PhusAgent implements PhusAgentFacade {
   private autoCompactEnabled: boolean;
   private toolPermissionHandler?: (req: ToolPermissionRequest) => Promise<boolean>;
   private planEventHandlers = new Set<PlanEventHandler>();
+  /** Captured at construction — plans still "running" with an older
+   *  updatedAt belong to a dead process and are reconciled to paused. */
+  private readonly processStartedAt = Date.now();
 
   constructor(deps: PhusAgentDeps) {
     this.tape = deps.tape;
@@ -509,6 +516,45 @@ export class PhusAgent implements PhusAgentFacade {
       }).map(toAgentTool),
       ...createExternalTools(),
     ];
+
+    this.reconcileInterruptedPlans();
+  }
+
+  /**
+   * Plans are durable citizens: a plan left "running" by a dead process
+   * (crash, kill, Ctrl+C before the runner settled) is not lost — but it
+   * must not look alive either. Reconcile it to `paused` so the startup
+   * prompt can offer an explicit resume. Single-writer assumption: two
+   * live processes sharing one PHUS_HOME would flap each other's plans.
+   */
+  private reconcileInterruptedPlans(): void {
+    try {
+      const orphans = this.planStore.loadInterrupted(this.processStartedAt);
+      for (const plan of orphans) {
+        plan.status = "paused";
+        plan.updatedAt = Date.now();
+        this.planStore.save(plan);
+        logger.info("plan.reconciled_interrupted", {
+          planId: plan.id,
+          sessionId: plan.sessionId,
+          goal: plan.goal,
+        });
+      }
+    } catch (err) {
+      logger.warn("plan.reconcile_failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /** Paused (resumable) plans across all sessions, newest first — the
+   *  startup prompt's data source. */
+  getInterruptedPlans(): Plan[] {
+    try {
+      return this.planStore.loadPaused();
+    } catch {
+      return [];
+    }
   }
 
   private makePlannerModel(): { prompt(messages: AgentMessage[]): Promise<string> } {
@@ -783,18 +829,11 @@ export class PhusAgent implements PhusAgentFacade {
         return this.summarizePlan(plan);
       }
 
-      // Heuristic: explicit multi-step intent.
-      if (/分步骤|step by step|multi[- ]?step/i.test(content)) {
-        const plan = await this.planRunner.createAndRun(content, sessionId, envelope.content);
-        return this.summarizePlan(plan);
-      }
-
-      // Resume an active plan for this session.
-      const activePlan = this.planStore.loadActiveForSession(sessionId);
-      if (activePlan && activePlan.status === "running") {
-        const plan = await this.planRunner.runPlan(activePlan);
-        return this.summarizePlan(plan);
-      }
+      // NOTE: plans are durable citizens driven by EXPLICIT intent only —
+      // /plan commands and the plan_create/plan_run meta tools. No
+      // heuristics here: an active plan must never resume just because a
+      // message arrived (a bare "你好" used to resurrect stale plans),
+      // and conversational text must not silently spawn plans either.
     } catch (err: any) {
       logger.error("turn.plan_flow_failed", { sessionId, error: err.message });
     }

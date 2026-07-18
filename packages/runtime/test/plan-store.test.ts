@@ -88,6 +88,29 @@ describe("PlanStore", () => {
     expect(store.load(plan.id)).toBeUndefined();
   });
 
+  it("loadInterrupted finds only stale running plans (orphans of a dead process)", () => {
+    store = new PlanStore(":memory:");
+    const stale = makePlan({ id: "stale", status: "running", updatedAt: 100 });
+    const fresh = makePlan({ id: "fresh", status: "running", updatedAt: 500 });
+    const paused = makePlan({ id: "paused", status: "paused", updatedAt: 100 });
+    store.save(stale);
+    store.save(fresh);
+    store.save(paused);
+
+    const interrupted = store.loadInterrupted(400);
+    expect(interrupted.map((p) => p.id)).toEqual(["stale"]);
+  });
+
+  it("loadPaused returns paused plans across sessions, newest first", () => {
+    store = new PlanStore(":memory:");
+    store.save(makePlan({ id: "old", status: "paused", updatedAt: 100, sessionId: asSessionId("s1") }));
+    store.save(makePlan({ id: "new", status: "paused", updatedAt: 200, sessionId: asSessionId("s2") }));
+    store.save(makePlan({ id: "done", status: "completed", updatedAt: 300, sessionId: asSessionId("s2") }));
+
+    const paused = store.loadPaused();
+    expect(paused.map((p) => p.id)).toEqual(["new", "old"]);
+  });
+
   describe("validation_attempts", () => {
     function metrics(over: Partial<{ failures: number; stepCount: number; status: "completed" | "failed" }> = {}) {
       return {

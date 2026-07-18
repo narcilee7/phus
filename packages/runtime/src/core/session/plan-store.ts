@@ -122,6 +122,46 @@ export class PlanStore {
     return undefined;
   }
 
+  /**
+   * Plans left "running" by a dead process: status is `running` but the
+   * row hasn't been updated since `cutoffMs` (typically the current
+   * process's start time). Plans are durable citizens — this is how we
+   * find the ones whose writer died mid-flight.
+   */
+  loadInterrupted(cutoffMs: number): Plan[] {
+    const rows = this.db
+      .prepare(
+        "SELECT payload FROM plans WHERE status = 'running' AND updated_at < ? ORDER BY updated_at DESC",
+      )
+      .all(cutoffMs) as Array<{ payload: string }>;
+    return rows
+      .map((r) => {
+        try {
+          return JSON.parse(r.payload) as Plan;
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((p): p is Plan => p !== undefined);
+  }
+
+  /** Paused plans across every session, newest first — the resumable
+   *  backlog surfaced by the TUI's startup prompt. */
+  loadPaused(): Plan[] {
+    const rows = this.db
+      .prepare("SELECT payload FROM plans WHERE status = 'paused' ORDER BY updated_at DESC")
+      .all() as Array<{ payload: string }>;
+    return rows
+      .map((r) => {
+        try {
+          return JSON.parse(r.payload) as Plan;
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((p): p is Plan => p !== undefined);
+  }
+
   delete(planId: string): void {
     this.db.prepare("DELETE FROM plans WHERE id = ?").run(planId);
   }
