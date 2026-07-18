@@ -6,10 +6,23 @@ import { makeCtx } from "@/core/runtime/hook/ctx-builder";
 import { ReplanNeededError } from "@/core/runtime/executor/error";
 
 export class PlanRunner {
+  /** Cooperative cancellation: set by abort() while a run is in flight,
+   *  consumed at the next step boundary. In-flight steps can't be killed,
+   *  but the plan stops after the current step settles instead of running
+   *  the whole graph (which looked like a TUI hang). */
+  private abortRequested = false;
+  private running = false;
+
   constructor(private deps: PlanRunnerDeps) {}
 
   setEvolutionEngine(engine: EvolutionEngine | undefined): void {
     this.deps.evolutionEngine = engine;
+  }
+
+  /** Request the active run to stop after the current step. No-op when
+   *  no run is in flight (a stale flag would otherwise kill the NEXT run). */
+  abort(): void {
+    if (this.running) this.abortRequested = true;
   }
 
   async createAndRun(goal: string, sessionId: string, context?: string): Promise<Plan> {
@@ -56,8 +69,28 @@ export class PlanRunner {
     );
     const failed = new Set<string>();
     let replanRequested = false;
+    this.running = true;
+    this.abortRequested = false;
+    let aborted = false;
 
     for (const step of steps) {
+      // Cooperative abort: stop between steps, mark everything not yet
+      // done as skipped, and leave the plan resumable (status "paused").
+      if (this.abortRequested) {
+        aborted = true;
+        this.abortRequested = false;
+        for (const s of steps) {
+          if (s.status === "pending" || s.status === "running") {
+            s.status = "skipped";
+            s.error = "aborted by user";
+          }
+        }
+        plan.updatedAt = Date.now();
+        this.deps.store.save(plan);
+        this.emitStep("plan_step_failed", plan, step, { reason: "aborted by user" });
+        break;
+      }
+
       if (step.status === "completed") {
         step.error = undefined;
         continue;
@@ -136,20 +169,23 @@ export class PlanRunner {
     }
 
     const allCompleted = plan.steps.every((s) => s.status === "completed");
-    plan.status = replanRequested ? "paused" : allCompleted ? "completed" : "failed";
+    plan.status = aborted ? "paused" : replanRequested ? "paused" : allCompleted ? "completed" : "failed";
     plan.updatedAt = Date.now();
     this.deps.store.save(plan);
+    this.running = false;
 
-    this.deps.hooks.execute(
-      "plan_completed",
-      makeCtx({
-        sessionId: plan.sessionId,
-        extras: { plan },
-      }),
-      "broadcast",
-    );
+    if (!aborted) {
+      this.deps.hooks.execute(
+        "plan_completed",
+        makeCtx({
+          sessionId: plan.sessionId,
+          extras: { plan },
+        }),
+        "broadcast",
+      );
+    }
 
-    if (this.deps.evolutionEngine) {
+    if (!aborted && this.deps.evolutionEngine) {
       try {
         await this.deps.evolutionEngine.onPlanCompleted(plan);
       } catch (err) {

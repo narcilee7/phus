@@ -916,6 +916,10 @@ export class PhusAgent implements PhusAgentFacade {
 
   abort(): void {
     this.piAgent.abort();
+    // A plan run (plan_create / /plan / active-plan resume) executes
+    // outside the Pi loop — piAgent.abort() alone leaves it running and
+    // the turn looks hung. Cooperative: stops after the current step.
+    this.planRunner?.abort();
     logger.info("turn.aborted");
   }
 

@@ -282,4 +282,61 @@ describe("PlanRunner", () => {
     expect(updated.steps.find((step) => step.id === "b")?.status).toBe("skipped");
     expect(updated.status).toBe("failed");
   });
+
+  it("abort() stops the run after the current step and leaves it resumable", async () => {
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+    const steps = [makeStep(0, { id: "a" }), makeStep(1, { id: "b" }), makeStep(2, { id: "c" })];
+    const planner = {
+      createPlan: vi.fn().mockResolvedValue(makePlan(steps)),
+    } as unknown as Planner;
+    const calls: string[] = [];
+    let runnerRef: PlanRunner | undefined;
+    const executor = {
+      executeStep: vi.fn().mockImplementation(async (step: Step) => {
+        calls.push(step.id);
+        // Simulate the user hitting Ctrl+C while step "a" is in flight.
+        if (step.id === "a") runnerRef?.abort();
+        step.status = "completed";
+        return {
+          step,
+          verification: { ok: true, confidence: 1, reason: "", action: "proceed" as const },
+        };
+      }),
+    } as unknown as Executor;
+
+    runnerRef = new PlanRunner({ planner, executor, store, hooks });
+    const plan = await runnerRef.createAndRun("goal", "session-1");
+
+    // "a" finished (in-flight steps can't be killed), b/c never started.
+    expect(calls).toEqual(["a"]);
+    expect(plan.steps.find((s) => s.id === "a")?.status).toBe("completed");
+    expect(plan.steps.find((s) => s.id === "b")?.status).toBe("skipped");
+    expect(plan.steps.find((s) => s.id === "c")?.status).toBe("skipped");
+    // Paused, not failed: /plan resume can pick it up later.
+    expect(plan.status).toBe("paused");
+    expect(store.load(plan.id)?.status).toBe("paused");
+  });
+
+  it("abort() with no run in flight is a no-op (no stale flag kills the next run)", async () => {
+    const store = new PlanStore(":memory:");
+    const hooks = new HookRegistry({ isolateErrors: true });
+    const planner = {
+      createPlan: vi.fn().mockResolvedValue(makePlan([makeStep(0)])),
+    } as unknown as Planner;
+    const executor = {
+      executeStep: vi.fn().mockImplementation(async (step: Step) => {
+        step.status = "completed";
+        return {
+          step,
+          verification: { ok: true, confidence: 1, reason: "", action: "proceed" as const },
+        };
+      }),
+    } as unknown as Executor;
+
+    const runner = new PlanRunner({ planner, executor, store, hooks });
+    runner.abort(); // nothing running — must not poison the next run
+    const plan = await runner.createAndRun("goal", "session-1");
+    expect(plan.status).toBe("completed");
+  });
 });
