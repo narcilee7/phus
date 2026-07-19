@@ -246,7 +246,13 @@ export function modelFromProfile(profile: ProviderProfile): Model<any> {
 
   const overrides: Partial<Model<any>> & { headers?: Record<string, string> } = {};
   if (profile.baseUrl) overrides.baseUrl = profile.baseUrl;
-  if (wireId !== profile.modelId) overrides.id = wireId;
+  if (wireId !== profile.modelId) {
+    overrides.id = wireId;
+    // Gateway proxies (Volcano Ark, etc.) may not support the native
+    // thinking/reasoning API. Disable reasoning so Pi doesn't send
+    // unsupported parameters like `thinking: { type: "disabled" }`.
+    overrides.reasoning = false;
+  }
   if (profile.headers) overrides.headers = { ...base.headers, ...profile.headers };
 
   return Object.keys(overrides).length > 0 ? { ...base, ...overrides } : base;

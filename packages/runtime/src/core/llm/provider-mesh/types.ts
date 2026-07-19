@@ -5,8 +5,12 @@ export interface EndpointSpec {
   name: string;
   /** Pi provider name (e.g. "openai", "anthropic", "deepseek"). */
   provider: string;
-  /** Pi modelId OR override id sent on the wire. */
+  /** Pi modelId (canonical, used for model lookup). */
   modelId: string;
+  /** Optional wire-id override (e.g. Volcano Ark ep-xxx endpoint id).
+   *  When set, this is sent as the model field on the wire instead of
+   *  modelId. Defaults to modelId if unset. */
+  wireId?: string;
   baseUrl?: string;
   apiKeyEnv?: string;
   /** Priority for failover. Lower = tried first. Default: 0. */
