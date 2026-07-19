@@ -24,23 +24,31 @@ See [`documents/Architecture.md`](documents/Architecture.md) for the design visi
 
 ## Install
 
+Requires **Node.js >= 20.19.0** (oxlint needs `^20.19.0 || >=22.12.0`).
+
 ```bash
-npm install
-cp .env.example .env
+pnpm install
+cp .env.example .phus/.env
 # fill in at least one provider key
 ```
 
 ## Quick start
 
 ```bash
-# Interactive TUI (default — `phus` with no args)
-phus
+# Build the binary (required before first run)
+pnpm build
+
+# Interactive TUI (default)
+pnpm dev
 
 # One-shot prompt
-phus run "summarize this repo"
+pnpm run run -- "summarize this repo"
+
+# Or run the built binary directly
+node packages/runtime/dist/phus.js
 
 # Multi-channel gateway (24/7 service mode)
-phus gateway --websocket 8080
+pnpm gateway --websocket 8080
 ```
 
 The first time you run it, Phus creates `./skills/`, `./.phus/`, and `./logs/` automatically. Read [`documents/Architecture.md`](documents/Architecture.md) to understand how it all fits together.
@@ -51,10 +59,10 @@ The first time you run it, Phus creates `./skills/`, `./.phus/`, and `./logs/` a
 
 | Command | Purpose |
 |---|---|
-| `phus` | Launch the interactive **ink TUI** (default) |
-| `phus chat` / `phus tui` | Aliases for the default TUI |
-| `phus run "<prompt>"` | One-shot execution, prints response, exits |
-| `phus gateway [--websocket N] [--telegram] [--sse N]` | Start channel listeners in foreground |
+| `pnpm dev` | Launch the interactive **ink TUI** (default) |
+| `pnpm chat` / `pnpm tui` | Aliases for the default TUI |
+| `pnpm run run -- "<prompt>"` | One-shot execution, prints response, exits |
+| `pnpm gateway [--websocket N] [--telegram] [--sse N]` | Start channel listeners in foreground |
 | `phus hooks` | List registered hooks (diagnostic) |
 | `phus skills` | List discovered skills |
 | `phus tape` | Print tape statistics |
@@ -65,7 +73,7 @@ The first time you run it, Phus creates `./skills/`, `./.phus/`, and `./logs/` a
 | `phus compact <sessionId>` | Summarize old turns into an anchor |
 | `phus health` | Health check (used by Docker / systemd) |
 
-Run `phus help <command>` for options on any command.
+For `phus` subcommands, either use the built binary (`node packages/runtime/dist/phus.js <cmd>`) or link it globally (`cd packages/runtime && pnpm link --global`). Run `phus help <command>` for options on any command.
 
 ---
 
