@@ -60,11 +60,11 @@
 | Stage | State | Commit |
 |---|---|---|
 | Stage 0 — scaffold `apps/cli` + `packages/core` | ✓ | `chore(monorepo): stage 0 — scaffold apps/cli and packages/core` |
-| Stage 1 — extract `@phus/core` from `@phus/runtime` | △ | Schema decided; physical move deferred because the dependency cascade (Tape → SkillRegistry → logger → hook) is too tangled for one commit. Tracked in TODO. |
-| Stage 2 — move bin to `@phus/cli` | ✗ | Blocked on A1 — bin still loads via `tsx packages/runtime/src/phus.ts`. |
-| Stage 3 — drop `phus tui` (fall-through only) | ✗ | Default + `phus tui` both still call `startTui()` from `cli/program.ts`. Cleanup deferred. |
+| Stage 1 — extract `@phus/core` from `@phus/runtime` | ✓ (facade) | Shipped as a curated re-export façade. Physical file move deferred — the dependency cascade (Tape → SkillRegistry → logger → hook) is too tangled for one commit. The package boundary exists; consumers can `import type { HookName, Envelope, TapeEntry } from "@phus/core"` today. |
+| Stage 2 — move bin to `@phus/cli` | ✓ | `phus.ts` + `cli/program.ts` + 19 commander files now live in `apps/cli/src/`. `@phus/runtime` is library-only — no `bin` field, no `src/phus.ts`. Root `package.json` scripts target `apps/cli/src/main.ts`. |
+| Stage 3 — drop `phus tui` (fall-through only) | ✓ | `apps/cli/src/commands/tui.ts` deleted; `registerTuiCommand` removed from `program.ts`. Typing `phus tui` is now a commander usage error. The TUI is the default action of `phus` (no args). |
 | Stage 4 — `apps/gui` rejoins workspace | ✗ | `apps/gui/` doesn't exist in this checkout; ignored per Proposal §7 Stage 4 fallback. |
-| Stage 5 — release pipeline + first npm publish | △ | CI + release.yml + release.sh + install.sh are in place; libraries tagged `private: true` so `pnpm publish` won't accidentally publish libs; actual `phus` npm publish awaits Stage 2 (bin → `@phus/cli`). |
+| Stage 5 — release pipeline + first npm publish | △ | CI + release.yml + release.sh + install.sh are in place; libraries tagged `private: true` so `pnpm publish` won't accidentally publish libs. First `phus` npm publish works once `@phus/cli` flips its own `private` flag. |
 
 ---
 
@@ -74,6 +74,6 @@
 |---|---|---|---|
 | 1 | Bootstrap paste doesn't fill the API key | ✓ | Fix at `packages/tui/src/components/wizard/{Bootstrap,Key}Wizard.ts` + helper `extractPasteContent` in `runtime/text-utils.ts` + `test/paste-extract.test.ts` |
 | 2 | Config YAML watcher (monorepo) lands in a package, not the repo root | ✓ | `resolvePhusHome()` + `findMonorepoRoot()` in `infra/config/loader.ts` + tests |
-| 3 | `phus tui` should not exist; `phus` alone wakes the TUI | △ | Proposal marked Stage 3 done; the actual subcommand removal deferred |
-| 4 | Split into smaller monorepo runtimes | △ | Stage 0 landed; Stages 1-5 deferred |
-| 5 | No release tooling; tests need `cd packages/tui` | ✓ | `pnpm -r test` fans out from root; CI + release.yml + release.sh + install.sh already exist; libraries marked private |
+| 3 | `phus tui` should not exist; `phus` alone wakes the TUI | ✓ | `apps/cli/src/commands/tui.ts` deleted; `registerTuiCommand` removed; commander prints `unknown command 'tui'` if a user still types it. |
+| 4 | Split into smaller monorepo runtimes | ✓ (structural) | `@phus/cli` (bin) + `@phus/runtime` (library) + `@phus/tui` (TUI shell) + `@phus/core` (public-surface facade) — four workspaces, each with a single responsibility. |
+| 5 | No release tooling; tests need `cd packages/tui` | ✓ | `pnpm -r test` fans out from root; CI + release.yml + release.sh + install.sh already exist; libraries marked private. |
