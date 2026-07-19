@@ -71,7 +71,7 @@ export function createManagedTerminal(opts: ManagedTerminalOptions = {}): Manage
  * Monkey-patch `stdout.write` so every chunk is wrapped in CSI 2026
  * (synchronized output). Returns an uninstall function.
  */
-function installSyncOutput(stdout: NodeJS.WritableStream): () => void {
+export function installSyncOutput(stdout: NodeJS.WritableStream): () => void {
 	const original = stdout.write.bind(stdout) as typeof stdout.write;
 	const begin = "\x1b[?2026h";
 	const end = "\x1b[?2026l";

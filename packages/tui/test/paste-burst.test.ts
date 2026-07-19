@@ -1,10 +1,10 @@
 // test/tui/paste-burst.test.ts
 // Unit tests for the paste-burst detector. Ported from
-// @moonshot-ai/pi-tui (MIT). Verifies the heuristics match the upstream
 // behavior so we don't regress.
 
 import { describe, expect, it } from "vitest";
-import { PasteBurst } from "../../src/tui/runtime/paste-burst.js";
+// import { PasteBurst } from "../../src/tui/src/cendor/pi-ui/paste-burst.js";
+import { PasteBurst } from '../src/vendor/pi-tui/paste-burst'
 
 describe("PasteBurst", () => {
 	it("does not suppress Enter when no characters have arrived", () => {
