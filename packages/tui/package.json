@@ -1,6 +1,7 @@
 {
 	"name": "@phus/tui",
 	"version": "0.1.0",
+	"private": true,
 	"description": "Phus terminal UI: pi-tui based chat interface (vendored @mariozechner/pi-tui primitives, no React, no ink).",
 	"license": "ISC",
 	"type": "module",

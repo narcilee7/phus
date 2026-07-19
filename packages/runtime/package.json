@@ -1,6 +1,7 @@
 {
 	"name": "@phus/runtime",
 	"version": "0.1.0",
+	"private": true,
 	"description": "Phus agent runtime: bridge, core, channels, CLI. Headless — no TUI.",
 	"license": "ISC",
 	"type": "module",
