@@ -137,3 +137,22 @@ export function center(s: string, width: number): string {
 	const right = total - left;
 	return " ".repeat(left) + s + " ".repeat(right);
 }
+
+/**
+ * Bracketed-paste markers emitted by the vendored pi-tui stdin buffer
+ * (see vendor/pi-tui/terminal.ts::setupStdinBuffer). The terminal wraps
+ * every pasted payload between these two sequences; without stripping
+ * them, a naive `data.startsWith("\x1b")` filter would drop the whole
+ * paste, which is why Issue #1's "API key paste doesn't work" existed.
+ *
+ * Returns the inner pasted content if `data` is a complete bracketed
+ * paste payload, otherwise `null`. Empty paste returns `""`.
+ */
+const PASTE_START = "\x1b[200~";
+const PASTE_END = "\x1b[201~";
+
+export function extractPasteContent(data: string): string | null {
+	if (!data.startsWith(PASTE_START) || !data.endsWith(PASTE_END)) return null;
+	if (data.length < PASTE_START.length + PASTE_END.length) return null;
+	return data.slice(PASTE_START.length, -PASTE_END.length);
+}

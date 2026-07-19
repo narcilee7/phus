@@ -10,7 +10,7 @@ import yaml from "yaml";
 import type { Component, Focusable } from "@/vendor/pi-tui/tui.js";
 import { matchesKey, Key } from "@/vendor/pi-tui/keys.js";
 import { box } from "@/runtime/border.js";
-import { colorize } from "@/runtime/text-utils.js";
+import { colorize, extractPasteContent } from "@/runtime/text-utils.js";
 import { configPath, loadConfig, resetConfigCache } from "@phus/runtime/infra/config/index.js";
 
 type Step = "mode" | "value" | "done" | "error";
@@ -66,8 +66,10 @@ export class KeyWizard implements Component, Focusable {
 			else if (matchesKey(data, Key.escape)) this.step = "mode";
 			else if (matchesKey(data, Key.backspace) || matchesKey(data, Key.delete)) {
 				this.value = this.value.slice(0, -1);
-			} else if (data.length > 0 && !data.startsWith("\x1b")) {
-				this.value += data;
+			} else if (data.length > 0) {
+				const pasted = extractPasteContent(data);
+				if (pasted !== null) this.value += pasted;
+				else if (!data.startsWith("\x1b")) this.value += data;
 			}
 			return;
 		}
