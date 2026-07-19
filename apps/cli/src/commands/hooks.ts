@@ -2,7 +2,7 @@
 // `phus hooks` — print the registered hook report.
 
 import type { Command } from "commander";
-import { PhusAgent } from "@/bridge/pi-agent.js";
+import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 
 export function registerHooksCommand(program: Command): void {
   program

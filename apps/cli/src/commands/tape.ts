@@ -2,7 +2,7 @@
 // `phus tape` — print tape statistics.
 
 import type { Command } from "commander";
-import { PhusAgent } from "@/bridge/pi-agent.js";
+import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 
 export function registerTapeCommand(program: Command): void {
   program

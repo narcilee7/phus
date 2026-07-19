@@ -6,14 +6,14 @@
 // order, then drains the plugin CLI command queue before parsing.
 
 import { Command } from "commander";
-import { drainPendingCliCommands } from "@/infra/plugins/cli-queue.js";
-import type { ResolvedConfig } from "@/infra/config/index.js";
+import { drainPendingCliCommands } from "@phus/runtime/infra/plugins/cli-queue.js";
+import type { ResolvedConfig } from "@phus/runtime/infra/config/index.js";
 
 import { registerDefaultCommand } from "./commands/default.js";
 import { registerChatCommand } from "./commands/chat.js";
 import { registerRunCommand } from "./commands/run.js";
 import { registerGatewayCommand } from "./commands/gateway.js";
-import { registerGatewayDaemonCommands } from "@/commands/gateway-daemon.js";
+import { registerGatewayDaemonCommands } from "@phus/runtime/commands/gateway-daemon.js";
 import { registerHooksCommand } from "./commands/hooks.js";
 import { registerSkillsCommand } from "./commands/skills.js";
 import { registerTapeCommand } from "./commands/tape.js";
@@ -25,7 +25,6 @@ import { registerTraceCommand } from "./commands/trace.js";
 import { registerLogsCommand } from "./commands/logs.js";
 import { registerCompactCommand } from "./commands/compact.js";
 import { registerHealthCommand } from "./commands/health.js";
-import { registerTuiCommand } from "./commands/tui.js";
 import { registerResumeCommand } from "./commands/resume.js";
 import { registerSetupCommand } from "./commands/setup.js";
 import { registerMetricsCommand } from "./commands/metrics.js";
@@ -42,10 +41,12 @@ export function buildProgram(): Command {
     .version("0.1.0");
 
   // Register every built-in command. Order does not matter for
-  // dispatch; we keep the lifecycle-relevant ones first.
+  // dispatch; we keep the lifecycle-relevant ones first. There is NO
+  // `phus tui` subcommand — typing `phus tui` is now a usage error.
+  // The TUI is the default: `phus` (no args) wakes it via
+  // `registerDefaultCommand`. See documents/Proposal-Monorepo-Split.md §4.
   registerDefaultCommand(program);
   registerChatCommand(program);
-  registerTuiCommand(program);
   registerRunCommand(program);
   registerGatewayCommand(program);
   registerGatewayDaemonCommands(program);
@@ -72,11 +73,11 @@ export function buildProgram(): Command {
  *  are added after built-ins so users see phus-native help first. */
 export async function registerPluginCliCommands(program: Command, config: ResolvedConfig): Promise<void> {
   // 1. Drain queue (set by PluginContext.registerCliCommand during plugin load)
-  const beforeCount = (await import("@/infra/plugins/cli-queue.js"))._pendingCliCommandCount();
+  const beforeCount = (await import("@phus/runtime/infra/plugins/cli-queue.js"))._pendingCliCommandCount();
   try {
     drainPendingCliCommands(program);
   } catch (err) {
-    const { logger } = await import("@/infra/logging.js");
+    const { logger } = await import("@phus/runtime/infra/logging.js");
     logger.error("plugin.cli_command_failed", {
       count: beforeCount,
       error: (err as Error).message,
@@ -87,15 +88,15 @@ export async function registerPluginCliCommands(program: Command, config: Resolv
   //    Throwaway PhusAgent uses the pre-loaded config — no re-parse.
   //    If the agent cannot be created (e.g. no API key), log a warning and
   //    continue so help/setup/version commands still work.
-  const { PhusAgent } = await import("@/bridge/pi-agent.js");
-  const { makeCtx } = await import("@/core/runtime/hook/ctx-builder");
-  const { initInternalCommands } = await import("@/core/runtime/internal-commands/index.js");
+  const { PhusAgent } = await import("@phus/runtime/bridge/pi-agent.js");
+  const { makeCtx } = await import("@phus/runtime/core/runtime/hook/ctx-builder.js");
+  const { initInternalCommands } = await import("@phus/runtime/core/runtime/internal-commands/index.js");
 
   let tempHandle;
   try {
     tempHandle = await PhusAgent.create({ config, profileName: config.profileName });
   } catch (err: any) {
-    const { logger } = await import("@/infra/logging.js");
+    const { logger } = await import("@phus/runtime/infra/logging.js");
     logger.warn("plugin.agent_creation_skipped", {
       reason: err.message,
       hint: "run `phus setup` to configure an API key",

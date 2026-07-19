@@ -5,8 +5,8 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { buildProgram, registerPluginCliCommands } from "../src/cli/program";
-import { resetConfigCache } from "../src/infra/config/index";
+import { buildProgram, registerPluginCliCommands } from "../src/program.js";
+import { resetConfigCache } from "@phus/runtime/infra/config/index.js";
 
 describe("CLI without API key", () => {
   let tmpDir: string;

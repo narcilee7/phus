@@ -2,28 +2,39 @@
 	"name": "@phus/cli",
 	"version": "0.1.0",
 	"private": true,
-	"description": "The Phus CLI bin: `phus` (no args) wakes the TUI; every subcommand runs here. Stage 2 will move the composition root out of @phus/runtime.",
+	"description": "The Phus CLI bin — `phus` (no args) wakes the TUI; every subcommand runs here. See documents/Proposal-Monorepo-Split.md §4.",
 	"license": "ISC",
 	"type": "module",
-	"main": "./src/index.ts",
-	"types": "./src/index.ts",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"bin": {
+		"phus": "./dist/cli.js"
+	},
 	"exports": {
-		".": "./src/index.ts"
+		".": "./dist/index.js"
 	},
 	"files": [
 		"dist",
 		"README.md"
 	],
 	"scripts": {
-		"build": "echo 'no-op in Stage 0 — bin lands here in Stage 2'",
-		"build:js": "echo 'no-op in Stage 0'",
-		"build:types": "echo 'no-op in Stage 0'",
-		"dev": "tsx src/index.ts",
+		"build": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
+		"build:js": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
+		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+		"dev": "PHUS_HOME=$PHUS_HOME tsx src/main.ts",
+		"chat": "PHUS_HOME=$PHUS_HOME tsx src/main.ts chat",
+		"run": "PHUS_HOME=$PHUS_HOME tsx src/main.ts run",
+		"gateway": "PHUS_HOME=$PHUS_HOME tsx src/main.ts gateway",
 		"typecheck": "tsc --noEmit",
 		"lint": "oxlint --quiet src test",
-		"test": "echo 'no tests yet — Stage 0 stub'"
+		"test": "vitest run --passWithNoTests"
 	},
 	"engines": {
 		"node": ">=20.0.0"
+	},
+	"dependencies": {
+		"@phus/runtime": "workspace:*",
+		"@phus/tui": "workspace:*",
+		"commander": "^14.0.3"
 	}
 }

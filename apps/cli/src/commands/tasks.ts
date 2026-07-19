@@ -2,7 +2,7 @@
 // `phus tasks` — show agent state, sessions, schedules, recent checkpoints.
 
 import type { Command } from "commander";
-import { collectTasks, renderTasks } from "@/commands/tasks.js";
+import { collectTasks, renderTasks } from "@phus/runtime/commands/tasks.js";
 
 export function registerTasksCommand(program: Command): void {
   program

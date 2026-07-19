@@ -2,10 +2,10 @@
 // `phus compact <sessionId>` — manually compact a session's tape.
 
 import type { Command } from "commander";
-import { Tape } from "@/core/session/tape.js";
-import { compactSession } from "@/core/session/compaction.js";
-import { asSessionId } from "@/types/brand.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { Tape } from "@phus/runtime/core/session/tape.js";
+import { compactSession } from "@phus/runtime/core/session/compaction.js";
+import { asSessionId } from "@phus/runtime/types/brand.js";
+import { loadConfig } from "@phus/runtime/infra/config/index.js";
 
 export function registerCompactCommand(program: Command): void {
   program

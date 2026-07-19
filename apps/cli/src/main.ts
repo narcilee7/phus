@@ -4,10 +4,10 @@
 // the Commander program, drains the plugin CLI command queue, then
 // parses argv. All real command logic lives in `src/cli/commands/`.
 
-import { loadConfig, setLogSink } from "@/infra/config/index.js";
-import { loadEnvFile } from "@/infra/env-file.js";
-import { initLogger, logger } from "@/infra/logging.js";
-import { buildProgram, registerPluginCliCommands } from "@/cli/program.js";
+import { loadConfig, setLogSink } from "@phus/runtime/infra/config/index.js";
+import { loadEnvFile } from "@phus/runtime/infra/env-file.js";
+import { initLogger, logger } from "@phus/runtime/infra/logging.js";
+import { buildProgram, registerPluginCliCommands } from "./program.js";
 
 // 0. Load optional `$PHUS_HOME/.env` so API keys and other secrets are
 //    available before config interpolation and model resolution run.

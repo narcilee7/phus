@@ -2,7 +2,7 @@
 // `phus policy` — show the active safety policy.
 
 import type { Command } from "commander";
-import { PhusAgent } from "@/bridge/pi-agent.js";
+import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 
 export function registerPolicyCommand(program: Command): void {
   program

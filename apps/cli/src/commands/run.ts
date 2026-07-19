@@ -2,8 +2,8 @@
 // `phus run <prompt>` — one-shot prompt + print response.
 
 import type { Command } from "commander";
-import { loadConfig, resetConfigCache } from "@/infra/config/index.js";
-import { resolveProfile, apiKeyForProfile } from "@/infra/profile.js";
+import { loadConfig, resetConfigCache } from "@phus/runtime/infra/config/index.js";
+import { resolveProfile, apiKeyForProfile } from "@phus/runtime/infra/profile.js";
 
 function formatMissingKeyError(profileName: string): string {
   const profile = resolveProfile(profileName, loadConfig().providers);
@@ -39,7 +39,7 @@ export function registerRunCommand(program: Command): void {
       }
 
       try {
-        const { runOnce } = await import("@/channels/cli.js");
+        const { runOnce } = await import("@phus/runtime/channels/cli.js");
         await runOnce(prompt, profileName);
       } catch (err: any) {
         // eslint-disable-next-line no-console

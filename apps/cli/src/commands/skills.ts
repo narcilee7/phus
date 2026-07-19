@@ -2,7 +2,7 @@
 // `phus skills` — list all discovered skills.
 
 import type { Command } from "commander";
-import { PhusAgent } from "@/bridge/pi-agent.js";
+import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 
 export function registerSkillsCommand(program: Command): void {
   program

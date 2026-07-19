@@ -3,7 +3,7 @@
 // Exits 0 if healthy, non-zero otherwise.
 
 import type { Command } from "commander";
-import { healthCheck } from "@/commands/health.js";
+import { healthCheck } from "@phus/runtime/commands/health.js";
 
 export function registerHealthCommand(program: Command): void {
   program

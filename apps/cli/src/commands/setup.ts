@@ -2,8 +2,8 @@
 // `phus setup` — run the interactive first-run wizard.
 
 import type { Command } from "commander";
-import { loadConfig } from "@/infra/config/index.js";
-import { runSetupWizard } from "@/infra/bootstrap/wizard.js";
+import { loadConfig } from "@phus/runtime/infra/config/index.js";
+import { runSetupWizard } from "@phus/runtime/infra/bootstrap/wizard.js";
 
 export function registerSetupCommand(program: Command): void {
   program

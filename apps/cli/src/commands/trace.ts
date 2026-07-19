@@ -2,8 +2,8 @@
 // `phus trace <sessionId>` — print a turn timeline for one session.
 
 import type { Command } from "commander";
-import { traceSession } from "@/commands/trace.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { traceSession } from "@phus/runtime/commands/trace.js";
+import { loadConfig } from "@phus/runtime/infra/config/index.js";
 
 export function registerTraceCommand(program: Command): void {
   program

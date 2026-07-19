@@ -3,8 +3,8 @@
 
 import type { Command } from "commander";
 import * as path from "node:path";
-import { loadConfig } from "@/infra/config/loader.js";
-import { printMetrics } from "@/commands/metrics.js";
+import { loadConfig } from "@phus/runtime/infra/config/loader.js";
+import { printMetrics } from "@phus/runtime/commands/metrics.js";
 
 export function registerMetricsCommand(program: Command): void {
     program

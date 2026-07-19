@@ -2,8 +2,8 @@
 // `phus logs` — query the structured JSON log file.
 
 import type { Command } from "commander";
-import { tailLogs } from "@/commands/logs.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { tailLogs } from "@phus/runtime/commands/logs.js";
+import { loadConfig } from "@phus/runtime/infra/config/index.js";
 
 export function registerLogsCommand(program: Command): void {
   program
