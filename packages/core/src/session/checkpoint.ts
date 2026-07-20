@@ -11,7 +11,7 @@
 //   - `phus run --resume <turnId>` — explicit resume in one-shot mode
 
 import type { Tape } from "./tape.js";
-// logger import disabled pending Wave E/F (infra move)
+import { logger } from "@phus/core/infra/logging.js";
 import type { SessionId, TurnId } from "@phus/core/types/brand.js";
 import { asOptionalSessionId, asOptionalTurnId } from "@phus/core/types/brand.js";
 

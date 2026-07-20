@@ -6,7 +6,7 @@
 
 import type { Tape } from "./tape.js";
 import type { Turn } from "@phus/core/types/tape/index.js";
-// logger import disabled pending Wave E/F (infra move)
+import { logger } from "@phus/core/infra/logging.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 

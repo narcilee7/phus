@@ -5,7 +5,7 @@
 
 import type { Tape } from "./tape.js";
 import { compactSession } from "./compaction.js";
-// logger import disabled pending Wave E/F (infra move)
+import { logger } from "@phus/core/infra/logging.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 
