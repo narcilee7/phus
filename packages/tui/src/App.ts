@@ -37,13 +37,14 @@ import { SisyphusAnimator } from "@/runtime/sisyphus.js";
 import { eventToAction } from "@/transform/events.js";
 import { planEventToAction, type PlanRef } from "@/transform/plan-events.js";
 import { describeMemoryAction, buildMemoryPreview } from "@/transform/memory.js";
-import { parseMemoryAction } from "@phus/runtime/infra/meta/index.js";
+// import { parseMemoryAction } from "@phus/runtime/infra/meta/index.js";
 import { runSlash, SLASH_COMMANDS } from "@/handler/commands/commands.js";
 import { buildShortcutListener, type GlobalShortcutCallbacks } from "@/runtime/keybindings.js";
 import { submitMessage } from "@/handler/submit-message.js";
 import { tuiChannel } from "@/channel.js";
 import type { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import type { AppState, PermissionRequest } from "@/state/state.js";
+import { parseMemoryAction } from "@phus/runtime/infra/meta/memory-tools.js";
 
 export interface AppDeps {
 	readonly agent: PhusAgent;

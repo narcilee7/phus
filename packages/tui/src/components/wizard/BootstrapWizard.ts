@@ -14,7 +14,7 @@ import yaml from "yaml";
 import type { Component, Focusable } from "@/vendor/pi-tui/tui.js";
 import { matchesKey, Key } from "@/vendor/pi-tui/keys.js";
 import { box } from "@/runtime/border.js";
-import { colorize, padRight, wrapTextWithAnsi } from "@/runtime/text-utils.js";
+import { colorize, padRight, wrapTextWithAnsi, extractPasteContent } from "@/runtime/text-utils.js";
 import { configPath, resetConfigCache } from "@phus/runtime/infra/config/index.js";
 
 type Step = "welcome" | "provider" | "model" | "keyMode" | "apiKey" | "profile" | "confirm" | "done" | "error";
@@ -120,8 +120,10 @@ export class BootstrapWizard implements Component, Focusable {
 			} else if (matchesKey(data, Key.escape)) this.step = "keyMode";
 			else if (matchesKey(data, Key.backspace) || matchesKey(data, Key.delete)) {
 				this.apiKey = this.apiKey.slice(0, -1);
-			} else if (data.length > 0 && !data.startsWith("\x1b")) {
-				this.apiKey += data;
+			} else if (data.length > 0) {
+				const pasted = extractPasteContent(data);
+				if (pasted !== null) this.apiKey += pasted;
+				else if (!data.startsWith("\x1b")) this.apiKey += data;
 			}
 			return;
 		}
@@ -130,8 +132,10 @@ export class BootstrapWizard implements Component, Focusable {
 			else if (matchesKey(data, Key.escape)) this.step = "keyMode";
 			else if (matchesKey(data, Key.backspace) || matchesKey(data, Key.delete)) {
 				this.profileName = this.profileName.slice(0, -1);
-			} else if (data.length > 0 && !data.startsWith("\x1b")) {
-				this.profileName += data;
+			} else if (data.length > 0) {
+				const pasted = extractPasteContent(data);
+				if (pasted !== null) this.profileName += pasted;
+				else if (!data.startsWith("\x1b")) this.profileName += data;
 			}
 			return;
 		}

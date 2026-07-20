@@ -25,9 +25,14 @@ See [`documents/Architecture.md`](documents/Architecture.md) for the design visi
 ## Install
 
 ```bash
-npm install
-cp .env.example .env
-# fill in at least one provider key
+pnpm install
+
+# Set at least one provider key — `phus` will look it up at startup.
+# Easiest: run `phus setup` (interactive wizard; writes
+# ./<monorepo-root>/.phus/phus.config.yaml). Or export directly:
+export ANTHROPIC_API_KEY=sk-ant-...
+# (OPENAI_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY work the same way
+# — Pi reads them automatically.)
 ```
 
 ## Quick start
@@ -51,10 +56,11 @@ The first time you run it, Phus creates `./skills/`, `./.phus/`, and `./logs/` a
 
 | Command | Purpose |
 |---|---|
-| `phus` | Launch the interactive **ink TUI** (default) |
-| `phus chat` / `phus tui` | Aliases for the default TUI |
+| `phus` | Launch the interactive **TUI** (default — `phus` with no args wakes the TUI; there is no `phus tui` subcommand) |
 | `phus run "<prompt>"` | One-shot execution, prints response, exits |
-| `phus gateway [--websocket N] [--telegram] [--sse N]` | Start channel listeners in foreground |
+| `phus chat` | Headless REPL session (long-running command) |
+| `phus gateway [--websocket N] [--telegram] [--sse N]` | Start channel listeners in foreground (long-running command) |
+| `phus setup` | First-run wizard (writes `phus.config.yaml`, picks provider / model / key) |
 | `phus hooks` | List registered hooks (diagnostic) |
 | `phus skills` | List discovered skills |
 | `phus tape` | Print tape statistics |
@@ -63,6 +69,7 @@ The first time you run it, Phus creates `./skills/`, `./.phus/`, and `./logs/` a
 | `phus trace <sessionId>` | Print a turn timeline for one session |
 | `phus logs [--follow] [--session S] [--level L]` | Query the structured JSON log |
 | `phus compact <sessionId>` | Summarize old turns into an anchor |
+| `phus resume` / `phus tasks` | Resume or list long-running plans / subagent tasks |
 | `phus health` | Health check (used by Docker / systemd) |
 
 Run `phus help <command>` for options on any command.
@@ -106,7 +113,7 @@ Each line carries `ts`, `level`, `event`, `sessionId` (when applicable), and arb
 
 ## Safety
 
-Operator equivalence (Bub principle): the agent cannot write outside `./skills/`, `./.phus/`, `./tmp/`, `./out/`, and its `bash` tool is blocked against `rm -rf /`, fork bombs, `curl|sh`, `dd if=`, `chmod -R 777 /`, and `mkfs`. These rules live in [`src/core/policy.ts`](src/core/policy.ts) and run inside the `before_tool_call` hook — they apply to every tool call, including meta tools, and cannot be bypassed by the agent. See `phus policy` for the active rule set.
+Operator equivalence (Bub principle): the agent cannot write outside `./skills/`, `./.phus/`, `./tmp/`, `./out/`, and its `bash` tool is blocked against `rm -rf /`, fork bombs, `curl|sh`, `dd if=`, `chmod -R 777 /`, and `mkfs`. These rules live in [`packages/runtime/src/infra/safety.ts`](packages/runtime/src/infra/safety.ts) and run inside the `before_tool_call` hook — they apply to every tool call, including meta tools, and cannot be bypassed by the agent. See `phus policy` for the active rule set.
 
 ---
 
@@ -168,8 +175,22 @@ Requires at least one provider key set.
 
 - [`documents/Architecture.md`](documents/Architecture.md) — How each Phus piece maps to Bub and Pi
 - [`documents/Plan-correction.md`](documents/Plan-correction.md) — Design rationale + corrections to the original Plan.md
+- [`documents/Proposal-Monorepo-Split.md`](documents/Proposal-Monorepo-Split.md) — Active monorepo split (@phus/core / @phus/runtime / @phus/tui / apps/cli)
 - [`documents/Plugins.md`](documents/Plugins.md) — Plugin development guide
 - [`documents/Deployment.md`](documents/Deployment.md) — Docker + systemd deployment
+
+## Package layout
+
+Phus is a pnpm workspace; Stage 0 of the monorepo split (tracked in [`documents/Proposal-Monorepo-Split.md`](documents/Proposal-Monorepo-Split.md)) carved out two new workspaces:
+
+```
+apps/cli/        ← @phus/cli (Stage 2 lands here; today still under @phus/runtime)
+packages/core/   ← @phus/core  — headless library (hooks, tape, registry, types)
+packages/runtime/← @phus/runtime — PhusAgent, channels, mesh, meta-tools
+packages/tui/    ← @phus/tui    — TUI shell (vendored pi-tui primitives)
+```
+
+`pnpm test`, `pnpm build`, `pnpm lint`, `pnpm typecheck` all fan out across the workspace from the repo root — no `cd packages/<x>` needed.
 
 ## License
 

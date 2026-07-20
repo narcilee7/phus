@@ -11,6 +11,8 @@ import {
   loadConfig,
   resetConfigCache,
   configPath,
+  resolvePhusHome,
+  findMonorepoRoot,
   setLogSink,
 } from "../src/infra/config/index";
 
@@ -367,5 +369,61 @@ describe("loadConfig", () => {
     );
     const cfg = loadConfig();
     expect(cfg.providers.profiles.broken?.mesh).toHaveLength(0);
+  });
+});
+
+describe("resolvePhusHome (Issues.md #2)", () => {
+  const savedHome = process.env.PHUS_HOME;
+  beforeEach(() => {
+    delete process.env.PHUS_HOME;
+  });
+  afterEach(() => {
+    if (savedHome === undefined) delete process.env.PHUS_HOME;
+    else process.env.PHUS_HOME = savedHome;
+    resetConfigCache();
+  });
+
+  it("honors an absolute $PHUS_HOME verbatim", () => {
+    process.env.PHUS_HOME = "/tmp/abs-phus-home";
+    expect(resolvePhusHome()).toBe("/tmp/abs-phus-home");
+  });
+
+  it("resolves a relative $PHUS_HOME against cwd", () => {
+    process.env.PHUS_HOME = "rel/.phus";
+    expect(resolvePhusHome()).toBe(path.resolve("rel/.phus"));
+  });
+
+  it("falls back to the phus monorepo root when $PHUS_HOME is unset", () => {
+    // vitest runs from packages/runtime/, which lives inside the phus
+    // monorepo. Walking upward should find pnpm-workspace.yaml at the
+    // repo root.
+    const home = resolvePhusHome();
+    expect(home.endsWith(`${path.sep}.phus`)).toBe(true);
+    expect(path.dirname(home)).toBe(findMonorepoRoot());
+  });
+});
+
+describe("findMonorepoRoot", () => {
+  it("returns the repo root when invoked from any subdirectory of the phus monorepo", () => {
+    // The runtime test process itself runs from packages/runtime/, so a
+    // no-arg call should find pnpm-workspace.yaml upward.
+    const root = findMonorepoRoot();
+    expect(root).toBeDefined();
+    expect(fs.existsSync(path.join(root!, "pnpm-workspace.yaml"))).toBe(true);
+  });
+
+  it("returns undefined when invoked from a directory without an ancestor anchor", () => {
+    // Simulate walking upward by temporarily chdir-ing into a fresh
+    // tmpfs dir with no pnpm-workspace.yaml above it. Vitest cleans up
+    // the tmp dir; we restore cwd.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "phus-no-mono-"));
+    const original = process.cwd();
+    try {
+      process.chdir(tmp);
+      expect(findMonorepoRoot()).toBeUndefined();
+    } finally {
+      process.chdir(original);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

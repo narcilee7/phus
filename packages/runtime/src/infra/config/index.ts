@@ -16,6 +16,8 @@ export {
   loadConfig,
   resetConfigCache,
   configPath,
+  resolvePhusHome,
+  findMonorepoRoot,
   setLogSink,
   ConfigValidationError,
 } from "./loader.js";

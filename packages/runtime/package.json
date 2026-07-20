@@ -1,6 +1,7 @@
 {
 	"name": "@phus/runtime",
 	"version": "0.1.0",
+	"private": true,
 	"description": "Phus agent runtime: bridge, core, channels, CLI. Headless — no TUI.",
 	"license": "ISC",
 	"type": "module",
@@ -11,7 +12,6 @@
 		"./phus": "./dist/phus.js",
 		"./bridge/*": "./dist/bridge/*",
 		"./channels/*": "./dist/channels/*",
-		"./cli/*": "./dist/cli/*",
 		"./commands/*": "./dist/commands/*",
 		"./core/*": "./dist/core/*",
 		"./infra/*": "./dist/infra/*",
@@ -26,10 +26,6 @@
 		"build": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
 		"build:js": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
 		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-		"dev": "tsx src/phus.ts",
-		"chat": "tsx src/phus.ts chat",
-		"run": "tsx src/phus.ts run",
-		"gateway": "tsx src/phus.ts gateway",
 		"typecheck": "tsc --noEmit",
 		"lint": "oxlint --quiet src test",
 		"test": "vitest run"

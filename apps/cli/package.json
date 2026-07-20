@@ -1,0 +1,40 @@
+{
+	"name": "@phus/cli",
+	"version": "0.1.0",
+	"private": true,
+	"description": "The Phus CLI bin — `phus` (no args) wakes the TUI; every subcommand runs here. See documents/Proposal-Monorepo-Split.md §4.",
+	"license": "ISC",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"bin": {
+		"phus": "./dist/cli.js"
+	},
+	"exports": {
+		".": "./dist/index.js"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
+		"build:js": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
+		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+		"dev": "PHUS_HOME=$PHUS_HOME tsx src/main.ts",
+		"chat": "PHUS_HOME=$PHUS_HOME tsx src/main.ts chat",
+		"run": "PHUS_HOME=$PHUS_HOME tsx src/main.ts run",
+		"gateway": "PHUS_HOME=$PHUS_HOME tsx src/main.ts gateway",
+		"typecheck": "tsc --noEmit",
+		"lint": "oxlint --quiet src test",
+		"test": "vitest run --passWithNoTests"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	},
+	"dependencies": {
+		"@phus/runtime": "workspace:*",
+		"@phus/tui": "workspace:*",
+		"commander": "^14.0.3"
+	}
+}

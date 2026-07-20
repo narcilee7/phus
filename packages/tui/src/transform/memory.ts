@@ -1,7 +1,8 @@
 // ─── Memory write preview helpers ─────────────────────────────────
 // Short caption used in the permission prompt header:
 
-import { parseMemoryAction } from "@phus/runtime/infra/meta/index.js";
+import { parseMemoryAction } from "@phus/runtime/infra/meta/memory-tools.js";
+
 
 //   "memory_write? (append 'Style')" / "memory_write? (replace 'Style')" / "memory_write? (delete 'Style')"
 export function describeMemoryAction(rawArgs: unknown): string | undefined {

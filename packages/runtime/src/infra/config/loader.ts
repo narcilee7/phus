@@ -6,7 +6,7 @@
 // precedence table and `infra/config/schema.ts` for the shape.
 //
 // Loading flow:
-//   1. Resolve home = process.env.PHUS_HOME ?? DEFAULTS.home
+//   1. Resolve home — see `resolvePhusHome()` for the precedence
 //   2. Read <home>/phus.config.yaml; missing file → defaults-filled cfg
 //   3. yaml.parse, then interpolateEnv() once
 //   4. Build ResolvedConfig with env-override precedence for ops vars
@@ -81,7 +81,7 @@ interface LoadOptions {
  */
 export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   const warn = opts.warn ?? _logSink;
-  const home = process.env.PHUS_HOME ?? DEFAULTS.home;
+  const home = resolvePhusHome();
   const cfgPath = path.join(home, "phus.config.yaml");
 
   let present = false;
@@ -221,10 +221,45 @@ export function resetConfigCache(): void {
   _cache = undefined;
 }
 
+/**
+ * Resolve the active Phus home directory.
+ *
+ * Precedence:
+ *   1. `$PHUS_HOME` (absolute or cwd-relative) — explicit override wins.
+ *   2. The phus monorepo root, identified by walking upward from
+ *      `process.cwd()` looking for `pnpm-workspace.yaml`. When found,
+ *      `<root>/.phus` is used. This is the fix for Issues.md #2 —
+ *      after the monorepo migration, running phus from `packages/<x>/`
+ *      would otherwise land the config under that package instead of the
+ *      repo root.
+ *   3. `path.resolve(DEFAULTS.home)` (cwd-relative fallback).
+ */
+export function resolvePhusHome(): string {
+  const env = process.env.PHUS_HOME;
+  if (env) return path.isAbsolute(env) ? env : path.resolve(env);
+  const mono = findMonorepoRoot();
+  if (mono) return path.join(mono, ".phus");
+  return path.resolve(DEFAULTS.home);
+}
+
+/**
+ * Walk upward from cwd looking for the phus monorepo anchor
+ * (`pnpm-workspace.yaml` at the workspace root). Returns the directory
+ * or `undefined` if no anchor is found within filesystem root.
+ */
+export function findMonorepoRoot(): string | undefined {
+  let dir = process.cwd();
+  while (true) {
+    if (fs.existsSync(path.join(dir, "pnpm-workspace.yaml"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
 /** Returns the absolute path the loader would read (file may not exist). */
 export function configPath(): string {
-  const home = process.env.PHUS_HOME ?? DEFAULTS.home;
-  return path.join(home, "phus.config.yaml");
+  return path.join(resolvePhusHome(), "phus.config.yaml");
 }
 
 // ─── helpers ───────────────────────────────────────────────────────
