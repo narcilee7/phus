@@ -2,7 +2,7 @@
 // Self-evolution commands: reflection, draft management, startup suggestions.
 
 import type { InternalCommand, InternalCommandServices } from "../types";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 export function defineEvolutionCommands(
   services: InternalCommandServices,

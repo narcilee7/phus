@@ -1,6 +1,6 @@
 // ,schedule.* — inspect and edit cron-driven hook schedules.
 
-import { asScheduleName } from "@/types/brand";
+import { asScheduleName } from "@phus/core/types/brand.js";
 import type { InternalCommand, InternalCommandServices } from "../types";
 
 function notInitializedMessage(): string {

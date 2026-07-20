@@ -3,9 +3,9 @@
 // startup_write, self_reflect, tape_stats, compact_session.
 
 import { Type } from "@mariozechner/pi-ai";
-import type { MetaTool } from "@/types/tool.js";
-import type { SessionId } from "@/types/brand.js";
-import { asSessionId } from "@/types/brand.js";
+import type { MetaTool } from "@phus/runtime/types/tool.js";
+import type { SessionId } from "@phus/core/types/brand.js";
+import { asSessionId } from "@phus/core/types/brand.js";
 import { loadConfig } from "@/infra/config/index.js";
 import { StartupAdvisor } from "@/core/runtime/startup/advisor";
 
@@ -89,7 +89,7 @@ export function defineSystemMetaTools(deps: {
       parameters: Type.Object({}),
       execute: async () => {
         const advisor = new StartupAdvisor();
-        const script = await advisor.suggestStartup(deps.tapeConcrete as unknown as import("@/types/hooks/index.js").TapeLike);
+        const script = await advisor.suggestStartup(deps.tapeConcrete as unknown as import("@phus/core/types/hooks/index.js").TapeLike);
         return { ok: true, script };
       },
     },

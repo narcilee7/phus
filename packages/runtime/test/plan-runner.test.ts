@@ -10,7 +10,7 @@ import { PlanStore } from "@/core/session/plan-store";
 import { HookRegistry } from "@/core/runtime/hook/registry";
 import { resetConfigCache } from "@/infra/config/index";
 import type { Plan, Step } from "@/core/runtime/plan/types";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 function makePlan(steps: Step[], status: Plan["status"] = "pending"): Plan {
   return {

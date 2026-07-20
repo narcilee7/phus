@@ -6,8 +6,8 @@
 import type { Tape } from "@/core/session/tape.js";
 import { compactSession } from "@/core/session/compaction.js";
 import { logger } from "@/infra/logging.js";
-import type { SessionId } from "@/types/brand.js";
-import { asSessionId } from "@/types/brand.js";
+import type { SessionId } from "@phus/core/types/brand.js";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 export interface AutoCompactConfig {
   /** Max number of messages before triggering. Default: 100. */

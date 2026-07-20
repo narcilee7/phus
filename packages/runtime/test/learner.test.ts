@@ -4,8 +4,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { Learner } from "@/core/runtime/evolution/learner";
 import { SkillRegistry } from "@/infra/skills/registry";
-import { asSessionId } from "@/types/brand";
-import type { TapeLike } from "@/types/hooks/index";
+import { asSessionId } from "@phus/core/types/brand.js";
+import type { TapeLike } from "@phus/core/types/hooks.js";
 import type { CorePort } from "@/bridge/core-port";
 
 function makeTape(entries: unknown[] = []): TapeLike {

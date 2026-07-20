@@ -11,7 +11,7 @@ import {
   type ToolCallId,
   type TurnId,
   type ScheduleName,
-} from "../src/types/brand";
+} from "@phus/core/types/brand.js";
 
 describe("brand helpers", () => {
   it("cast helpers preserve the runtime string", () => {

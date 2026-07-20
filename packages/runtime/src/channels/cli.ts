@@ -69,7 +69,7 @@ export class CLIChannel implements ChannelAdapter {
     });
   }
 
-  async send(outbounds: import("@/types/channel/index.js").Outbound[]): Promise<void> {
+  async send(outbounds: import("@phus/core/types/channel/index.js").Outbound[]): Promise<void> {
     for (const msg of outbounds) {
       if (msg.type === "text") {
         console.log(`\n⛰️  ${msg.content}\n`);

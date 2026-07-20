@@ -8,11 +8,11 @@ import { MemoryStore } from "@/infra/memory/store";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { SkillRegistry } from "@/infra/skills/registry";
 import { PlanStore } from "@/core/session/plan-store";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 import type { Plan, Step } from "@/core/runtime/plan/types";
 import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
-import type { TapeLike } from "@/types/hooks/index";
-import type { TapeEntry } from "@/types/tape/index";
+import type { TapeLike } from "@phus/core/types/hooks.js";
+import type { TapeEntry } from "@phus/core/types/tape.js";
 
 function makeTape(): TapeLike {
   return {

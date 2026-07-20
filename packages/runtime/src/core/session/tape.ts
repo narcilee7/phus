@@ -5,7 +5,7 @@
 import Database from "better-sqlite3";
 import * as path from "node:path";
 import * as fs from "node:fs";
-import type { TapeEntry, Turn, TapeAnchorRef } from "@/types/tape/index.js";
+import type { TapeEntry, Turn, TapeAnchorRef } from "@phus/core/types/tape/index.js";
 
 export class Tape {
   private db: Database.Database;

@@ -3,7 +3,7 @@
 // monolith entry point; this module keeps that signature stable while
 // internally composing skill-tools + system-tools + memory-tools + plan-tools + evolution-tools.
 
-import type { MetaTool } from "@/types/tool.js";
+import type { MetaTool } from "@phus/runtime/types/tool.js";
 import type { Tape } from "@/core/session/tape.js";
 import { defineSkillMetaTools } from "./skill-tools.js";
 import { defineSystemMetaTools } from "./system-tools.js";
@@ -12,7 +12,7 @@ import { definePlanMetaTools } from "./plan-tools.js";
 import { defineEvolutionMetaTools } from "./evolution-tools.js";
 import type { SkillRegistry } from "@/infra/skills/registry.js";
 import type { MemoryStore } from "@/infra/memory/index.js";
-import type { SessionId } from "@/types/brand.js";
+import type { SessionId } from "@phus/core/types/brand.js";
 import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import type { PlanStore } from "@/core/session/plan-store.js";
 import type { Learner } from "@/core/runtime/evolution/learner";

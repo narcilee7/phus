@@ -5,7 +5,7 @@ import * as os from "node:os";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { PlanStore } from "@/core/session/plan-store";
 import { SkillRegistry } from "@/infra/skills/registry";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 import type { Plan, Step } from "@/core/runtime/plan/types";
 import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
 

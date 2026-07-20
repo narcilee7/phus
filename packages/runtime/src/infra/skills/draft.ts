@@ -1,4 +1,4 @@
-import type { SessionId } from "@/types/brand.js";
+import type { SessionId } from "@phus/core/types/brand.js";
 
 export interface SkillDraft {
   name: string;
@@ -16,7 +16,7 @@ export interface SkillDraftStore {
   writeDraft(draft: Omit<SkillDraft, "createdAt">): SkillDraft;
   getDraft(name: string): SkillDraft | undefined;
   getAllDrafts(): SkillDraft[];
-  promoteDraft(name: string): import("@/types/skill.js").Skill | undefined;
+  promoteDraft(name: string): import("@phus/core/types/skill.js").Skill | undefined;
   archiveDraft(name: string): void;
   discoverDrafts(): void;
 }

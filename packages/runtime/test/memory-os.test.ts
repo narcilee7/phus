@@ -6,8 +6,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore, inferCategory } from "@/infra/memory/store";
-import type { TapeEntry } from "@/types/tape/index";
-import type { TapeLike } from "@/types/hooks/index";
+import type { TapeEntry } from "@phus/core/types/tape.js";
+import type { TapeLike } from "@phus/core/types/hooks.js";
 
 let tmpDir: string;
 let filePath: string;

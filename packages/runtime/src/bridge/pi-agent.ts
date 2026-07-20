@@ -16,7 +16,7 @@ import {
   type AfterToolCallResult,
 } from "@mariozechner/pi-agent-core";
 import { streamSimple, type Model } from "@mariozechner/pi-ai";
-import type { Envelope, Outbound } from "@/types/channel/index.js";
+import type { Envelope, Outbound } from "@phus/core/types/channel/index.js";
 import { Planner } from '@/core/runtime/plan/planner';
 import type { Plan, PlanStatus, Step, StepStatus } from "@/core/runtime/plan/types.js";
 import { PlanStore } from "@/core/session/plan-store.js";
@@ -25,10 +25,10 @@ import type { CorePort } from "@/bridge/core-port.js";
 import { Learner } from "@/core/runtime/evolution/learner";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { EvolutionEngine } from "@/core/runtime/evolution/engine";
-import type { Turn } from "@/types/tape/index.js";
-import type { MetaTool } from "@/types/tool.js";
-import type { SessionId } from "@/types/brand.js";
-import { asSessionId, asToolCallId, asTurnId } from "@/types/brand.js";
+import type { Turn } from "@phus/core/types/tape/index.js";
+import type { MetaTool } from "@phus/runtime/types/tool.js";
+import type { SessionId } from "@phus/core/types/brand.js";
+import { asSessionId, asToolCallId, asTurnId } from "@phus/core/types/brand.js";
 import { Tape } from "@/core/session/tape.js";
 import { PiSteeringInbox } from "@/core/runtime/steering";
 import { SkillRegistry } from "@/infra/skills/registry.js";
@@ -44,7 +44,7 @@ import {
   type ProviderProfile,
 } from "@/infra/profile.js";
 import { loadConfig } from "@/infra/config/index.js";
-import type { SteeringInbox } from "@/types/steering/index.js";
+import type { SteeringInbox } from "@phus/core/types/steering/index.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@/core/session/checkpoint.js";
 import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/llm/provider-mesh/index.js";
@@ -61,7 +61,7 @@ import { HookRegistry } from "@/core/runtime/hook/registry";
 import { Executor } from "@/core/runtime/executor";
 import { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import { makeCtx } from "@/core/runtime/hook/ctx-builder";
-import { HookContext } from "@/types";
+import { HookContext } from "@phus/core/types/index.js";
 import { Verifier } from "@/core/runtime/verifier";
 
 export interface PhusAgentDeps {
@@ -198,15 +198,15 @@ export interface PhusAgentFacade {
   /** Hook report — what `phus hooks` prints. */
   getHookReport(): Record<string, Array<{ priority: number; mode: "first_result" | "chain" | "broadcast" }>>;
   /** All skills (name + metadata + description). */
-  getAllSkills(): readonly import("@/types/skill.js").Skill[];
+  getAllSkills(): readonly import("@phus/core/types/skill.js").Skill[];
   /** Look up one skill by name. */
-  getSkill(name: string): import("@/types/skill.js").Skill | undefined;
+  getSkill(name: string): import("@phus/core/types/skill.js").Skill | undefined;
   /** Active safety policy rules. */
   getPolicy(): readonly PolicyRule[];
   /** Tape statistics. */
   getTapeStats(): { totalEntries: number; sessions: Record<string, number> };
   /** Replay all entries for a session (Tape-style generator). */
-  replayTape(sessionId?: string): Generator<import("@/types/tape/index.js").TapeEntry>;
+  replayTape(sessionId?: string): Generator<import("@phus/core/types/tape/index.js").TapeEntry>;
   /** Render a recent-turn summary (used by `,context`). */
   getTapeSummary(sessionId: SessionId | undefined, limit: number): string;
 
@@ -1139,7 +1139,7 @@ export class PhusAgent implements PhusAgentFacade {
     return this.tape.stats();
   }
 
-  *replayTape(sessionId?: string): Generator<import("@/types/tape/index.js").TapeEntry> {
+  *replayTape(sessionId?: string): Generator<import("@phus/core/types/tape/index.js").TapeEntry> {
     yield* this.tape.replay(sessionId);
   }
 

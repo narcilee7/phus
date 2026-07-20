@@ -8,9 +8,9 @@ import type { Agent } from "@mariozechner/pi-agent-core";
 
 import type { Tape } from "@/core/session/tape.js";
 import { compactSession } from "@/core/session/compaction.js";
-import type { TapeEntry, Turn } from "@/types/tape/index.js";
-import type { MetaTool } from "@/types/tool.js";
-import { asSessionId } from "@/types/brand.js";
+import type { TapeEntry, Turn } from "@phus/core/types/tape/index.js";
+import type { MetaTool } from "@phus/runtime/types/tool.js";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 /** Meta tool that lets the agent compact its own session on demand.
  *  The summarizer is injected by the caller (typically a Pi Agent

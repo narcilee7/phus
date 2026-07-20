@@ -3,8 +3,8 @@
 // `transformContext` callback.
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { SkillRegistryLike, TapeLike } from "@/types/hooks/index.js";
-import type { SessionId } from "@/types/brand.js";
+import type { SkillRegistryLike, TapeLike } from "@phus/core/types/hooks/index.js";
+import type { SessionId } from "@phus/core/types/brand.js";
 import { makeCtx } from "@/core/runtime/hook/ctx-builder";
 import type { HookRegistry } from "@/core/runtime/hook/registry";
 import type { RepoFileIndex } from "@/core/session/repo-file-index.js";

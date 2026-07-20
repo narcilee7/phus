@@ -12,8 +12,8 @@
 
 import type { Tape } from "@/core/session/tape.js";
 import { logger } from "@/infra/logging.js";
-import type { SessionId, TurnId } from "@/types/brand.js";
-import { asOptionalSessionId, asOptionalTurnId } from "@/types/brand.js";
+import type { SessionId, TurnId } from "@phus/core/types/brand.js";
+import { asOptionalSessionId, asOptionalTurnId } from "@phus/core/types/brand.js";
 
 export interface CheckpointEntry {
   kind: "checkpoint";

@@ -14,7 +14,7 @@ import { loadConfig } from "@phus/runtime/infra/config/index.js";
 import { initInternalCommands } from "@phus/runtime/runtime/internal-commands/index.js";
 import { channelStatuses, collectChannels } from "@phus/runtime/commands/channels.js";
 import type { ChannelAdapter } from "@phus/runtime/channels/base.js";
-import type { Schedule } from "@phus/runtime/types/scheduler/index.js";
+import type { Schedule } from "@phus/core/types/scheduler/index.js";
 import { resolveProfile, apiKeyForProfile } from "@phus/runtime/infra/profile.js";
 
 export function registerGatewayCommand(program: Command): void {

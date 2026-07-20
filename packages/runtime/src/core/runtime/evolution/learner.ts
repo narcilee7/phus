@@ -2,7 +2,7 @@
 // Learner — reflects on a session and surfaces a reusable procedure.
 // LLM call goes through the injected `port: CorePort`.
 
-import { SessionId } from "@/types/brand";
+import { SessionId } from "@phus/core/types/brand.js";
 import { LearnerDeps, Reflection } from "./types";
 import { SkillDraft } from "@/infra/skills/draft";
 

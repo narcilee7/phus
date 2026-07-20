@@ -4,7 +4,7 @@ import { Executor } from "@/core/runtime/executor/index";
 import { ReplanNeededError } from "@/core/runtime/executor/error";
 import { Verifier } from "@/core/runtime/verifier/index";
 import type { Plan, Step } from "@/core/runtime/plan/types";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 function makePlan(): Plan {
   return {

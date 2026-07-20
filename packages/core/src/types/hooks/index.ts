@@ -8,10 +8,10 @@
  * concrete class identities back into the type layer.
  */
 
-import type { Envelope } from "@/types/channel/index.js";
-import type { TapeEntry, TapeAnchorRef } from "@/types/tape/index.js";
-import type { Skill } from "@/types/skill.js";
-import type { SessionId } from "@/types/brand.js";
+import type { Envelope } from "../../types/channel/index.js";
+import type { TapeEntry, TapeAnchorRef } from "../../types/tape/index.js";
+import type { Skill } from "../../types/skill.js";
+import type { SessionId } from "../../types/brand.js";
 
 // Re-export so consumers can `import { TapeAnchorRef } from ".../types/hooks"`
 // without having to know it lives in types/tape.

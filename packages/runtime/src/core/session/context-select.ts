@@ -7,7 +7,7 @@
 // Falls back to last-N when query is empty or no turns match.
 
 import type { Tape } from "@/core/session/tape.js";
-import type { Turn } from "@/types/tape/index.js";
+import type { Turn } from "@phus/core/types/tape/index.js";
 import { type RepoFileIndex, type ScoredFile } from "./repo-file-index.js";
 
 export interface SelectOptions {

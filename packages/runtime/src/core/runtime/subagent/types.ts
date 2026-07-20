@@ -1,4 +1,4 @@
-import { SessionId } from "@/types/brand";
+import { SessionId } from "@phus/core/types/brand.js";
 import { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 
 export interface SubAgentAgentLike {

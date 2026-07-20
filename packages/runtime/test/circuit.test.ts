@@ -137,6 +137,6 @@ describe("circuit lifecycle (closed → open → half-open → closed)", () => {
   });
 });
 
-vi.mock("@/core/logger.js", () => ({
+vi.mock("@phus/runtime/infra/logger.js", () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 }));

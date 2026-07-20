@@ -11,9 +11,9 @@ import {
   parseMemoryAction,
 } from "@/infra/meta/memory-tools";
 import { MemoryStore } from "@/infra/memory/store";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 import type { Tape } from "@/core/session/tape";
-import type { TapeEntry } from "@/types/tape/index";
+import type { TapeEntry } from "@phus/core/types/tape.js";
 
 let tmpDir: string;
 let filePath: string;

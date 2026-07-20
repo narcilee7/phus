@@ -1,4 +1,4 @@
-import { AuthorDefinition } from "@/types/enumTypes/index.js";
+import { AuthorDefinition } from "../types/enumTypes/index.js";
 
 export type SkillSource = "builtin" | "user" | "project";
 

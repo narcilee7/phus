@@ -1,4 +1,4 @@
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 import { type PlanPhase, type SubAgentOptions } from "../plan/types";
 import { SubAgentAgentLike } from "./types";
 import { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";

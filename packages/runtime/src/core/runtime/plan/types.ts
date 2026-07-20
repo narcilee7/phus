@@ -3,8 +3,8 @@
 // that Planner / Verifier / PlanRunner use to reach an LLM without
 // importing @mariozechner/pi-agent-core.
 
-import { SkillRegistryLike } from "@/types";
-import type { SessionId } from "@/types/brand.js";
+import { SkillRegistryLike } from "@phus/core/types/index.js";
+import type { SessionId } from "@phus/core/types/brand.js";
 import type { CorePort } from "@/bridge/core-port.js";
 import { HookRegistry } from "@/core/runtime/hook/registry";
 import { Planner } from "./planner";

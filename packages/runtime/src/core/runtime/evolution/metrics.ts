@@ -11,8 +11,8 @@
 
 import type { PlanStore } from "@/core/session/plan-store.js";
 import type { Plan } from "@/core/runtime/plan/types.js";
-import type { TapeLike } from "@/types/hooks/index.js";
-import type { TapeEntry } from "@/types/tape/index.js";
+import type { TapeLike } from "@phus/core/types/hooks/index.js";
+import type { TapeEntry } from "@phus/core/types/tape/index.js";
 
 export interface DraftMetrics {
     name: string;

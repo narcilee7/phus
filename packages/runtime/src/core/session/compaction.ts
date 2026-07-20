@@ -5,10 +5,10 @@
 // `@phus/runtime/llm/compact-tool.ts`.
 
 import type { Tape } from "@/core/session/tape.js";
-import type { Turn } from "@/types/tape/index.js";
+import type { Turn } from "@phus/core/types/tape/index.js";
 import { logger } from "@/infra/logging.js";
-import { asSessionId } from "@/types/brand.js";
-import type { SessionId } from "@/types/brand.js";
+import { asSessionId } from "@phus/core/types/brand.js";
+import type { SessionId } from "@phus/core/types/brand.js";
 
 export interface CompactionResult {
 	sessionId: string;

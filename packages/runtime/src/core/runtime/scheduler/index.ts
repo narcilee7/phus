@@ -16,9 +16,9 @@ import { CronExpressionParser } from "cron-parser";
 import { logger } from "@/infra/logging";
 import { HookRegistry } from "@/core/runtime/hook/registry";
 import { makeCtx } from "@/core/runtime/hook/ctx-builder";
-import { Schedule, SchedulerOptions } from "@/types/scheduler";
-import { HookContext } from "@/types/hooks";
-import { asSessionId } from "@/types/brand";
+import { Schedule, SchedulerOptions } from "@phus/core/types/scheduler/index.js";
+import { HookContext } from "@phus/core/types/hooks/index.js";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 export class Scheduler {
   private schedules = new Map<string, Schedule>();

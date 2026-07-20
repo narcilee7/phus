@@ -10,7 +10,7 @@ import type { ChannelConfig } from "@/infra/config/schema.js";
 import { makeCtx } from "@/core/runtime/hook/ctx-builder";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 import { logger } from "@/infra/logging.js";
-import { HookContext } from "@/types";
+import { HookContext } from "@phus/core/types/index.js";
 
 export interface ChannelOpts {
   telegram?: boolean;

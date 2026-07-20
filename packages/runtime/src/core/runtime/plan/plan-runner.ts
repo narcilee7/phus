@@ -1,4 +1,4 @@
-import { HookName } from "@/types";
+import { HookName } from "@phus/core/types/index.js";
 import { EvolutionEngine } from "../evolution/engine";
 import { Plan, PlanRunnerDeps, Step } from "./types";
 import { logger } from "@/infra/logging";

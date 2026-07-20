@@ -3,8 +3,8 @@
 // instead of importing @mariozechner/pi-agent-core.
 
 import { SkillDraft } from "@/infra/skills/draft";
-import { SkillRegistryLike, TapeLike } from "@/types";
-import { SessionId } from "@/types/brand";
+import { SkillRegistryLike, TapeLike } from "@phus/core/types/index.js";
+import { SessionId } from "@phus/core/types/brand.js";
 import type { CorePort } from "@/bridge/core-port.js";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { SkillRegistry } from "@/infra/skills/registry";

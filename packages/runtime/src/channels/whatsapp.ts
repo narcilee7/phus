@@ -8,7 +8,7 @@
 //       WhatsApp Business API client is available without puppeteer.
 
 import type { ChannelAdapter, ChannelStatus } from "@/channels/base.js";
-import type { Outbound } from "@/types/channel/index.js";
+import type { Outbound } from "@phus/core/types/channel/index.js";
 import type { PhusAgent } from "@/bridge/pi-agent.js";
 
 export class WhatsAppChannel implements ChannelAdapter {

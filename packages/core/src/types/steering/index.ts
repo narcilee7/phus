@@ -1,4 +1,4 @@
-import { Envelope, EnvelopType } from "@/types/channel/index.js";
+import { Envelope, EnvelopType } from "../../types/channel/index.js";
 
 type Messages = Envelope[];
 

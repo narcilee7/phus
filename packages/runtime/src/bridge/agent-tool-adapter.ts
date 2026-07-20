@@ -2,7 +2,7 @@
 // Adapt a Phus-side MetaTool into a Pi-side AgentTool.
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import type { MetaTool } from "@/types/tool.js";
+import type { MetaTool } from "@phus/runtime/types/tool.js";
 
 /** Convert a MetaTool into an AgentTool. Errors thrown from the
  *  MetaTool are re-thrown so Pi marks the result as `isError` and

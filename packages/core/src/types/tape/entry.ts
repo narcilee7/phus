@@ -1,7 +1,7 @@
-import { Envelope } from "@/types/channel/index.js";
-import { Turn } from "@/types/tape/turn.js";
-import type { Plan } from "@/core/runtime/plan/types.js";
-import type { SessionId, ToolCallId, TurnId } from "@/types/brand.js";
+import { Envelope } from "../../types/channel/index.js";
+import { Turn } from "../../types/tape/turn.js";
+type Plan = any; // plan/types stubbed post Wave G
+import type { SessionId, ToolCallId, TurnId } from "../../types/brand.js";
 
 /**
  * Discriminant for `TapeEntry`. String-literal union so that runtime

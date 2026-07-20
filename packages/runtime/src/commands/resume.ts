@@ -7,7 +7,7 @@ import { CLIChannel } from "@/channels/cli.js";
 import { ExitCode, CliExit } from "@/core/runtime/executor/exit-code";
 import { makeTextEnvelope } from "@/channels/base.js";
 import { logger } from "@/infra/logging.js";
-import { asSessionId } from "@/types/brand.js";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 export async function resumeSession(sessionId: string, prompt: string): Promise<void> {
   const branded = asSessionId(sessionId);

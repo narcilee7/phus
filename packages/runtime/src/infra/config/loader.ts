@@ -33,8 +33,8 @@ import type {
 } from "./schema.js";
 import { ENV_OVERRIDE_VARS } from "./schema.js";
 import type { ProviderConfig, ProviderProfile, MeshSpec } from "@/infra/profile.js";
-import type { Schedule } from "@/types/scheduler/index.js";
-import { asScheduleName } from "@/types/brand.js";
+import type { Schedule } from "@phus/core/types/scheduler/index.js";
+import { asScheduleName } from "@phus/core/types/brand.js";
 import {
   looksLikeSecret,
   resolveAndCache,

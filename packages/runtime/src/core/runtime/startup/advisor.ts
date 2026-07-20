@@ -1,5 +1,5 @@
-import type { TapeLike } from "@/types/hooks";
-import type { TapeEntry, TapePlanEntry } from "@/types/tape/entry";
+import type { TapeLike } from "@phus/core/types/hooks/index.js";
+import type { TapeEntry, TapePlanEntry } from "@phus/core/types/tape/entry.js";
 
 export class StartupAdvisor {
   async suggestStartup(tape: TapeLike): Promise<string> {

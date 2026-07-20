@@ -7,8 +7,8 @@
  */
 
 import type { Command } from "commander";
-import type { Skill } from "@/types/skill.js";
-import type { HookName, HookMode, HookImpl } from "@/types/hooks/index.js";
+import type { Skill } from "../../types/skill.js";
+import type { HookName, HookMode, HookImpl } from "../../types/hooks/index.js";
 
 /**
  * Narrow view of `HookRegistry` — only the surface plugins actually

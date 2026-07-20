@@ -2,8 +2,8 @@
  * Tape Turn
  */
 
-import { Envelope, Outbound } from "@/types/channel/index.js";
-import type { SessionId, TurnId } from "@/types/brand.js";
+import { Envelope, Outbound } from "../../types/channel/index.js";
+import type { SessionId, TurnId } from "../../types/brand.js";
 
 /**
  * Phus-side view of a tool invocation recorded against a turn.
