@@ -3,14 +3,14 @@
 // Phase 1B will rewrite all imports to use the `@/` alias and point
 // directly at this barrel where convenient.
 
-export type { LogLevel, LogEvent } from "../logger/index.js";
+export type { LogLevel, LogEvent } from "./logger/index.js";
 
 export type {
   Envelope,
   Outbound,
   EnvelopType,
   OutboundType,
-} from "../channel/index.js";
+} from "./channel/index.js";
 
 export type {
   HookName,
@@ -21,7 +21,7 @@ export type {
   TapeLike,
   SkillRegistryLike,
   TapeAnchorRef,
-} from "../hooks/index.js";
+} from "./hooks/index.js";
 
 export type {
   TapeEntry,
@@ -35,15 +35,15 @@ export type {
   TapeState,
   Turn,
   TapeToolCall,
-} from "../tape/index.js";
+} from "./tape/index.js";
 
 export type {
   Schedule,
   FiredSchedule,
   SchedulerOptions,
-} from "../scheduler/index.js";
+} from "./scheduler/index.js";
 
-export type { SteeringInbox, SteeringEvent } from "../steering/index.js";
+export type { SteeringInbox, SteeringEvent } from "./steering/index.js";
 
 export type {
   Plugin,
@@ -53,10 +53,10 @@ export type {
   HookBus,
   ChannelLike,
   InternalCommandLike,
-} from "../plugins/index.js";
+} from "./plugins/index.js";
 
 // export type { MetaTool } from "@phus/runtime/types/tool.js"; // re-enabled post Wave F (runtime dep)
 
-export type { Skill, SkillMetadata, SkillSource } from "../skill.js";
+export type { Skill, SkillMetadata, SkillSource } from "./skill.js";
 
-export type { AuthorDefinition } from "../index.js";
+export type { AuthorDefinition } from "./enumTypes/index.js";

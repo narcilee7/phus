@@ -22,7 +22,8 @@
       "@/*": [
         "./src/*"
       ]
-    }
+    },
+    "incremental": false
   },
   "include": [
     "src/**/*"
