@@ -7,8 +7,8 @@
  */
 import { Tape } from "../session/tape.js";
 import { SkillRegistry } from "@phus/runtime/infra/skills/registry.js";
-import { HookContext, SkillRegistryLike, TapeLike } from "../types/index.js"
-import { asSessionId } from "../types/brand.js";
+import { HookContext, SkillRegistryLike, TapeLike } from "../../types/index.js"
+import { asSessionId } from "../../types/brand.js";
 
 export type CtxOptions = Partial<HookContext>
   & {

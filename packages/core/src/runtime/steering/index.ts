@@ -7,9 +7,9 @@
 //   - Plugins: any external source that wants to push a message without
 //     going through a full Channel (e.g., webhook → inbox → agent)
 
-import type { Envelope } from "../types/channel/index.js";
+import type { Envelope } from "../../types/channel/index.js";
 import { logger } from "@phus/runtime/infra/logging.js";
-import { SteeringEvent, SteeringInbox } from "../types/steering/index.js";
+import { SteeringEvent, SteeringInbox } from "../../types/steering/index.js";
 
 /**
  * Default SteeringInbox: simple FIFO queue.

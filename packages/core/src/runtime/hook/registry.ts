@@ -7,8 +7,8 @@
 
 import { Tape } from "../session/tape.js";
 import { SkillRegistry } from "@phus/runtime/infra/skills/registry.js";
-import { HookContext, HookImpl, HookMode, HookName, RegisterOptions, SkillRegistryLike, TapeLike } from "../types/index.js";
-import { asSessionId } from "../types/brand.js";
+import { HookContext, HookImpl, HookMode, HookName, RegisterOptions, SkillRegistryLike, TapeLike } from "../../types/index.js";
+import { asSessionId } from "../../types/brand.js";
 import { logger } from "@phus/runtime/infra/logging.js";
 
 interface RegisteredHook {

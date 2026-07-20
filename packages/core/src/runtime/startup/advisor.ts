@@ -1,5 +1,5 @@
-import type { TapeLike } from "../types/hooks/index.js";
-import type { TapeEntry, TapePlanEntry } from "../types/tape/entry.js";
+import type { TapeLike } from "../../types/hooks/index.js";
+import type { TapeEntry, TapePlanEntry } from "../../types/tape/entry.js";
 
 export class StartupAdvisor {
   async suggestStartup(tape: TapeLike): Promise<string> {

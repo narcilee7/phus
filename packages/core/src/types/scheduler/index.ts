@@ -2,8 +2,8 @@
  * scheduler types
  */
 
-import { HookName } from "../types/hooks/index.js";
-import type { ScheduleName } from "../types/brand.js";
+import { HookName } from "../hooks/index.js";
+import type { ScheduleName } from "../brand.js";
 
 export interface Schedule {
   name: ScheduleName;
