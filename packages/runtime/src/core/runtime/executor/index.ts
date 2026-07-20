@@ -1,4 +1,4 @@
-import { type Plan, type PlanPhase, type Step, type VerificationResult } from "@phus/core/runtime/plan/types.js";
+import { type Plan, type PlanPhase, type Step, type VerificationResult } from "../plan/types.js";
 import { SubAgent } from "@phus/core/runtime/subagent.js";
 import { ReplanNeededError } from "./error";
 import { ExecutorDeps } from "./types";

@@ -1,6 +1,6 @@
-import { SubAgentAgentLike } from "@phus/core/runtime/subagent/types.js";
+import { SubAgentAgentLike } from "../subagent/types.js";
 import { Verifier } from "@phus/core/runtime/verifier.js";
-import type { Plan, PlanPhase, Step } from "@phus/core/runtime/plan/types.js";
+import type { Plan, PlanPhase, Step } from "../plan/types.js";
 
 export interface ExecutorDeps {
     agent: SubAgentAgentLike;

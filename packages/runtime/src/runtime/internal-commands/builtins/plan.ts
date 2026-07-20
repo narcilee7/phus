@@ -1,4 +1,4 @@
-import { PlanRunner } from "@phus/core/runtime/plan/plan-runner.js";
+import { PlanRunner } from "../../../core/runtime/plan/plan-runner.js";
 import type { InternalCommand, InternalCommandServices } from "../types";
 import type { PlanStore } from "@phus/core/session/plan-store.js";
 
