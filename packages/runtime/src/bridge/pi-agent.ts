@@ -20,7 +20,8 @@ import type { Envelope, Outbound } from "@/types/channel/index.js";
 import { Planner } from '@/core/runtime/plan/planner';
 import type { Plan, PlanStatus, Step, StepStatus } from "@/core/runtime/plan/types.js";
 import { PlanStore } from "@/core/session/plan-store.js";
-import { createPlannerModel } from "@/core/runtime/plan/planner-model.js";
+import { createDefaultCorePort } from "@/bridge/core-port-impl.js";
+import type { CorePort } from "@/bridge/core-port.js";
 import { Learner } from "@/core/runtime/evolution/learner";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { EvolutionEngine } from "@/core/runtime/evolution/engine";
@@ -95,6 +96,11 @@ export interface PhusAgentDeps {
   autoCompact?: AutoCompactConfig;
   /** SQLite-backed plan store. If omitted, an in-memory store is used. */
   planStore?: PlanStore;
+  /** Optional injection port for planner / verifier / learner. If
+   *  omitted, PhusAgent constructs a default `CorePort` that wraps
+   *  the live Pi Agent. Plugin authors and tests can substitute a
+   *  mock. */
+  corePort?: CorePort;
   /** Planner for long-horizon tasks. If omitted, a default planner is created. */
   planner?: Planner;
   /** Step executor used by the plan runner. If omitted, a default executor is created. */
@@ -339,6 +345,9 @@ export class PhusAgent implements PhusAgentFacade {
   private autoCompactEnabled: boolean;
   private toolPermissionHandler?: (req: ToolPermissionRequest) => Promise<boolean>;
   private planEventHandlers = new Set<PlanEventHandler>();
+  /** CorePort — injection port for planner / verifier / learner and any
+   *  other LLM-bound core consumer. Wraps the live Pi Agent loop. */
+  private corePort!: CorePort;
   /** Captured at construction — plans still "running" with an older
    *  updatedAt belong to a dead process and are reconciled to paused. */
   private readonly processStartedAt = Date.now();
@@ -434,13 +443,27 @@ export class PhusAgent implements PhusAgentFacade {
     this.piAgent.subscribe((event) => this.handleEvent(event));
     registerDefaultHooks(this.hooks, { tape: this.tape });
 
+    // Build the CorePort before any Planner/Verifier/Learner (they
+    // each take it via deps.port). Default impl wraps the just-created
+    // piAgent so the planner/verifier/learner share the same loop.
+    // Callers (tests, advanced plugins) can pass a `corePort` in deps
+    // to substitute a mock.
+    this.corePort = deps.corePort ?? createDefaultCorePort(
+      this.piAgent,
+      this.piAgent.state.model,
+      {
+        getCurrentSessionId: () => this.currentSessionId as string | undefined,
+        setNextSessionId: (id) => this.setNextSessionId(id as SessionId),
+      },
+    );
+
     this.planStore = deps.planStore ?? new PlanStore(":memory:");
     this.planner = deps.planner ?? new Planner({
       skills: this.skills,
-      model: this.makePlannerModel(),
+      port: this.corePort,
       hooks: this.hooks,
     });
-    const verifier = new Verifier({ model: this.makePlannerModel() });
+    const verifier = new Verifier({ port: this.corePort });
     this.executor = deps.executor ?? new Executor({ agent: this, verifier, tools: new Map() });
     this.planRunner = deps.planRunner ?? new PlanRunner({
       planner: this.planner,
@@ -452,7 +475,7 @@ export class PhusAgent implements PhusAgentFacade {
     this.learner = new Learner({
       tape: this.tape,
       skills: this.skills,
-      model: this.makePlannerModel(),
+      port: this.corePort,
     });
     const skillValidator = new SkillValidator({
       planRunner: this.planRunner,
@@ -600,10 +623,6 @@ export class PhusAgent implements PhusAgentFacade {
     } catch {
       return [];
     }
-  }
-
-  private makePlannerModel(): { prompt(messages: AgentMessage[]): Promise<string> } {
-    return createPlannerModel(this.piAgent.state.model);
   }
 
   private modelForEndpoint(ep: ReturnType<MeshLike["pickEndpoint"]>): Model<any> {
@@ -1268,7 +1287,7 @@ export class PhusAgent implements PhusAgentFacade {
     // step.subagentSessionId consumers.
     const running = plan.steps.find((s) => s.status === "running");
     if (running) {
-      running.subagentSessionId = info.sessionId;
+      running.subagentSessionId = info.sessionId as typeof running.subagentSessionId;
       running.subagentLabel = info.label;
       this.planStore?.save(plan);
     }

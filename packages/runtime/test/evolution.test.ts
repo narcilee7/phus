@@ -57,6 +57,11 @@ function makeRunner(): PlanRunner {
   } as unknown as PlanRunner;
 }
 
+/** Build a CorePort double whose `complete` returns the given JSON-string response. */
+function portWith(text: string) {
+  return { complete: async () => ({ text }) };
+}
+
 describe("EvolutionEngine", () => {
   it("onPlanCompleted creates a draft when reflection suggests a skill", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-evolution-"));
@@ -75,7 +80,7 @@ describe("EvolutionEngine", () => {
         trigger: "when the user asks for a summary",
       },
     });
-    const learner = new Learner({ tape, skills, model: { prompt: async () => modelResponse } });
+    const learner = new Learner({ tape, skills, port: portWith(modelResponse) });
     const store = new PlanStore(":memory:");
     const validator = new SkillValidator({ planRunner: makeRunner(), planStore: store, skills });
     const engine = new EvolutionEngine({
@@ -113,15 +118,12 @@ describe("EvolutionEngine", () => {
     const learner = new Learner({
       tape,
       skills,
-      model: {
-        prompt: async () =>
-          JSON.stringify({
-            outcome: "failure",
-            whatWorked: [],
-            whatFailed: ["no clear reusable pattern"],
-            procedureConfidence: 0,
-          }),
-      },
+      port: portWith(JSON.stringify({
+        outcome: "failure",
+        whatWorked: [],
+        whatFailed: ["no clear reusable pattern"],
+        procedureConfidence: 0,
+      })),
     });
     const store = new PlanStore(":memory:");
     const validator = new SkillValidator({ planRunner: makeRunner(), planStore: store, skills });
@@ -161,16 +163,13 @@ describe("EvolutionEngine", () => {
     const learner = new Learner({
       tape,
       skills,
-      model: {
-        prompt: async () =>
-          JSON.stringify({
-            outcome: "success",
-            whatWorked: ["reused the deploy checklist"],
-            whatFailed: [],
-            procedureConfidence: 0.8,
-            reusableProcedure: "1. run the tests\n2. deploy only after green",
-          }),
-      },
+      port: portWith(JSON.stringify({
+        outcome: "success",
+        whatWorked: ["reused the deploy checklist"],
+        whatFailed: [],
+        procedureConfidence: 0.8,
+        reusableProcedure: "1. run the tests\n2. deploy only after green",
+      })),
     });
     const store = new PlanStore(":memory:");
     const validator = new SkillValidator({ planRunner: makeRunner(), planStore: store, skills });
@@ -215,15 +214,12 @@ describe("EvolutionEngine", () => {
     const learner = new Learner({
       tape,
       skills,
-      model: {
-        prompt: async () =>
-          JSON.stringify({
-            outcome: "success",
-            whatWorked: ["read the file before editing", "ran tests after"],
-            whatFailed: [],
-            procedureConfidence: 0.5,
-          }),
-      },
+      port: portWith(JSON.stringify({
+        outcome: "success",
+        whatWorked: ["read the file before editing", "ran tests after"],
+        whatFailed: [],
+        procedureConfidence: 0.5,
+      })),
     });
     const store = new PlanStore(":memory:");
     const validator = new SkillValidator({ planRunner: makeRunner(), planStore: store, skills });
@@ -263,21 +259,18 @@ describe("EvolutionEngine", () => {
     const learner = new Learner({
       tape,
       skills,
-      model: {
-        prompt: async () =>
-          JSON.stringify({
-            outcome: "success",
-            whatWorked: ["step a", "step b"],
-            whatFailed: [],
-            procedureConfidence: 0.9,
-            suggestedSkill: {
-              name: "regression-test",
-              description: "Re-runs tests",
-              body: "Run tests",
-              trigger: "after edits",
-            },
-          }),
-      },
+      port: portWith(JSON.stringify({
+        outcome: "success",
+        whatWorked: ["step a", "step b"],
+        whatFailed: [],
+        procedureConfidence: 0.9,
+        suggestedSkill: {
+          name: "regression-test",
+          description: "Re-runs tests",
+          body: "Run tests",
+          trigger: "after edits",
+        },
+      })),
     });
     const store = new PlanStore(":memory:");
 
@@ -332,21 +325,18 @@ describe("EvolutionEngine", () => {
     const learner = new Learner({
       tape,
       skills,
-      model: {
-        prompt: async () =>
-          JSON.stringify({
-            outcome: "failure",
-            whatWorked: ["partial progress"],
-            whatFailed: ["got stuck on the last step"],
-            procedureConfidence: 0.9,
-            suggestedSkill: {
-              name: "unfinished",
-              description: "Won't be useful",
-              body: "Do something",
-              trigger: "rare",
-            },
-          }),
-      },
+      port: portWith(JSON.stringify({
+        outcome: "failure",
+        whatWorked: ["partial progress"],
+        whatFailed: ["got stuck on the last step"],
+        procedureConfidence: 0.9,
+        suggestedSkill: {
+          name: "unfinished",
+          description: "Won't be useful",
+          body: "Do something",
+          trigger: "rare",
+        },
+      })),
     });
     const store = new PlanStore(":memory:");
     const validator = new SkillValidator({ planRunner: makeRunner(), planStore: store, skills });
@@ -385,16 +375,13 @@ describe("EvolutionEngine", () => {
     const learner = new Learner({
       tape,
       skills,
-      model: {
-        prompt: async () =>
-          JSON.stringify({
-            outcome: "success",
-            whatWorked: ["small win"],
-            whatFailed: [],
-            procedureConfidence: 0.1,
-            reusableProcedure: "short proc",
-          }),
-      },
+      port: portWith(JSON.stringify({
+        outcome: "success",
+        whatWorked: ["small win"],
+        whatFailed: [],
+        procedureConfidence: 0.1,
+        reusableProcedure: "short proc",
+      })),
     });
     const store = new PlanStore(":memory:");
     const validator = new SkillValidator({ planRunner: makeRunner(), planStore: store, skills });

@@ -33,7 +33,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
@@ -55,18 +55,33 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Publish to npm
+      # Stage-5 of the monorepo split: only @phus/cli is published in v1
+      # (proposal §6.3). @phus/runtime, @phus/core, @phus/tui stay
+      # private and are consumed only via the workspace.
+      - name: Publish @phus/cli to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          pnpm publish --no-git-checks --access public --tag ${{ steps.dist-tag.outputs.tag }}
+          pnpm --filter @phus/cli publish \
+            --no-git-checks \
+            --access public \
+            --tag ${{ steps.dist-tag.outputs.tag }}
 
       - name: Pack distribution archive
         run: |
           mkdir -p release
+          # The bin lives under apps/cli/dist/ after Stage 2; hoist the
+          # cli-published package.json + pnpm-lock into the archive root
+          # so consumers see the flat `$PHUS_HOME/dist/phus.mjs` layout.
+          cp apps/cli/package.json package.json.cli
           tar -czf "release/phus-${{ steps.dist-tag.outputs.version }}.tar.gz" \
-            dist package.json pnpm-lock.yaml README.md LICENSE \
-            phus.config.example.yaml scripts/install.sh scripts/install.ps1
+            apps/cli/dist \
+            package.json.cli \
+            pnpm-lock.yaml README.md LICENSE \
+            phus.config.example.yaml scripts/install.sh scripts/install.ps1 \
+            scripts/rename-cli-bin.mjs \
+            scripts/fix-extensions.mjs
+          rm -f package.json.cli
           cp "release/phus-${{ steps.dist-tag.outputs.version }}.tar.gz" "release/phus-latest.tar.gz"
 
       - name: Create GitHub Release

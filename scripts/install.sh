@@ -62,9 +62,32 @@ install_from_release() {
   curl -fsSL "$url" -o "$install_dir/phus.tar.gz"
 
   log "Extracting..."
-  rm -rf "$install_dir/dist" "$install_dir/package.json" "$install_dir/pnpm-lock.yaml"
-  tar -xzf "$install_dir/phus.tar.gz" -C "$install_dir" --strip-components=1
+  # After Stage-2 the tarball carries apps/cli/dist/, packages/runtime/dist/ etc.
+  # under the top-level dir; strip-components=1 leaves apps/cli/dist at the
+  # install root. Stage the extraction into $install_dir/staging/ and move
+  # only the cli bin artifacts into $install_dir/dist/ to preserve the
+  # `$PHUS_HOME/dist/phus.mjs` invariant downstream (Dockerfile, install.sh,
+  # systemd unit all reference that path).
+  rm -rf "$install_dir/staging" "$install_dir/dist" "$install_dir/package.json" "$install_dir/pnpm-lock.yaml"
+  mkdir -p "$install_dir/staging"
+  tar -xzf "$install_dir/phus.tar.gz" -C "$install_dir/staging" --strip-components=1
   rm -f "$install_dir/phus.tar.gz"
+
+  if [ -d "$install_dir/staging/apps/cli/dist" ]; then
+    mv "$install_dir/staging/apps/cli/dist" "$install_dir/dist"
+  else
+    warn "Tarball did not contain apps/cli/dist; install layout changed?"
+  fi
+
+  # Hoist the cli-published package.json/lock into the install root
+  # (the tarball packs them as apps/cli/package.json).
+  if [ -f "$install_dir/staging/apps/cli/package.json" ]; then
+    mv "$install_dir/staging/apps/cli/package.json" "$install_dir/package.json"
+  fi
+  if [ -f "$install_dir/staging/apps/cli/pnpm-lock.yaml" ]; then
+    mv "$install_dir/staging/apps/cli/pnpm-lock.yaml" "$install_dir/pnpm-lock.yaml"
+  fi
+  rm -rf "$install_dir/staging"
 
   # Rebuild native deps if needed (better-sqlite3).
   if [ -f "$install_dir/package.json" ]; then
@@ -111,9 +134,11 @@ install_from_source() {
     pnpm build
   )
 
-  # Link dist to PHUS_HOME for consistency with release install.
-  ln -sfn "$install_dir/dist" "$PHUS_HOME/dist"
-  ln -sfn "$install_dir/package.json" "$PHUS_HOME/package.json"
+  # Link dist to PHUS_HOME for consistency with release install. After
+  # the Stage-2 split the workspace build emits apps/cli/dist, not a
+  # top-level dist/.
+  ln -sfn "$install_dir/apps/cli/dist" "$PHUS_HOME/dist"
+  ln -sfn "$install_dir/apps/cli/package.json" "$PHUS_HOME/package.json"
 
   log "Phus (source) installed at $install_dir"
 }

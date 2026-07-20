@@ -80,15 +80,12 @@ describe("Evaluation: intelligence loop integration", () => {
         const learner = new Learner({
             tape: makeTape().tape,
             skills: new SkillRegistry(dir),
-            model: {
-                prompt: async () =>
-                    JSON.stringify({
-                        outcome: "success",
-                        whatWorked: ["followed the procedure"],
-                        whatFailed: [],
-                        procedureConfidence: 0.8,
-                    }),
-            },
+            port: { complete: async () => ({ text: JSON.stringify({
+                outcome: "success",
+                whatWorked: ["followed the procedure"],
+                whatFailed: [],
+                procedureConfidence: 0.8,
+            }) }) },
         });
         const skills = new SkillRegistry(dir);
         const store = new PlanStore(":memory:");
@@ -138,21 +135,18 @@ describe("Evaluation: intelligence loop integration", () => {
         const learner = new Learner({
             tape: makeTape().tape,
             skills,
-            model: {
-                prompt: async () =>
-                    JSON.stringify({
-                        outcome: "success",
-                        whatWorked: ["reduced failures to 0"],
-                        whatFailed: [],
-                        procedureConfidence: 0.9,
-                        suggestedSkill: {
-                            name: "improve-me",
-                            description: "Better deploy",
-                            body: "Use this for deploys",
-                            trigger: "deploy",
-                        },
-                    }),
-            },
+            port: { complete: async () => ({ text: JSON.stringify({
+                outcome: "success",
+                whatWorked: ["reduced failures to 0"],
+                whatFailed: [],
+                procedureConfidence: 0.9,
+                suggestedSkill: {
+                    name: "improve-me",
+                    description: "Better deploy",
+                    body: "Use this for deploys",
+                    trigger: "deploy",
+                },
+            }) }) },
         });
 
         const validator = new SkillValidator({ planRunner: makePlanRunner(), planStore: store, skills });
@@ -305,21 +299,18 @@ describe("Evaluation: intelligence loop integration", () => {
         const learner = new Learner({
             tape: makeTape().tape,
             skills,
-            model: {
-                prompt: async () =>
-                    JSON.stringify({
-                        outcome: "success",
-                        whatWorked: ["tried something"],
-                        whatFailed: [],
-                        procedureConfidence: 0.8,
-                        suggestedSkill: {
-                            name: "worse",
-                            description: "Less effective",
-                            body: "Do less",
-                            trigger: "rare",
-                        },
-                    }),
-            },
+            port: { complete: async () => ({ text: JSON.stringify({
+                outcome: "success",
+                whatWorked: ["tried something"],
+                whatFailed: [],
+                procedureConfidence: 0.8,
+                suggestedSkill: {
+                    name: "worse",
+                    description: "Less effective",
+                    body: "Do less",
+                    trigger: "rare",
+                },
+            }) }) },
         });
 
         const validator = new SkillValidator({ planRunner: makePlanRunner(), planStore: store, skills });

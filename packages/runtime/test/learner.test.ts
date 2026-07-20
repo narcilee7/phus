@@ -6,6 +6,7 @@ import { Learner } from "@/core/runtime/evolution/learner";
 import { SkillRegistry } from "@/infra/skills/registry";
 import { asSessionId } from "@/types/brand";
 import type { TapeLike } from "@/types/hooks/index";
+import type { CorePort } from "@/bridge/core-port";
 
 function makeTape(entries: unknown[] = []): TapeLike {
   return {
@@ -17,6 +18,10 @@ function makeTape(entries: unknown[] = []): TapeLike {
     stats: () => ({ totalEntries: entries.length, sessions: {} }),
     loadAnchor: () => undefined,
   };
+}
+
+function makePort(response: string): CorePort {
+  return { complete: async () => ({ text: response }) };
 }
 
 describe("Learner", () => {
@@ -46,9 +51,9 @@ describe("Learner", () => {
         trigger: "when the user asks to deploy",
       },
     });
-    const model = { prompt: async () => modelResponse };
+    const port = makePort(modelResponse);
 
-    const learner = new Learner({ tape, skills, model });
+    const learner = new Learner({ tape, skills, port });
     const reflection = await learner.reflect(asSessionId("session-1"), "deploy the app");
 
     expect(reflection.outcome).toBe("success");
@@ -62,9 +67,9 @@ describe("Learner", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-learner-"));
     const skills = new SkillRegistry(dir);
     const tape = makeTape([]);
-    const model = { prompt: async () => "not valid json" };
+    const port = makePort("not valid json");
 
-    const learner = new Learner({ tape, skills, model });
+    const learner = new Learner({ tape, skills, port });
     const reflection = await learner.reflect(asSessionId("session-2"), "some task");
 
     expect(reflection.outcome).toBe("partial");

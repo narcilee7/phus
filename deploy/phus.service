@@ -15,7 +15,7 @@ Type=simple
 User=phus
 Group=phus
 WorkingDirectory=/opt/phus
-ExecStart=/usr/bin/node /opt/phus/dist/phus.js gateway --websocket 8080
+ExecStart=/usr/bin/node /opt/phus/dist/phus.mjs gateway --websocket 8080
 Restart=on-failure
 RestartSec=5
 

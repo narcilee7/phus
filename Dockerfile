@@ -25,9 +25,9 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-# Build TS to dist/
-COPY tsconfig.json tsdown.config.ts ./
-COPY src ./src
+# Build TS to dist/ — `pnpm -r build` walks the workspace; the @phus/cli
+# package emits apps/cli/dist (renamed to apps/cli/dist/phus.mjs post-build).
+COPY tsconfig.json ./
 RUN pnpm build
 
 # ---- runtime ----
@@ -48,8 +48,11 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 
-# Built artifacts.
-COPY --from=builder /app/dist ./dist
+# Built artifacts. After the Stage-2 monorepo split, the bin lives
+# under apps/cli/dist/; renaming preserves the `dist/phus.mjs` path
+# the rest of the deploy story (HEALTHCHECK, ENTRYPOINT, docs) already
+# references.
+COPY --from=builder /app/apps/cli/dist ./dist
 
 # Phus home dir (mount as a volume in production).
 RUN mkdir -p /app/.phus /app/logs

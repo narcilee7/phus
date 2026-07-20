@@ -2,7 +2,7 @@ import { asSessionId } from "@/types/brand";
 import { type PlanPhase, type SubAgentOptions } from "../plan/types";
 import { SubAgentAgentLike } from "./types";
 import { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import { extractText } from "@/utils/pi-text";
+import { extractText } from "@/bridge/text.js";
 import { loadConfig } from "@/infra/config/index.js";
 
 export class SubAgentTimeoutError extends Error {
