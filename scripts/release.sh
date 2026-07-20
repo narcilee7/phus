@@ -42,13 +42,25 @@ fi
 
 echo "New version: $NEW"
 
-# Update package.json
-node -e "
-  const fs = require('fs');
-  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
-  pkg.version = '$NEW';
-  fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-"
+# Bump every workspace package.json in lockstep. Stage 5 of the
+# monorepo split pins a single workspace version across root + apps/cli
+# + packages/* (proposal §10 question #4: fixed semver in v1).
+PACKAGES=(
+  package.json
+  apps/cli/package.json
+  packages/core/package.json
+  packages/runtime/package.json
+  packages/tui/package.json
+)
+
+for f in "${PACKAGES[@]}"; do
+  node -e "
+    const fs = require('fs');
+    const pkg = JSON.parse(fs.readFileSync('$f', 'utf-8'));
+    pkg.version = '$NEW';
+    fs.writeFileSync('$f', JSON.stringify(pkg, null, 2) + '\n');
+  "
+done
 
 # Update CHANGELOG
 TODAY=$(date +%Y-%m-%d)
@@ -78,7 +90,7 @@ SECTION="\n## [$NEW] - $TODAY\n\n### Added\n$CHANGES\n"
 } > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
 
 # Commit and tag
-git add package.json CHANGELOG.md
+git add package.json apps/cli/package.json packages/core/package.json packages/runtime/package.json packages/tui/package.json CHANGELOG.md
 git commit -m "release: v$NEW"
 git tag "v$NEW"
 

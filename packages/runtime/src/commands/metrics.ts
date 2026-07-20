@@ -1,7 +1,7 @@
 // src/commands/metrics.ts
 // `phus metrics [--session <id>] [--json]` — print aggregated intelligence-loop stats.
 
-import { PlanStore } from "@/core/session/plan-store.js";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import { IntelligenceMetricsAggregator } from "@/core/runtime/evolution/metrics.js";
 
 export interface MetricsOptions {

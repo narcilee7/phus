@@ -46,12 +46,35 @@ function Install-FromRelease {
   Invoke-WebRequest -Uri $url -OutFile $tarball -UseBasicParsing
 
   Log "Extracting..."
+  # After Stage-2 the tarball carries apps/cli/dist/, packages/runtime/dist/
+  # etc. under the top-level dir. Stage into a temp dir, then hoist only the
+  # cli bin artifacts into $PhusHome/dist/ so the `$PHUS_HOME\dist\phus.mjs`
+  # invariant downstream (Dockerfile, install.ps1, systemd unit) holds.
+  Remove-Item -Recurse -Force (Join-Path $PhusHome "staging") -ErrorAction SilentlyContinue
   Remove-Item -Recurse -Force (Join-Path $PhusHome "dist") -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $PhusHome "package.json") -ErrorAction SilentlyContinue
   Remove-Item -Force (Join-Path $PhusHome "pnpm-lock.yaml") -ErrorAction SilentlyContinue
 
-  tar -xzf $tarball -C $PhusHome --strip-components=1
+  New-Item -ItemType Directory -Force -Path (Join-Path $PhusHome "staging") | Out-Null
+  tar -xzf $tarball -C (Join-Path $PhusHome "staging") --strip-components=1
   Remove-Item $tarball -ErrorAction SilentlyContinue
+
+  $stagedDist = Join-Path $PhusHome (Join-Path "staging" (Join-Path "apps" (Join-Path "cli" "dist")))
+  if (Test-Path $stagedDist) {
+    Move-Item -Force $stagedDist (Join-Path $PhusHome "dist")
+  } else {
+    Warn "Tarball did not contain apps/cli/dist; install layout changed?"
+  }
+
+  $stagedPkg = Join-Path $PhusHome (Join-Path "staging" (Join-Path "apps" (Join-Path "cli" "package.json")))
+  if (Test-Path $stagedPkg) {
+    Move-Item -Force $stagedPkg (Join-Path $PhusHome "package.json")
+  }
+  $stagedLock = Join-Path $PhusHome (Join-Path "staging" (Join-Path "apps" (Join-Path "cli" "pnpm-lock.yaml")))
+  if (Test-Path $stagedLock) {
+    Move-Item -Force $stagedLock (Join-Path $PhusHome "pnpm-lock.yaml")
+  }
+  Remove-Item -Recurse -Force (Join-Path $PhusHome "staging") -ErrorAction SilentlyContinue
 
   if (Test-Path (Join-Path $PhusHome "package.json")) {
     Ensure-Node
@@ -138,13 +161,15 @@ function Install-FromSource {
   Push-Location $InstallDir
   try { pnpm build } finally { Pop-Location }
 
-  # Link dist to PHUS_HOME for consistency with release install.
+  # Link dist to PHUS_HOME for consistency with release install. After
+  # the Stage-2 split the workspace build emits apps/cli/dist, not a
+  # top-level dist/.
   $distLink = Join-Path $PhusHome "dist"
   $pkgLink = Join-Path $PhusHome "package.json"
   if (Test-Path $distLink) { Remove-Item $distLink -Force }
   if (Test-Path $pkgLink) { Remove-Item $pkgLink -Force }
-  New-Item -ItemType SymbolicLink -Path $distLink -Target (Join-Path $InstallDir "dist") | Out-Null
-  New-Item -ItemType SymbolicLink -Path $pkgLink -Target (Join-Path $InstallDir "package.json") | Out-Null
+  New-Item -ItemType SymbolicLink -Path $distLink -Target (Join-Path (Join-Path $InstallDir "apps") "dist") | Out-Null
+  New-Item -ItemType SymbolicLink -Path $pkgLink -Target (Join-Path (Join-Path $InstallDir "apps") "package.json") | Out-Null
 
   Log "Phus (source) installed at $InstallDir"
 }

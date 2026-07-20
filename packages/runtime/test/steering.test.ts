@@ -1,6 +1,6 @@
 // test/steering.test.ts
 import { describe, expect, it, beforeEach } from "vitest";
-import { PiSteeringInbox } from "../src/core/runtime/steering/index";
+import { PiSteeringInbox } from "@phus/core/runtime/steering/index.js";
 import type { Envelope } from "../src/types/channel/index";
 
 function env(content: string, from = "system"): Envelope {

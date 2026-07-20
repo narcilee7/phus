@@ -4,10 +4,10 @@ import {
   pingHealth,
   createHealthTimer,
   runHealthChecks,
-} from "../src/core/llm/provider-mesh/health";
-import type { EndpointState, MeshPolicy } from "../src/core/llm/provider-mesh/types";
+} from "../src/llm/provider-mesh/health";
+import type { EndpointState, MeshPolicy } from "../src/llm/provider-mesh/types";
 
-vi.mock("@/core/logger.js", () => ({
+vi.mock("@phus/runtime/infra/logger.js", () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 }));
 

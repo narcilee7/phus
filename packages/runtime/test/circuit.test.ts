@@ -1,7 +1,7 @@
 // test/provider-mesh/circuit.test.ts
 import { describe, expect, it, vi } from "vitest";
-import { isAvailable, recordSuccess, recordFailure, type CircuitChangeEvent } from "../src/core/llm/provider-mesh/circuit";
-import type { EndpointState, MeshPolicy } from "../src/core/llm/provider-mesh/types";
+import { isAvailable, recordSuccess, recordFailure, type CircuitChangeEvent } from "../src/llm/provider-mesh/circuit";
+import type { EndpointState, MeshPolicy } from "../src/llm/provider-mesh/types";
 
 function makeState(over: Partial<EndpointState> = {}): EndpointState {
   return {
@@ -137,6 +137,6 @@ describe("circuit lifecycle (closed → open → half-open → closed)", () => {
   });
 });
 
-vi.mock("@/core/logger.js", () => ({
+vi.mock("@phus/runtime/infra/logger.js", () => ({
   logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
 }));

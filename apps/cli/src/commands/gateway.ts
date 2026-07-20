@@ -11,10 +11,10 @@ import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import { bootstrap } from "@phus/runtime/infra/bootstrap.js";
 import { logger } from "@phus/runtime/infra/logging.js";
 import { loadConfig } from "@phus/runtime/infra/config/index.js";
-import { initInternalCommands } from "@phus/runtime/core/runtime/internal-commands/index.js";
+import { initInternalCommands } from "@phus/runtime/runtime/internal-commands/index.js";
 import { channelStatuses, collectChannels } from "@phus/runtime/commands/channels.js";
 import type { ChannelAdapter } from "@phus/runtime/channels/base.js";
-import type { Schedule } from "@phus/runtime/types/scheduler/index.js";
+import type { Schedule } from "@phus/core/types/scheduler/index.js";
 import { resolveProfile, apiKeyForProfile } from "@phus/runtime/infra/profile.js";
 
 export function registerGatewayCommand(program: Command): void {
@@ -64,7 +64,7 @@ export function registerGatewayCommand(program: Command): void {
       }
 
       // Scheduler + mesh → internal-commands services (DI, no singleton).
-      const { Scheduler } = await import("@phus/runtime/core/runtime/scheduler/index.js");
+      const { Scheduler } = await import("@phus/core/runtime/scheduler/index.js");
       const scheduler = new Scheduler(handle.internals.hooks);
       initInternalCommands({
         agent: handle.agent,

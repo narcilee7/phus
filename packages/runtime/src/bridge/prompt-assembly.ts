@@ -3,12 +3,12 @@
 // `transformContext` callback.
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { SkillRegistryLike, TapeLike } from "@/types/hooks/index.js";
-import type { SessionId } from "@/types/brand.js";
-import { makeCtx } from "@/core/runtime/hook/ctx-builder";
-import type { HookRegistry } from "@/core/runtime/hook/registry";
-import type { RepoFileIndex } from "@/core/session/repo-file-index.js";
-import { selectRelevantFiles } from "@/core/session/context-select.js";
+import type { SkillRegistryLike, TapeLike } from "@phus/core/types/hooks/index.js";
+import type { SessionId } from "@phus/core/types/brand.js";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
+import type { HookRegistry } from "@phus/core/runtime/hook/registry.js";
+import type { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
+import { selectRelevantFiles } from "@phus/core/session/context-select.js";
 
 export const SYSTEM_PROMPT_HEADER = `You are Phus (⛰️ 西西弗斯), a self-evolving agent.
 
@@ -98,12 +98,12 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
     let tapeSummary: string;
     const sid = deps.getCurrentSessionId();
     if (sid) {
-      const { selectRelevantTurns } = await import("@/core/session/context-select.js");
+      const { selectRelevantTurns } = await import("@phus/core/session/context-select.js");
       // `selectRelevantTurns` requires the concrete `Tape` class.
       // `TapeLike` already declares `.replay()` so the cast is sound
       // — the import keeps the interface narrow in the type layer.
       const relevant = selectRelevantTurns(
-        deps.tape as unknown as import("@/core/session/tape.js").Tape,
+        deps.tape as unknown as import("@phus/core/session/tape.js").Tape,
         sid,
         queryText,
       );

@@ -54,7 +54,7 @@ async function runInternalCommand(
   dispatch: (a: AppAction) => void,
 ): Promise<SlashResult> {
   const { execute, initInternalCommands } = await import(
-    "@phus/runtime/core/runtime/internal-commands/index.js"
+    "@phus/runtime/runtime/internal-commands/index.js"
   );
   initInternalCommands({
     agent,

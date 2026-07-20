@@ -9,12 +9,12 @@
 import pino from "pino";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { LEVELS, type LogLevel } from "@/types/logger/index.js";
+import { LEVELS, type LogLevel } from "@phus/core/types/logger/index.js";
 import type { LogConfig } from "@/infra/config/schema.js";
 import { LOG_LEVELS } from "@/infra/config/defaults.js";
 
-export type { LogLevel } from "@/types/logger/index.js";
-export type { LogEvent } from "@/types/logger/index.js";
+export type { LogLevel } from "@phus/core/types/logger/index.js";
+export type { LogEvent } from "@phus/core/types/logger/index.js";
 
 function ensureDir(file: string): string {
   fs.mkdirSync(path.dirname(file), { recursive: true });

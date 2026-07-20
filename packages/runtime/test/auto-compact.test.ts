@@ -3,8 +3,8 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "../src/core/session/tape";
-import { shouldCompact, maybeCompact, estimateTokens, DEFAULT_AUTO_COMPACT } from "../src/core/session/auto-compact";
+import { Tape } from "@phus/core/session/tape.js";
+import { shouldCompact, maybeCompact, estimateTokens, DEFAULT_AUTO_COMPACT } from "@phus/core/session/auto-compact.js";
 
 function makeTurn(i: number, sessionId = "test") {
   return {

@@ -1,10 +1,10 @@
-import { HookName } from "@/types";
+import { HookName } from "@phus/core/types/index.js";
 import { EvolutionEngine } from "../evolution/engine";
 import { Plan, PlanRunnerDeps, Step } from "./types";
 import { logger } from "@/infra/logging";
 import { loadConfig } from "@/infra/config/index.js";
-import { makeCtx } from "@/core/runtime/hook/ctx-builder";
-import { ReplanNeededError } from "@/core/runtime/executor/error";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
+import { ReplanNeededError } from "../executor/error.js";
 
 export class PlanRunner {
   /** Cooperative cancellation: set by abort() while a run is in flight,

@@ -16,20 +16,21 @@ import {
   type AfterToolCallResult,
 } from "@mariozechner/pi-agent-core";
 import { streamSimple, type Model } from "@mariozechner/pi-ai";
-import type { Envelope, Outbound } from "@/types/channel/index.js";
-import { Planner } from '@/core/runtime/plan/planner';
+import type { Envelope, Outbound } from "@phus/core/types/channel/index.js";
+import { Planner } from '@phus/core/runtime/plan/planner.js';
 import type { Plan, PlanStatus, Step, StepStatus } from "@/core/runtime/plan/types.js";
-import { PlanStore } from "@/core/session/plan-store.js";
-import { createPlannerModel } from "@/core/runtime/plan/planner-model.js";
-import { Learner } from "@/core/runtime/evolution/learner";
-import { SkillValidator } from "@/core/runtime/skill/validator";
-import { EvolutionEngine } from "@/core/runtime/evolution/engine";
-import type { Turn } from "@/types/tape/index.js";
-import type { MetaTool } from "@/types/tool.js";
-import type { SessionId } from "@/types/brand.js";
-import { asSessionId, asToolCallId, asTurnId } from "@/types/brand.js";
-import { Tape } from "@/core/session/tape.js";
-import { PiSteeringInbox } from "@/core/runtime/steering";
+import { PlanStore } from "@phus/core/session/plan-store.js";
+import { createDefaultCorePort } from "@/bridge/core-port-impl.js";
+import type { CorePort } from "@/bridge/core-port.js";
+import { Learner } from "@phus/core/runtime/evolution/learner.js";
+import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
+import { EvolutionEngine } from "@phus/core/runtime/evolution/engine.js";
+import type { Turn } from "@phus/core/types/tape/index.js";
+import type { MetaTool } from "@phus/runtime/types/tool.js";
+import type { SessionId } from "@phus/core/types/brand.js";
+import { asSessionId, asToolCallId, asTurnId } from "@phus/core/types/brand.js";
+import { Tape } from "@phus/core/session/tape.js";
+import { PiSteeringInbox } from "@phus/core/runtime/steering/index.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import type { SkillDraft } from "@/infra/skills/draft.js";
 import { createMetaTools } from "@/infra/meta/index.js";
@@ -43,10 +44,10 @@ import {
   type ProviderProfile,
 } from "@/infra/profile.js";
 import { loadConfig } from "@/infra/config/index.js";
-import type { SteeringInbox } from "@/types/steering/index.js";
-import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
-import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@/core/session/checkpoint.js";
-import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/llm/provider-mesh/index.js";
+import type { SteeringInbox } from "@phus/core/types/steering/index.js";
+import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@phus/core/session/auto-compact.js";
+import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@phus/core/session/checkpoint.js";
+import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/llm/provider-mesh/index.js";
 import { logger } from "@/infra/logging.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { toAgentTool } from "@/bridge/agent-tool-adapter.js";
@@ -54,14 +55,14 @@ import { extractText } from "@/bridge/text.js";
 import { resolveApiKey } from "@/bridge/model-resolver.js";
 import { registerDefaultHooks } from "@/bridge/default-hooks.js";
 import { buildContextBlock } from "@/bridge/prompt-assembly.js";
-import { RepoFileIndex } from "@/core/session/repo-file-index.js";
+import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
-import { HookRegistry } from "@/core/runtime/hook/registry";
-import { Executor } from "@/core/runtime/executor";
-import { PlanRunner } from "@/core/runtime/plan/plan-runner";
-import { makeCtx } from "@/core/runtime/hook/ctx-builder";
-import { HookContext } from "@/types";
-import { Verifier } from "@/core/runtime/verifier";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
+import { Executor } from "@phus/core/runtime/executor.js";
+import { PlanRunner } from "@phus/core/runtime/plan/plan-runner.js";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
+import { HookContext } from "@phus/core/types/index.js";
+import { Verifier } from "@phus/core/runtime/verifier.js";
 
 export interface PhusAgentDeps {
   /** Logger used for all diagnostic and error events. */
@@ -95,6 +96,11 @@ export interface PhusAgentDeps {
   autoCompact?: AutoCompactConfig;
   /** SQLite-backed plan store. If omitted, an in-memory store is used. */
   planStore?: PlanStore;
+  /** Optional injection port for planner / verifier / learner. If
+   *  omitted, PhusAgent constructs a default `CorePort` that wraps
+   *  the live Pi Agent. Plugin authors and tests can substitute a
+   *  mock. */
+  corePort?: CorePort;
   /** Planner for long-horizon tasks. If omitted, a default planner is created. */
   planner?: Planner;
   /** Step executor used by the plan runner. If omitted, a default executor is created. */
@@ -192,15 +198,15 @@ export interface PhusAgentFacade {
   /** Hook report — what `phus hooks` prints. */
   getHookReport(): Record<string, Array<{ priority: number; mode: "first_result" | "chain" | "broadcast" }>>;
   /** All skills (name + metadata + description). */
-  getAllSkills(): readonly import("@/types/skill.js").Skill[];
+  getAllSkills(): readonly import("@phus/core/types/skill.js").Skill[];
   /** Look up one skill by name. */
-  getSkill(name: string): import("@/types/skill.js").Skill | undefined;
+  getSkill(name: string): import("@phus/core/types/skill.js").Skill | undefined;
   /** Active safety policy rules. */
   getPolicy(): readonly PolicyRule[];
   /** Tape statistics. */
   getTapeStats(): { totalEntries: number; sessions: Record<string, number> };
   /** Replay all entries for a session (Tape-style generator). */
-  replayTape(sessionId?: string): Generator<import("@/types/tape/index.js").TapeEntry>;
+  replayTape(sessionId?: string): Generator<import("@phus/core/types/tape/index.js").TapeEntry>;
   /** Render a recent-turn summary (used by `,context`). */
   getTapeSummary(sessionId: SessionId | undefined, limit: number): string;
 
@@ -251,7 +257,7 @@ export interface PhusAgentFacade {
   /** Suggest startup.sh content based on recent tape. */
   suggestStartup(): Promise<string>;
   /** Reflect on a session and return a structured reflection. */
-  reflect(sessionId: SessionId, task: string): Promise<import("@/core/runtime/evolution/types").Reflection>;
+  reflect(sessionId: SessionId, task: string): Promise<import("@phus/core/runtime/evolution/types.js").Reflection>;
   /** Number of entries currently in tape. */
   getTapeTotalEntries(): number;
   /** Number of sessions currently in tape. */
@@ -339,6 +345,9 @@ export class PhusAgent implements PhusAgentFacade {
   private autoCompactEnabled: boolean;
   private toolPermissionHandler?: (req: ToolPermissionRequest) => Promise<boolean>;
   private planEventHandlers = new Set<PlanEventHandler>();
+  /** CorePort — injection port for planner / verifier / learner and any
+   *  other LLM-bound core consumer. Wraps the live Pi Agent loop. */
+  private corePort!: CorePort;
   /** Captured at construction — plans still "running" with an older
    *  updatedAt belong to a dead process and are reconciled to paused. */
   private readonly processStartedAt = Date.now();
@@ -434,13 +443,27 @@ export class PhusAgent implements PhusAgentFacade {
     this.piAgent.subscribe((event) => this.handleEvent(event));
     registerDefaultHooks(this.hooks, { tape: this.tape });
 
+    // Build the CorePort before any Planner/Verifier/Learner (they
+    // each take it via deps.port). Default impl wraps the just-created
+    // piAgent so the planner/verifier/learner share the same loop.
+    // Callers (tests, advanced plugins) can pass a `corePort` in deps
+    // to substitute a mock.
+    this.corePort = deps.corePort ?? createDefaultCorePort(
+      this.piAgent,
+      this.piAgent.state.model,
+      {
+        getCurrentSessionId: () => this.currentSessionId as string | undefined,
+        setNextSessionId: (id) => this.setNextSessionId(id as SessionId),
+      },
+    );
+
     this.planStore = deps.planStore ?? new PlanStore(":memory:");
     this.planner = deps.planner ?? new Planner({
       skills: this.skills,
-      model: this.makePlannerModel(),
+      port: this.corePort,
       hooks: this.hooks,
     });
-    const verifier = new Verifier({ model: this.makePlannerModel() });
+    const verifier = new Verifier({ port: this.corePort });
     this.executor = deps.executor ?? new Executor({ agent: this, verifier, tools: new Map() });
     this.planRunner = deps.planRunner ?? new PlanRunner({
       planner: this.planner,
@@ -452,7 +475,7 @@ export class PhusAgent implements PhusAgentFacade {
     this.learner = new Learner({
       tape: this.tape,
       skills: this.skills,
-      model: this.makePlannerModel(),
+      port: this.corePort,
     });
     const skillValidator = new SkillValidator({
       planRunner: this.planRunner,
@@ -600,10 +623,6 @@ export class PhusAgent implements PhusAgentFacade {
     } catch {
       return [];
     }
-  }
-
-  private makePlannerModel(): { prompt(messages: AgentMessage[]): Promise<string> } {
-    return createPlannerModel(this.piAgent.state.model);
   }
 
   private modelForEndpoint(ep: ReturnType<MeshLike["pickEndpoint"]>): Model<any> {
@@ -1066,7 +1085,7 @@ export class PhusAgent implements PhusAgentFacade {
 
   async compactCurrentSession(): Promise<string> {
     if (!this.currentSessionId) throw new Error("no current session to compact");
-    const { compactSession } = await import("@/core/session/compaction.js");
+    const { compactSession } = await import("@phus/core/session/compaction.js");
     const result = await compactSession(this.tape, this.currentSessionId, { keepRecent: 10 });
     return `compacted: summarized=${result.summarized}, kept=${result.keptRecent}`;
   }
@@ -1120,7 +1139,7 @@ export class PhusAgent implements PhusAgentFacade {
     return this.tape.stats();
   }
 
-  *replayTape(sessionId?: string): Generator<import("@/types/tape/index.js").TapeEntry> {
+  *replayTape(sessionId?: string): Generator<import("@phus/core/types/tape/index.js").TapeEntry> {
     yield* this.tape.replay(sessionId);
   }
 
@@ -1268,7 +1287,7 @@ export class PhusAgent implements PhusAgentFacade {
     // step.subagentSessionId consumers.
     const running = plan.steps.find((s) => s.status === "running");
     if (running) {
-      running.subagentSessionId = info.sessionId;
+      running.subagentSessionId = info.sessionId as typeof running.subagentSessionId;
       running.subagentLabel = info.label;
       this.planStore?.save(plan);
     }
@@ -1365,12 +1384,12 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   async suggestStartup(): Promise<string> {
-    const { StartupAdvisor } = await import("@/core/runtime/startup/advisor");
+    const { StartupAdvisor } = await import("@phus/core/runtime/startup/advisor.js");
     const advisor = new StartupAdvisor();
     return advisor.suggestStartup(this.tape);
   }
 
-  async reflect(sessionId: SessionId, task: string): Promise<import("@/core/runtime/evolution/types").Reflection> {
+  async reflect(sessionId: SessionId, task: string): Promise<import("@phus/core/runtime/evolution/types.js").Reflection> {
     return this.learner.reflect(sessionId, task);
   }
 

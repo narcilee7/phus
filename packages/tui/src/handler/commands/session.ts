@@ -3,7 +3,7 @@
 // context, forget history, trace recent turns, tape stats, retry last
 // prompt, start fresh, clear chat area, quit / exit.
 
-import { asSessionId } from "@phus/runtime/types/brand.js";
+import { asSessionId } from "@phus/core/types/brand.js";
 import { TURN_TRACE_CHARS, TURN_TRACE_PREVIEW } from "@/constants.js";
 import { truncate } from "@/state/state.js";
 import type { CommandRegistry } from "@/handler/commands/context.js";

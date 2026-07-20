@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { StartupAdvisor } from "@/core/runtime/startup/advisor";
-import type { TapeLike } from "@/types/hooks/index";
-import { asSessionId } from "@/types/brand";
+import { StartupAdvisor } from "@phus/core/runtime/startup/advisor";
+import type { TapeLike } from "@phus/core/types/hooks.js";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 function makeTape(entries: unknown[] = []): TapeLike {
   return {

@@ -2,7 +2,7 @@
 // The default implementations for `resolve_session` and `load_state`.
 // Plugins can register higher-priority impls to override.
 
-import type { TapeLike } from "@/types/hooks/index.js";
+import type { TapeLike } from "@phus/core/types/hooks/index.js";
 
 export interface DefaultHooksDeps {
   tape: TapeLike;

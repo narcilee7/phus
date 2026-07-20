@@ -3,8 +3,8 @@
 // monolith entry point; this module keeps that signature stable while
 // internally composing skill-tools + system-tools + memory-tools + plan-tools + evolution-tools.
 
-import type { MetaTool } from "@/types/tool.js";
-import type { Tape } from "@/core/session/tape.js";
+import type { MetaTool } from "@phus/runtime/types/tool.js";
+import type { Tape } from "@phus/core/session/tape.js";
 import { defineSkillMetaTools } from "./skill-tools.js";
 import { defineSystemMetaTools } from "./system-tools.js";
 import { defineMemoryMetaTools } from "./memory-tools.js";
@@ -12,11 +12,11 @@ import { definePlanMetaTools } from "./plan-tools.js";
 import { defineEvolutionMetaTools } from "./evolution-tools.js";
 import type { SkillRegistry } from "@/infra/skills/registry.js";
 import type { MemoryStore } from "@/infra/memory/index.js";
-import type { SessionId } from "@/types/brand.js";
-import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
-import type { PlanStore } from "@/core/session/plan-store.js";
-import type { Learner } from "@/core/runtime/evolution/learner";
-import type { EvolutionEngine } from "@/core/runtime/evolution/engine";
+import type { SessionId } from "@phus/core/types/brand.js";
+import type { PlanRunner } from "@phus/core/runtime/plan/plan-runner.js";
+import type { PlanStore } from "@phus/core/session/plan-store.js";
+import type { Learner } from "@phus/core/runtime/evolution/learner.js";
+import type { EvolutionEngine } from "@phus/core/runtime/evolution/engine.js";
 
 export function createMetaTools(
   skills: SkillRegistry,
@@ -37,7 +37,7 @@ export function createMetaTools(
       stats: () => tape.stats(),
     },
     compactSession: async (tapeConcrete, sessionId, opts) => {
-      const { compactSession } = await import("@/core/session/compaction.js");
+      const { compactSession } = await import("@phus/core/session/compaction.js");
       return compactSession(tapeConcrete as Tape, sessionId, opts);
     },
     tapeConcrete: tape,

@@ -3,8 +3,8 @@
 // Reuses scheduler + tape data, no separate state to maintain.
 
 import { PhusAgent } from "@/bridge/pi-agent.js";
-import { getScheduler, nextFires } from "@/core/runtime/scheduler";
-import { listCheckpoints, loadLatestCheckpoint } from "@/core/session/checkpoint.js";
+import { getScheduler, nextFires } from "@phus/core/runtime/scheduler.js";
+import { listCheckpoints, loadLatestCheckpoint } from "@phus/core/session/checkpoint.js";
 
 export interface TasksOutput {
   agent: {

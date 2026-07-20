@@ -4,7 +4,7 @@ import { Executor } from "@/core/runtime/executor/index";
 import { ReplanNeededError } from "@/core/runtime/executor/error";
 import { Verifier } from "@/core/runtime/verifier/index";
 import type { Plan, Step } from "@/core/runtime/plan/types";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 function makePlan(): Plan {
   return {
@@ -88,12 +88,15 @@ describe("Executor", () => {
   it("retries with repair context after verification requests a retry", async () => {
     let calls = 0;
     const verifier = new Verifier({
-      model: {
-        prompt: async () => {
+      port: {
+        complete: async () => {
           calls++;
-          return calls === 1
-            ? JSON.stringify({ ok: false, confidence: 0.4, reason: "retry", action: "retry" })
-            : JSON.stringify({ ok: true, confidence: 0.9, reason: "fixed", action: "proceed" });
+          return {
+            text:
+              calls === 1
+                ? JSON.stringify({ ok: false, confidence: 0.4, reason: "retry", action: "retry" })
+                : JSON.stringify({ ok: true, confidence: 0.9, reason: "fixed", action: "proceed" }),
+          };
         },
       },
     });
@@ -115,10 +118,12 @@ describe("Executor", () => {
   it("retries a failing step up to maxRetries", async () => {
     let calls = 0;
     const verifier = new Verifier({
-      model: {
-        prompt: async () => {
+      port: {
+        complete: async () => {
           calls++;
-          return JSON.stringify({ ok: calls >= 3, confidence: 0.5, reason: "retry", action: calls >= 3 ? "proceed" : "retry" });
+          return {
+            text: JSON.stringify({ ok: calls >= 3, confidence: 0.5, reason: "retry", action: calls >= 3 ? "proceed" : "retry" }),
+          };
         },
       },
     });
@@ -131,8 +136,8 @@ describe("Executor", () => {
 
   it("marks step failed after max retries", async () => {
     const verifier = new Verifier({
-      model: {
-        prompt: async () => JSON.stringify({ ok: false, confidence: 0, reason: "no", action: "retry" }),
+      port: {
+        complete: async () => ({ text: JSON.stringify({ ok: false, confidence: 0, reason: "no", action: "retry" }) }),
       },
     });
     const executor = new Executor({ agent: makeMockAgent("bad") as any, verifier, maxRetries: 1 });
@@ -160,8 +165,8 @@ describe("Executor", () => {
 
   it("throws ReplanNeededError when verifier requests replan", async () => {
     const verifier = new Verifier({
-      model: {
-        prompt: async () => JSON.stringify({ ok: false, action: "replan", reason: "need replan" }),
+      port: {
+        complete: async () => ({ text: JSON.stringify({ ok: false, action: "replan", reason: "need replan" }) }),
       },
     });
     const executor = new Executor({ agent: makeMockAgent() as any, verifier });

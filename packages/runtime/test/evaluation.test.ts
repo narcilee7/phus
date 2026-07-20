@@ -14,15 +14,15 @@ import { Learner } from "@/core/runtime/evolution/learner";
 import { IntelligenceMetricsAggregator } from "@/core/runtime/evolution/metrics";
 import { MemoryStore } from "@/infra/memory/store";
 import { SkillRegistry } from "@/infra/skills/registry";
-import { PlanStore } from "@/core/session/plan-store";
-import { SkillValidator } from "@/core/runtime/skill/validator";
+import { PlanStore } from "@phus/core/session/plan-store.js";
+import { SkillValidator } from "@phus/core/runtime/skill/validator";
 import { buildContextBlock } from "@/bridge/prompt-assembly";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 import type { Plan, Step } from "@/core/runtime/plan/types";
 import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
-import type { TapeLike } from "@/types/hooks/index";
-import type { TapeEntry } from "@/types/tape/index";
-import type { HookRegistry } from "@/core/runtime/hook/registry";
+import type { TapeLike } from "@phus/core/types/hooks.js";
+import type { TapeEntry } from "@phus/core/types/tape.js";
+import type { HookRegistry } from "@phus/core/runtime/hook/registry";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 function makeTape(entries: TapeEntry[] = []): { tape: TapeLike; entries: TapeEntry[] } {
@@ -80,15 +80,12 @@ describe("Evaluation: intelligence loop integration", () => {
         const learner = new Learner({
             tape: makeTape().tape,
             skills: new SkillRegistry(dir),
-            model: {
-                prompt: async () =>
-                    JSON.stringify({
-                        outcome: "success",
-                        whatWorked: ["followed the procedure"],
-                        whatFailed: [],
-                        procedureConfidence: 0.8,
-                    }),
-            },
+            port: { complete: async () => ({ text: JSON.stringify({
+                outcome: "success",
+                whatWorked: ["followed the procedure"],
+                whatFailed: [],
+                procedureConfidence: 0.8,
+            }) }) },
         });
         const skills = new SkillRegistry(dir);
         const store = new PlanStore(":memory:");
@@ -138,21 +135,18 @@ describe("Evaluation: intelligence loop integration", () => {
         const learner = new Learner({
             tape: makeTape().tape,
             skills,
-            model: {
-                prompt: async () =>
-                    JSON.stringify({
-                        outcome: "success",
-                        whatWorked: ["reduced failures to 0"],
-                        whatFailed: [],
-                        procedureConfidence: 0.9,
-                        suggestedSkill: {
-                            name: "improve-me",
-                            description: "Better deploy",
-                            body: "Use this for deploys",
-                            trigger: "deploy",
-                        },
-                    }),
-            },
+            port: { complete: async () => ({ text: JSON.stringify({
+                outcome: "success",
+                whatWorked: ["reduced failures to 0"],
+                whatFailed: [],
+                procedureConfidence: 0.9,
+                suggestedSkill: {
+                    name: "improve-me",
+                    description: "Better deploy",
+                    body: "Use this for deploys",
+                    trigger: "deploy",
+                },
+            }) }) },
         });
 
         const validator = new SkillValidator({ planRunner: makePlanRunner(), planStore: store, skills });
@@ -260,7 +254,7 @@ describe("Evaluation: intelligence loop integration", () => {
         fs.writeFileSync(path.join(dir, "src", "foo.ts"), "export const foo = 1;\n");
         fs.writeFileSync(path.join(dir, "src", "bar.ts"), "export const bar = 2;\n");
 
-        const { RepoFileIndex } = await import("@/core/session/repo-file-index.js");
+        const { RepoFileIndex } = await import("@phus/core/session/repo-file-index.js");
         const index = new RepoFileIndex(dir);
 
         const tape = makeTape().tape;
@@ -305,21 +299,18 @@ describe("Evaluation: intelligence loop integration", () => {
         const learner = new Learner({
             tape: makeTape().tape,
             skills,
-            model: {
-                prompt: async () =>
-                    JSON.stringify({
-                        outcome: "success",
-                        whatWorked: ["tried something"],
-                        whatFailed: [],
-                        procedureConfidence: 0.8,
-                        suggestedSkill: {
-                            name: "worse",
-                            description: "Less effective",
-                            body: "Do less",
-                            trigger: "rare",
-                        },
-                    }),
-            },
+            port: { complete: async () => ({ text: JSON.stringify({
+                outcome: "success",
+                whatWorked: ["tried something"],
+                whatFailed: [],
+                procedureConfidence: 0.8,
+                suggestedSkill: {
+                    name: "worse",
+                    description: "Less effective",
+                    body: "Do less",
+                    trigger: "rare",
+                },
+            }) }) },
         });
 
         const validator = new SkillValidator({ planRunner: makePlanRunner(), planStore: store, skills });

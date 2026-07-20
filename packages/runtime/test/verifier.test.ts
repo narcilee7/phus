@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { Verifier } from "@/core/runtime/verifier/index";
 import type { Step } from "@/core/runtime/plan/types";
+import type { CoreMessage, CorePort } from "@/bridge/core-port";
 
 function makeStep(expectedOutput?: string): Step {
   return {
@@ -15,24 +15,12 @@ function makeStep(expectedOutput?: string): Step {
   };
 }
 
-function extractText(messages: AgentMessage[]): string {
-  return messages
-    .map((message) => {
-      const content = message.content;
-      if (typeof content === "string") return content;
-      if (!Array.isArray(content)) return "";
-      return content
-        .map((part) => (part && typeof part === "object" && part.type === "text" && typeof part.text === "string" ? part.text : ""))
-        .filter(Boolean)
-        .join(" ");
-    })
-    .join("\n");
+function extractText(messages: CoreMessage[]): string {
+  return messages.map((m) => m.content).join("\n");
 }
 
-function makeModel(response: string) {
-  return {
-    prompt: async (_messages: AgentMessage[]): Promise<string> => response,
-  };
+function makePort(response: string): CorePort {
+  return { complete: async () => ({ text: response }) };
 }
 
 describe("Verifier", () => {
@@ -60,7 +48,7 @@ describe("Verifier", () => {
 
   it("uses model verdict when available", async () => {
     const verifier = new Verifier({
-      model: makeModel(JSON.stringify({ ok: true, confidence: 0.9, reason: "matches", action: "proceed" })),
+      port: makePort(JSON.stringify({ ok: true, confidence: 0.9, reason: "matches", action: "proceed" })),
     });
     const result = await verifier.verify(makeStep("expected"), "actual");
     expect(result.ok).toBe(true);
@@ -69,7 +57,7 @@ describe("Verifier", () => {
   });
 
   it("falls back to lightweight when model output is malformed", async () => {
-    const verifier = new Verifier({ model: makeModel("bad json") });
+    const verifier = new Verifier({ port: makePort("bad json") });
     const result = await verifier.verify(makeStep("expected"), "actual");
     expect(result.ok).toBe(true);
     expect(result.action).toBe("proceed");
@@ -77,7 +65,7 @@ describe("Verifier", () => {
 
   it("falls back to lightweight when expectedOutput is empty", async () => {
     const verifier = new Verifier({
-      model: makeModel(JSON.stringify({ ok: false, action: "abort" })),
+      port: makePort(JSON.stringify({ ok: false, action: "abort" })),
     });
     const result = await verifier.verify(makeStep(), "actual");
     expect(result.ok).toBe(true);
@@ -87,10 +75,10 @@ describe("Verifier", () => {
   it("includes phase and repair context in the verification prompt", async () => {
     let promptText = "";
     const verifier = new Verifier({
-      model: {
-        prompt: async (messages: AgentMessage[]) => {
+      port: {
+        complete: async (messages) => {
           promptText = extractText(messages);
-          return JSON.stringify({ ok: true, confidence: 0.8, reason: "fine", action: "proceed" });
+          return { text: JSON.stringify({ ok: true, confidence: 0.8, reason: "fine", action: "proceed" }) };
         },
       },
     });

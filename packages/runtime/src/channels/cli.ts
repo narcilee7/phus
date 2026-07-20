@@ -29,7 +29,7 @@ export class CLIChannel implements ChannelAdapter {
       }
       // Bub-style internal commands (comma prefix)
       if (text.startsWith(",")) {
-        const { execute, initInternalCommands } = await import("@/core/runtime/internal-commands/index.js");
+        const { execute, initInternalCommands } = await import("@/runtime/internal-commands/index.js");
         initInternalCommands({
           agent,
           home: () => loadConfig().paths.home,
@@ -69,7 +69,7 @@ export class CLIChannel implements ChannelAdapter {
     });
   }
 
-  async send(outbounds: import("@/types/channel/index.js").Outbound[]): Promise<void> {
+  async send(outbounds: import("@phus/core/types/channel/index.js").Outbound[]): Promise<void> {
     for (const msg of outbounds) {
       if (msg.type === "text") {
         console.log(`\n⛰️  ${msg.content}\n`);

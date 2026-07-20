@@ -2,7 +2,7 @@
 // Meta tools for skill CRUD: skill_write, skill_read, skill_delete.
 
 import { Type } from "@mariozechner/pi-ai";
-import type { MetaTool } from "@/types/tool.js";
+import type { MetaTool } from "@phus/runtime/types/tool.js";
 
 export function defineSkillMetaTools(skills: {
   write: (input: { name: string; description: string; body: string; metadata: Record<string, unknown> }) => { location: string };

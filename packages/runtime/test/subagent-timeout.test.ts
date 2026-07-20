@@ -9,7 +9,7 @@ import * as path from "node:path";
 import { SubAgent, SubAgentTimeoutError } from "@/core/runtime/subagent/index";
 import type { SubAgentAgentLike } from "@/core/runtime/subagent/types";
 import { resetConfigCache } from "@/infra/config/index";
-import { asSessionId } from "@/types/brand";
+import { asSessionId } from "@phus/core/types/brand.js";
 
 describe("SubAgent timeout", () => {
   let dir: string;

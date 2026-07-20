@@ -1,7 +1,7 @@
 // test/provider-mesh/stats.test.ts
 import { describe, expect, it } from "vitest";
-import { avg, percentile, statsOf } from "../src/core/llm/provider-mesh/stats";
-import type { EndpointState } from "../src/core/llm/provider-mesh/types";
+import { avg, percentile, statsOf } from "../src/llm/provider-mesh/stats";
+import type { EndpointState } from "../src/llm/provider-mesh/types";
 
 function makeState(over: Partial<EndpointState> = {}): EndpointState {
   return {

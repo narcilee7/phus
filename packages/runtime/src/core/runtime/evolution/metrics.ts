@@ -9,10 +9,10 @@
 // The point isn't a perfect KPI dashboard — it's a single object that
 // gives an operator (or a test) a quick "is the loop learning?" signal.
 
-import type { PlanStore } from "@/core/session/plan-store.js";
+import type { PlanStore } from "@phus/core/session/plan-store.js";
 import type { Plan } from "@/core/runtime/plan/types.js";
-import type { TapeLike } from "@/types/hooks/index.js";
-import type { TapeEntry } from "@/types/tape/index.js";
+import type { TapeLike } from "@phus/core/types/hooks/index.js";
+import type { TapeEntry } from "@phus/core/types/tape/index.js";
 
 export interface DraftMetrics {
     name: string;

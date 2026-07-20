@@ -3,27 +3,25 @@
 // Used by CLI / TUI / commands that want a turnkey agent without
 // manually wiring every dependency.
 
-import { HookRegistry } from "@/core/runtime/hook/registry";
-import { Tape } from "@/core/session/tape.js";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
+import { Tape } from "@phus/core/session/tape.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import { defaultPolicy } from "@/infra/safety.js";
 import { resolveProfile, type ProviderProfile } from "@/infra/profile.js";
 import {
   type EndpointSpec,
   type MeshPolicy,
-} from "@/core/llm/provider-mesh/index.js";
-import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
-import { PiSteeringInbox } from "@/core/runtime/steering";
-import type { SteeringInbox } from "@/types/steering/index.js";
-import { buildMesh } from "@/core/llm/provider-mesh/index.js";
+} from "@/llm/provider-mesh/index.js";
+import { PiSteeringInbox } from "@phus/core/runtime/steering/index.js";
+import type { SteeringInbox } from "@phus/core/types/steering/index.js";
+import { buildMesh } from "@/llm/provider-mesh/index.js";
+import type { MeshLike } from "@/llm/provider-mesh/contract.js";
 import { logger } from "@/infra/logging.js";
 import { resolveModelSafe } from "@/bridge/model-resolver.js";
 import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
 import { loadConfig, type ResolvedConfig } from "@/infra/config/index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
-import { PlanStore } from "@/core/session/plan-store.js";
-import { Planner } from "@/core/runtime/plan/planner";
-import { createPlannerModel } from "@/core/runtime/plan/planner-model";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import * as path from "node:path";
 
 export interface DefaultDepsOptions {
@@ -87,11 +85,8 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
   const steeringInbox: SteeringInbox = new PiSteeringInbox();
 
   const planStore = new PlanStore(path.join(config.paths.home, "plans.sqlite"));
-  const planner = new Planner({
-    skills,
-    model: createPlannerModel(resolvedModel),
-    hooks,
-  });
+  // Planner/Verifier/Learner are constructed inside PhusAgent from the
+  // injected `corePort`. Default-deps no longer needs to build them.
 
   return {
     logger,
@@ -105,6 +100,5 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
     profile,
     policy,
     planStore,
-    planner,
   };
 }

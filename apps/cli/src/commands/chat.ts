@@ -1,12 +1,12 @@
 // src/cli/commands/chat.ts
-// `phus chat` — alias for the TUI.
+// `phus chat` — launch the TUI.
 
 import type { Command } from "commander";
 
 export function registerChatCommand(program: Command): void {
   program
     .command("chat")
-    .description("Alias for `phus tui` — launch the interactive TUI")
+    .description("Launch the interactive TUI")
     .action(async () => {
       const { startTui } = await import("@phus/tui");
       await startTui();

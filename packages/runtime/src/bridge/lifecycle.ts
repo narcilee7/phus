@@ -7,7 +7,7 @@ import {
   type PhusAgentDeps,
   type PhusAgentFacade,
 } from "@/bridge/pi-agent.js";
-import { RepoFileIndex } from "@/core/session/repo-file-index.js";
+import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
 import { logger } from "@/infra/logging.js";
 
 export interface PhusAgentHandle {

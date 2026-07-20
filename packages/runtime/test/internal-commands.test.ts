@@ -9,7 +9,7 @@ import {
   list,
   initInternalCommands,
   _resetInternalCommands,
-} from "../src/core/runtime/internal-commands/index";
+} from "../src/runtime/internal-commands/index";
 
 describe("parse", () => {
   it("returns null for non-command lines", () => {

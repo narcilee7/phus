@@ -6,7 +6,7 @@
 // section means adding it here + in loader.ts.
 
 import type { ProviderConfig } from "@/infra/profile.js";
-import type { Schedule } from "@/types/scheduler/index.js";
+import type { Schedule } from "@phus/core/types/scheduler/index.js";
 import type { LogLevelLiteral } from "./defaults.js";
 import { RobustnessConfig } from "../llm-fuse.js";
 
