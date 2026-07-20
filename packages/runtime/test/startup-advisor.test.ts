@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { StartupAdvisor } from "@/core/runtime/startup/advisor";
+import { StartupAdvisor } from "@phus/core/runtime/startup/advisor";
 import type { TapeLike } from "@phus/core/types/hooks.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 

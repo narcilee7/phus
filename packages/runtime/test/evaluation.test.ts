@@ -15,14 +15,14 @@ import { IntelligenceMetricsAggregator } from "@/core/runtime/evolution/metrics"
 import { MemoryStore } from "@/infra/memory/store";
 import { SkillRegistry } from "@/infra/skills/registry";
 import { PlanStore } from "@phus/core/session/plan-store.js";
-import { SkillValidator } from "@/core/runtime/skill/validator";
+import { SkillValidator } from "@phus/core/runtime/skill/validator";
 import { buildContextBlock } from "@/bridge/prompt-assembly";
 import { asSessionId } from "@phus/core/types/brand.js";
 import type { Plan, Step } from "@/core/runtime/plan/types";
 import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import type { TapeLike } from "@phus/core/types/hooks.js";
 import type { TapeEntry } from "@phus/core/types/tape.js";
-import type { HookRegistry } from "@/core/runtime/hook/registry";
+import type { HookRegistry } from "@phus/core/runtime/hook/registry";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 function makeTape(entries: TapeEntry[] = []): { tape: TapeLike; entries: TapeEntry[] } {

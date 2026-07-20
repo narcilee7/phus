@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { HookRegistry } from "../src/core/runtime/hook/registry";
-import { makeCtx } from "../src/core/runtime/hook/ctx-builder";
-import { Tape } from "@phus/core/session/tape";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
+import { Tape } from "@phus/core/session/tape.js";
 import { SkillRegistry } from "../src/infra/skills/registry";
 
 function tmpCtx() {

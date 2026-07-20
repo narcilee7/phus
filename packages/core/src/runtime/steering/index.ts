@@ -8,7 +8,7 @@
 //     going through a full Channel (e.g., webhook → inbox → agent)
 
 import type { Envelope } from "@phus/core/types/channel/index.js";
-import { logger } from "@/infra/logging";
+import { logger } from "@phus/runtime/infra/logging.js";
 import { SteeringEvent, SteeringInbox } from "@phus/core/types/steering/index.js";
 
 /**

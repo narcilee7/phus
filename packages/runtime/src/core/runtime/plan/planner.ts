@@ -5,7 +5,7 @@
 
 import { asSessionId } from "@phus/core/types/brand.js";
 import { type Plan, type PlannerDeps, type PlanPhase, type Step } from "./types";
-import { makeCtx } from "@/core/runtime/hook/ctx-builder";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import { stripJson } from "@phus/core/utils/json.js";
 
 const PHASES: PlanPhase[] = ["inspect", "edit", "test", "repair"];

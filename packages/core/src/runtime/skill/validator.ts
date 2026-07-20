@@ -2,10 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { PlanStore, ValidationMetrics } from "@phus/core/session/plan-store.js";
-import { PlanRunner } from "@/core/runtime/plan/plan-runner";
-import { Plan } from "@/core/runtime/plan/types";
-import { SkillRegistry } from "@/infra/skills/registry";
-import { SkillDraft } from "@/infra/skills/draft";
+import { PlanRunner } from "@phus/runtime/core/runtime/plan/plan-runner.js";
+import { Plan } from "@phus/runtime/core/runtime/plan/types.js";
+import { SkillRegistry } from "@phus/runtime/infra/skills/registry.js";
+import { SkillDraft } from "@phus/runtime/infra/skills/draft.js";
 
 export interface SkillValidatorDeps {
   planRunner: PlanRunner;

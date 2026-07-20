@@ -3,8 +3,8 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "@phus/core/session/tape";
-import { selectRelevantTurns, DEFAULT_SELECT } from "@phus/core/session/context-select";
+import { Tape } from "@phus/core/session/tape.js";
+import { selectRelevantTurns, DEFAULT_SELECT } from "@phus/core/session/context-select.js";
 
 function makeTurn(i: number, user: string, asst: string, sessionId = "s") {
   return {

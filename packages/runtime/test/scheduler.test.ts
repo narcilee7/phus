@@ -1,12 +1,12 @@
 // test/scheduler.test.ts
 import { describe, expect, it, beforeEach } from "vitest";
-import { Scheduler, nextFires, type Schedule } from "../src/core/runtime/scheduler/index";
-import { HookRegistry } from "../src/core/runtime/hook/registry";
-import { makeCtx } from "../src/core/runtime/hook/ctx-builder";
+import { Scheduler, nextFires, type Schedule } from "@phus/core/runtime/scheduler/index.js";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "@phus/core/session/tape";
+import { Tape } from "@phus/core/session/tape.js";
 import { SkillRegistry } from "../src/infra/skills/registry";
 
 function makeHooks(): { hooks: HookRegistry; tape: Tape; skills: SkillRegistry; dir: string } {

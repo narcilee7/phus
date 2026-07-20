@@ -5,7 +5,7 @@ import * as os from "node:os";
 import { EvolutionEngine } from "@/core/runtime/evolution/engine";
 import { Learner } from "@/core/runtime/evolution/learner";
 import { MemoryStore } from "@/infra/memory/store";
-import { SkillValidator } from "@/core/runtime/skill/validator";
+import { SkillValidator } from "@phus/core/runtime/skill/validator";
 import { SkillRegistry } from "@/infra/skills/registry";
 import { PlanStore } from "@phus/core/session/plan-store.js";
 import { asSessionId } from "@phus/core/types/brand.js";

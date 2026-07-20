@@ -5,8 +5,8 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { SkillRegistryLike, TapeLike } from "@phus/core/types/hooks/index.js";
 import type { SessionId } from "@phus/core/types/brand.js";
-import { makeCtx } from "@/core/runtime/hook/ctx-builder";
-import type { HookRegistry } from "@/core/runtime/hook/registry";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
+import type { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import type { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
 import { selectRelevantFiles } from "@phus/core/session/context-select.js";
 

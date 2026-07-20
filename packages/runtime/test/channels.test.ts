@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { buildChannelFromConfig, collectChannels } from "../src/commands/channels";
 import type { PhusAgent } from "../src/bridge/pi-agent";
 import type { ChannelConfig } from "../src/infra/config/schema";
-import { HookRegistry } from "../src/core/runtime/hook/registry";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 
 describe("buildChannelFromConfig", () => {
   it("creates a websocket channel", async () => {

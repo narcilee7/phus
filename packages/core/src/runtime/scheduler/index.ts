@@ -13,9 +13,9 @@
 //     write to tape, etc.
 
 import { CronExpressionParser } from "cron-parser";
-import { logger } from "@/infra/logging";
-import { HookRegistry } from "@/core/runtime/hook/registry";
-import { makeCtx } from "@/core/runtime/hook/ctx-builder";
+import { logger } from "@phus/runtime/infra/logging.js";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import { Schedule, SchedulerOptions } from "@phus/core/types/scheduler/index.js";
 import { HookContext } from "@phus/core/types/hooks/index.js";
 import { asSessionId } from "@phus/core/types/brand.js";

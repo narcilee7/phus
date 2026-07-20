@@ -6,7 +6,7 @@ import { SkillDraft } from "@/infra/skills/draft";
 import { SkillRegistryLike, TapeLike } from "@phus/core/types/index.js";
 import { SessionId } from "@phus/core/types/brand.js";
 import type { CorePort } from "@/bridge/core-port.js";
-import { SkillValidator } from "@/core/runtime/skill/validator";
+import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
 import { SkillRegistry } from "@/infra/skills/registry";
 import { PlanStore } from "@phus/core/session/plan-store.js";
 import type { MemoryStore } from "@/infra/memory/index.js";

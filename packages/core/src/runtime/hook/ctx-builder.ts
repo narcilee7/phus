@@ -6,7 +6,7 @@
  * hook may legitimately omit them.
  */
 import { Tape } from "@phus/core/session/tape.js";
-import { SkillRegistry } from "@/infra/skills/registry";
+import { SkillRegistry } from "@phus/runtime/infra/skills/registry.js";
 import { HookContext, SkillRegistryLike, TapeLike } from "@phus/core/types/index.js"
 import { asSessionId } from "@phus/core/types/brand.js";
 

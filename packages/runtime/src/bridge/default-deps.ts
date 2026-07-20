@@ -3,7 +3,7 @@
 // Used by CLI / TUI / commands that want a turnkey agent without
 // manually wiring every dependency.
 
-import { HookRegistry } from "@/core/runtime/hook/registry";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Tape } from "@phus/core/session/tape.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import { defaultPolicy } from "@/infra/safety.js";
@@ -12,7 +12,7 @@ import {
   type EndpointSpec,
   type MeshPolicy,
 } from "@/llm/provider-mesh/index.js";
-import { PiSteeringInbox } from "@/core/runtime/steering";
+import { PiSteeringInbox } from "@phus/core/runtime/steering/index.js";
 import type { SteeringInbox } from "@phus/core/types/steering/index.js";
 import { buildMesh } from "@/llm/provider-mesh/index.js";
 import type { MeshLike } from "@/llm/provider-mesh/contract.js";

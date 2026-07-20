@@ -1,6 +1,6 @@
 import type { Plan } from "@/core/runtime/plan/types";
 import type { MemoryAction } from "@/infra/memory/index.js";
-import { SkillValidator } from "@/core/runtime/skill/validator";
+import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
 import type { SkillDraft } from "@/infra/skills/draft";
 import type { TapeEntry } from "@phus/core/types/tape/index.js";
 import type { ValidationMetrics } from "@phus/core/session/plan-store.js";

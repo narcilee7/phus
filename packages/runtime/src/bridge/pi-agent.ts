@@ -23,7 +23,7 @@ import { PlanStore } from "@phus/core/session/plan-store.js";
 import { createDefaultCorePort } from "@/bridge/core-port-impl.js";
 import type { CorePort } from "@/bridge/core-port.js";
 import { Learner } from "@/core/runtime/evolution/learner";
-import { SkillValidator } from "@/core/runtime/skill/validator";
+import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
 import { EvolutionEngine } from "@/core/runtime/evolution/engine";
 import type { Turn } from "@phus/core/types/tape/index.js";
 import type { MetaTool } from "@phus/runtime/types/tool.js";
@@ -57,10 +57,10 @@ import { registerDefaultHooks } from "@/bridge/default-hooks.js";
 import { buildContextBlock } from "@/bridge/prompt-assembly.js";
 import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
-import { HookRegistry } from "@/core/runtime/hook/registry";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Executor } from "@/core/runtime/executor";
 import { PlanRunner } from "@/core/runtime/plan/plan-runner";
-import { makeCtx } from "@/core/runtime/hook/ctx-builder";
+import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import { HookContext } from "@phus/core/types/index.js";
 import { Verifier } from "@/core/runtime/verifier";
 
@@ -1384,7 +1384,7 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   async suggestStartup(): Promise<string> {
-    const { StartupAdvisor } = await import("@/core/runtime/startup/advisor");
+    const { StartupAdvisor } = await import("@phus/core/runtime/startup/advisor");
     const advisor = new StartupAdvisor();
     return advisor.suggestStartup(this.tape);
   }

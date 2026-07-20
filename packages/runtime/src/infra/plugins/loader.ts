@@ -13,7 +13,7 @@ import * as path from "node:path";
 import { createJiti } from "jiti";
 import * as yaml from "yaml";
 import { logger } from "@/infra/logging.js";
-import type { HookRegistry } from "@/core/runtime/hook/registry";
+import type { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { LoadedPlugin, Plugin, PluginContext, PluginLoaderOptions } from "@phus/core/types/plugins/index.js";
 import { Skill } from "@phus/core/types/skill.js";

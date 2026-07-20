@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
-import { selectRelevantFiles } from "@phus/core/session/context-select";
+import { selectRelevantFiles } from "@phus/core/session/context-select.js";
 
 function makeTree(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-repo-index-"));

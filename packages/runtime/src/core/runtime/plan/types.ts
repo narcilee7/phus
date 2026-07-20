@@ -6,7 +6,7 @@
 import { SkillRegistryLike } from "@phus/core/types/index.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import type { CorePort } from "@/bridge/core-port.js";
-import { HookRegistry } from "@/core/runtime/hook/registry";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Planner } from "./planner";
 import { Executor } from "../executor";
 import { PlanStore } from "@phus/core/session/plan-store.js";
