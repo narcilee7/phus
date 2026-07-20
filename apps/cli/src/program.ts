@@ -9,7 +9,6 @@ import { Command } from "commander";
 import { drainPendingCliCommands } from "@phus/runtime/infra/plugins/cli-queue.js";
 import type { ResolvedConfig } from "@phus/runtime/infra/config/index.js";
 
-import { registerDefaultCommand } from "./commands/default.js";
 import { registerChatCommand } from "./commands/chat.js";
 import { registerRunCommand } from "./commands/run.js";
 import { registerGatewayCommand } from "./commands/gateway.js";
@@ -41,11 +40,11 @@ export function buildProgram(): Command {
     .version("0.1.0");
 
   // Register every built-in command. Order does not matter for
-  // dispatch; we keep the lifecycle-relevant ones first. There is NO
-  // `phus tui` subcommand — typing `phus tui` is now a usage error.
-  // The TUI is the default: `phus` (no args) wakes it via
-  // `registerDefaultCommand`. See documents/Proposal-Monorepo-Split.md §4.
-  registerDefaultCommand(program);
+  // dispatch; we keep the lifecycle-relevant ones first.
+  // `phus tui` is intentionally NOT registered — typing `phus tui` is a
+  // usage error. The TUI is the implicit default: `phus` (no args) wakes
+  // it via the `program.action(...)` block in `apps/cli/src/main.ts`.
+  // See documents/Proposal-Monorepo-Split.md §4.
   registerChatCommand(program);
   registerRunCommand(program);
   registerGatewayCommand(program);

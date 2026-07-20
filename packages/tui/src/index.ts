@@ -1,6 +1,7 @@
-// src/tui/index.ts
-// `phus tui` — launch the interactive TUI. If the config or API key
-// is missing, runs the Bootstrap / Key wizard in a transient pi-tui
+// packages/tui/src/index.ts
+// TUI entry point. Wired as the implicit default for `phus` (no args)
+// and also exposed under `phus chat`. If the config or API key is
+// missing, runs the Bootstrap / Key wizard in a transient pi-tui
 // session first; once the wizard resolves, the main App takes over.
 
 import { TUI } from "@/vendor/pi-tui/tui.js";

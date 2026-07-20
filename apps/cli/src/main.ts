@@ -26,7 +26,34 @@ const program = buildProgram();
 
 await registerPluginCliCommands(program, config);
 
-program.parseAsync(process.argv).catch((err) => {
-  console.error("[phus] fatal:", err);
-  process.exit(1);
-});
+// Argument model (proposal §4.2):
+//   phus                     → startTui() (lazy-imported)
+//   phus <known-command>     → commander dispatches
+//   phus --option / flags    → commander handles (e.g. --help, --version)
+//   phus <unknown-command>   → usage error, exit 2
+// We pick the branch ourselves so `phus tui` (an unknown subcommand) is
+// rejected explicitly rather than silently falling through to the TUI.
+const argv = process.argv.slice(2);
+const knownCommand =
+	argv.length > 0 &&
+	program.commands.some(
+		(c) => c.name() === argv[0] || c.aliases().includes(argv[0]!),
+	);
+const looksLikeOption = argv.length > 0 && argv[0]!.startsWith("-");
+
+if (argv.length === 0) {
+	const { startTui } = await import("@phus/tui");
+	await startTui();
+} else if (knownCommand || looksLikeOption) {
+	program.parseAsync(process.argv).catch((err) => {
+		console.error("[phus] fatal:", err);
+		process.exit(1);
+	});
+} else {
+	// Treat the first positional as a subcommand attempt and reject it.
+	// Commander's default parseAsync just prints to stderr and exits 0;
+	// we want a non-zero exit so scripts/cron can detect bad input.
+	console.error(`error: unknown command '${argv[0]}'`);
+	program.outputHelp({ error: true });
+	process.exit(2);
+}
