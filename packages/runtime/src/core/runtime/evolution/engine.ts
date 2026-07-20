@@ -1,4 +1,4 @@
-import type { Plan } from "@/core/runtime/plan/types";
+import type { Plan } from "@phus/core/runtime/plan/types.js";
 import type { MemoryAction } from "@/infra/memory/index.js";
 import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
 import type { SkillDraft } from "@/infra/skills/draft";

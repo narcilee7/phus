@@ -58,4 +58,4 @@ export type { SessionId } from "./types/brand.js";
 
 // ── MetaTool — re-exported from @phus/runtime/types/tool.js (LLM-bound).
 //    Cross-package dependency; runtime must be built first.
-// export type { MetaTool } from "@phus/runtime/types/tool.js"; // cycle: enabled post Wave F
+export type { MetaTool } from "@phus/runtime/types/tool.js";

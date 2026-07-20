@@ -5,10 +5,10 @@
  * `SkillRegistryLike` interfaces so a context built for a scheduler-fired
  * hook may legitimately omit them.
  */
-import { Tape } from "@phus/core/session/tape.js";
+import { Tape } from "../session/tape.js";
 import { SkillRegistry } from "@phus/runtime/infra/skills/registry.js";
-import { HookContext, SkillRegistryLike, TapeLike } from "@phus/core/types/index.js"
-import { asSessionId } from "@phus/core/types/brand.js";
+import { HookContext, SkillRegistryLike, TapeLike } from "../types/index.js"
+import { asSessionId } from "../types/brand.js";
 
 export type CtxOptions = Partial<HookContext>
   & {

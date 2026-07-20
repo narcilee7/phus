@@ -7,7 +7,7 @@ import type { MetaTool } from "@phus/runtime/types/tool.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 import { loadConfig } from "@/infra/config/index.js";
-import { StartupAdvisor } from "@phus/core/runtime/startup/advisor";
+import { StartupAdvisor } from "@phus/core/runtime/startup/advisor.js";
 
 export function defineSystemMetaTools(deps: {
   tape: { replay: (sessionId?: string) => Generator<unknown>; stats: () => unknown };

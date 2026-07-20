@@ -1,3 +1,3 @@
-export * from "../../types/tape/anchor.js";
-export * from "../../types/tape/entry.js";
-export * from "../../types/tape/turn.js";
+export * from './anchor.js';
+export * from './entry.js';
+export * from './turn.js';

@@ -1,1 +1,1 @@
-export * from '../../types/channel/message.js';
+export * from './message.js';

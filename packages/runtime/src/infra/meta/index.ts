@@ -13,10 +13,10 @@ import { defineEvolutionMetaTools } from "./evolution-tools.js";
 import type { SkillRegistry } from "@/infra/skills/registry.js";
 import type { MemoryStore } from "@/infra/memory/index.js";
 import type { SessionId } from "@phus/core/types/brand.js";
-import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
+import type { PlanRunner } from "@phus/core/runtime/plan/plan-runner.js";
 import type { PlanStore } from "@phus/core/session/plan-store.js";
-import type { Learner } from "@/core/runtime/evolution/learner";
-import type { EvolutionEngine } from "@/core/runtime/evolution/engine";
+import type { Learner } from "@phus/core/runtime/evolution/learner.js";
+import type { EvolutionEngine } from "@phus/core/runtime/evolution/engine.js";
 
 export function createMetaTools(
   skills: SkillRegistry,

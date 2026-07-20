@@ -2,7 +2,7 @@
 // Verifier — checks whether a step's actual result matches its
 // expected output. Reaches the LLM via the injected `port: CorePort`.
 
-import type { Step, VerificationResult, PlanPhase } from "@/core/runtime/plan/types";
+import type { Step, VerificationResult, PlanPhase } from "@phus/core/runtime/plan/types.js";
 import type { CorePort } from "@/bridge/core-port.js";
 
 const PHASE_HINTS: Record<PlanPhase, string> = {

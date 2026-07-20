@@ -2,7 +2,7 @@
  * channel message's definition
  */
 
-import type { SessionId } from "../../types/brand.js";
+import type { SessionId } from "../types/brand.js";
 
 export type OutboundType = "text" | "image" | "reaction";
 

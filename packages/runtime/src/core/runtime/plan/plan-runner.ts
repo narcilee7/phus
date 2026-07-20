@@ -4,7 +4,7 @@ import { Plan, PlanRunnerDeps, Step } from "./types";
 import { logger } from "@/infra/logging";
 import { loadConfig } from "@/infra/config/index.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
-import { ReplanNeededError } from "@/core/runtime/executor/error";
+import { ReplanNeededError } from "@phus/core/runtime/executor/error.js";
 
 export class PlanRunner {
   /** Cooperative cancellation: set by abort() while a run is in flight,

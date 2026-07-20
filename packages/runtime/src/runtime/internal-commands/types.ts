@@ -5,7 +5,7 @@
 
 import type { PhusAgentFacade } from "@/bridge/pi-agent";
 import type { ChannelAdapter } from "@/channels/base";
-import type { Scheduler } from "@/core/runtime/scheduler";
+import type { Scheduler } from "@phus/core/runtime/scheduler/index.js.js";
 
 /** Where the command was invoked. */
 export type CommandSurface = "cli" | "tui";
