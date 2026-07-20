@@ -30,7 +30,7 @@ import type { MetaTool } from "@phus/runtime/types/tool.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import { asSessionId, asToolCallId, asTurnId } from "@phus/core/types/brand.js";
 import { Tape } from "@phus/core/session/tape.js";
-import { PiSteeringInbox } from "@/core/runtime/steering";
+import { PiSteeringInbox } from "@phus/core/runtime/steering/index.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import type { SkillDraft } from "@/infra/skills/draft.js";
 import { createMetaTools } from "@/infra/meta/index.js";

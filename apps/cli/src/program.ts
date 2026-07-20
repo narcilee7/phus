@@ -88,7 +88,7 @@ export async function registerPluginCliCommands(program: Command, config: Resolv
   //    If the agent cannot be created (e.g. no API key), log a warning and
   //    continue so help/setup/version commands still work.
   const { PhusAgent } = await import("@phus/runtime/bridge/pi-agent.js");
-  const { makeCtx } = await import("@phus/runtime/core/runtime/hook/ctx-builder.js");
+  const { makeCtx } = await import("@phus/core/runtime/hook/ctx-builder.js");
   const { initInternalCommands } = await import("@phus/runtime/runtime/internal-commands/index.js");
 
   let tempHandle;

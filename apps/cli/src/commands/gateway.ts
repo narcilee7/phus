@@ -64,7 +64,7 @@ export function registerGatewayCommand(program: Command): void {
       }
 
       // Scheduler + mesh → internal-commands services (DI, no singleton).
-      const { Scheduler } = await import("@phus/runtime/core/runtime/scheduler/index.js");
+      const { Scheduler } = await import("@phus/core/runtime/scheduler/index.js");
       const scheduler = new Scheduler(handle.internals.hooks);
       initInternalCommands({
         agent: handle.agent,

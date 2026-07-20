@@ -3,7 +3,7 @@
 
 import type { Command } from "commander";
 import { loadConfig } from "@phus/runtime/infra/config/index.js";
-import { HookRegistry } from "@phus/runtime/core/runtime/hook/registry.js";
+import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 
 export function registerPluginsListCommand(program: Command): void {
   program
