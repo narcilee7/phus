@@ -2,8 +2,8 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { RepoFileIndex } from "@/core/session/repo-file-index";
-import { selectRelevantFiles } from "@/core/session/context-select";
+import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
+import { selectRelevantFiles } from "@phus/core/session/context-select";
 
 function makeTree(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "phus-repo-index-"));

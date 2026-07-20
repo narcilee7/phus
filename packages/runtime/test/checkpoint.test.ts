@@ -3,8 +3,8 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "../src/core/session/tape";
-import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, pruneCheckpoints } from "../src/core/session/checkpoint";
+import { Tape } from "@phus/core/session/tape";
+import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, pruneCheckpoints } from "@phus/core/session/checkpoint";
 
 describe("checkpoint save/load", () => {
   let dir: string;

@@ -6,7 +6,7 @@ import { makeCtx } from "../src/core/runtime/hook/ctx-builder";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Tape } from "../src/core/session/tape";
+import { Tape } from "@phus/core/session/tape";
 import { SkillRegistry } from "../src/infra/skills/registry";
 
 function makeHooks(): { hooks: HookRegistry; tape: Tape; skills: SkillRegistry; dir: string } {

@@ -5,7 +5,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { HookRegistry } from "../src/core/runtime/hook/registry";
 import { makeCtx } from "../src/core/runtime/hook/ctx-builder";
-import { Tape } from "../src/core/session/tape";
+import { Tape } from "@phus/core/session/tape";
 import { SkillRegistry } from "../src/infra/skills/registry";
 
 function tmpCtx() {

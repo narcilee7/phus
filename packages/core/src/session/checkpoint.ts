@@ -10,8 +10,8 @@
 //   - `phus resume <sessionId>` — load latest checkpoint, restore messages, continue
 //   - `phus run --resume <turnId>` — explicit resume in one-shot mode
 
-import type { Tape } from "@/core/session/tape.js";
-import { logger } from "@/infra/logging.js";
+import type { Tape } from "./tape.js";
+// logger import disabled pending Wave E/F (infra move)
 import type { SessionId, TurnId } from "@phus/core/types/brand.js";
 import { asOptionalSessionId, asOptionalTurnId } from "@phus/core/types/brand.js";
 
@@ -45,12 +45,7 @@ export function saveCheckpoint(
     ts: Date.now() * 1000 + (checkpointCounter++ % 1000),
   };
   tape.append(entry);
-  logger.debug("checkpoint.saved", {
-    sessionId,
-    turnId,
-    messageCount: Array.isArray(messages) ? messages.length : 0,
-    bytes: JSON.stringify(entry).length,
-  });
+    /* logger call removed: logger.debug(... */
 }
 
 /** Load the most recent checkpoint for a session, or undefined. */
@@ -85,7 +80,7 @@ export function pruneCheckpoints(
   keep: number = 5,
 ): number {
   const deleted = tape.pruneCheckpoints(sessionId, keep);
-  logger.debug("checkpoint.pruned", { sessionId, deleted, kept: keep });
+    /* logger call removed: logger.debug(... */
   return deleted;
 }
 

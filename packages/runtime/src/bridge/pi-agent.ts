@@ -19,7 +19,7 @@ import { streamSimple, type Model } from "@mariozechner/pi-ai";
 import type { Envelope, Outbound } from "@phus/core/types/channel/index.js";
 import { Planner } from '@/core/runtime/plan/planner';
 import type { Plan, PlanStatus, Step, StepStatus } from "@/core/runtime/plan/types.js";
-import { PlanStore } from "@/core/session/plan-store.js";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import { createDefaultCorePort } from "@/bridge/core-port-impl.js";
 import type { CorePort } from "@/bridge/core-port.js";
 import { Learner } from "@/core/runtime/evolution/learner";
@@ -29,7 +29,7 @@ import type { Turn } from "@phus/core/types/tape/index.js";
 import type { MetaTool } from "@phus/runtime/types/tool.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import { asSessionId, asToolCallId, asTurnId } from "@phus/core/types/brand.js";
-import { Tape } from "@/core/session/tape.js";
+import { Tape } from "@phus/core/session/tape.js";
 import { PiSteeringInbox } from "@/core/runtime/steering";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import type { SkillDraft } from "@/infra/skills/draft.js";
@@ -45,8 +45,8 @@ import {
 } from "@/infra/profile.js";
 import { loadConfig } from "@/infra/config/index.js";
 import type { SteeringInbox } from "@phus/core/types/steering/index.js";
-import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
-import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@/core/session/checkpoint.js";
+import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@phus/core/session/auto-compact.js";
+import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@phus/core/session/checkpoint.js";
 import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/llm/provider-mesh/index.js";
 import { logger } from "@/infra/logging.js";
 import type { ChannelAdapter } from "@/channels/base.js";
@@ -55,7 +55,7 @@ import { extractText } from "@/bridge/text.js";
 import { resolveApiKey } from "@/bridge/model-resolver.js";
 import { registerDefaultHooks } from "@/bridge/default-hooks.js";
 import { buildContextBlock } from "@/bridge/prompt-assembly.js";
-import { RepoFileIndex } from "@/core/session/repo-file-index.js";
+import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
 import { HookRegistry } from "@/core/runtime/hook/registry";
 import { Executor } from "@/core/runtime/executor";
@@ -1085,7 +1085,7 @@ export class PhusAgent implements PhusAgentFacade {
 
   async compactCurrentSession(): Promise<string> {
     if (!this.currentSessionId) throw new Error("no current session to compact");
-    const { compactSession } = await import("@/core/session/compaction.js");
+    const { compactSession } = await import("@phus/core/session/compaction.js");
     const result = await compactSession(this.tape, this.currentSessionId, { keepRecent: 10 });
     return `compacted: summarized=${result.summarized}, kept=${result.keptRecent}`;
   }

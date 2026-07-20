@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { PlanStore, ValidationMetrics } from "@/core/session/plan-store";
+import { PlanStore, ValidationMetrics } from "@phus/core/session/plan-store.js";
 import { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import { Plan } from "@/core/runtime/plan/types";
 import { SkillRegistry } from "@/infra/skills/registry";

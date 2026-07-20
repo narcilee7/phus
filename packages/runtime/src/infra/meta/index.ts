@@ -4,7 +4,7 @@
 // internally composing skill-tools + system-tools + memory-tools + plan-tools + evolution-tools.
 
 import type { MetaTool } from "@phus/runtime/types/tool.js";
-import type { Tape } from "@/core/session/tape.js";
+import type { Tape } from "@phus/core/session/tape.js";
 import { defineSkillMetaTools } from "./skill-tools.js";
 import { defineSystemMetaTools } from "./system-tools.js";
 import { defineMemoryMetaTools } from "./memory-tools.js";
@@ -14,7 +14,7 @@ import type { SkillRegistry } from "@/infra/skills/registry.js";
 import type { MemoryStore } from "@/infra/memory/index.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
-import type { PlanStore } from "@/core/session/plan-store.js";
+import type { PlanStore } from "@phus/core/session/plan-store.js";
 import type { Learner } from "@/core/runtime/evolution/learner";
 import type { EvolutionEngine } from "@/core/runtime/evolution/engine";
 
@@ -37,7 +37,7 @@ export function createMetaTools(
       stats: () => tape.stats(),
     },
     compactSession: async (tapeConcrete, sessionId, opts) => {
-      const { compactSession } = await import("@/core/session/compaction.js");
+      const { compactSession } = await import("@phus/core/session/compaction.js");
       return compactSession(tapeConcrete as Tape, sessionId, opts);
     },
     tapeConcrete: tape,

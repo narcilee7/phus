@@ -9,7 +9,7 @@ import type { CorePort } from "@/bridge/core-port.js";
 import { HookRegistry } from "@/core/runtime/hook/registry";
 import { Planner } from "./planner";
 import { Executor } from "../executor";
-import { PlanStore } from "@/core/session/plan-store";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import { EvolutionEngine } from "../evolution/engine";
 
 export type PlanStatus = "pending" | "running" | "paused" | "completed" | "failed";

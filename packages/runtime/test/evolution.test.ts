@@ -7,7 +7,7 @@ import { Learner } from "@/core/runtime/evolution/learner";
 import { MemoryStore } from "@/infra/memory/store";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { SkillRegistry } from "@/infra/skills/registry";
-import { PlanStore } from "@/core/session/plan-store";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 import type { Plan, Step } from "@/core/runtime/plan/types";
 import type { PlanRunner } from "@/core/runtime/plan/plan-runner";

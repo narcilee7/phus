@@ -5,7 +5,7 @@
  * `SkillRegistryLike` interfaces so a context built for a scheduler-fired
  * hook may legitimately omit them.
  */
-import { Tape } from "@/core/session/tape";
+import { Tape } from "@phus/core/session/tape.js";
 import { SkillRegistry } from "@/infra/skills/registry";
 import { HookContext, SkillRegistryLike, TapeLike } from "@phus/core/types/index.js"
 import { asSessionId } from "@phus/core/types/brand.js";

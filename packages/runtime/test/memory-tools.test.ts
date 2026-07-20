@@ -12,7 +12,7 @@ import {
 } from "@/infra/meta/memory-tools";
 import { MemoryStore } from "@/infra/memory/store";
 import { asSessionId } from "@phus/core/types/brand.js";
-import type { Tape } from "@/core/session/tape";
+import type { Tape } from "@phus/core/session/tape.js";
 import type { TapeEntry } from "@phus/core/types/tape.js";
 
 let tmpDir: string;

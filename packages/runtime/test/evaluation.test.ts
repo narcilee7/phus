@@ -14,7 +14,7 @@ import { Learner } from "@/core/runtime/evolution/learner";
 import { IntelligenceMetricsAggregator } from "@/core/runtime/evolution/metrics";
 import { MemoryStore } from "@/infra/memory/store";
 import { SkillRegistry } from "@/infra/skills/registry";
-import { PlanStore } from "@/core/session/plan-store";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { buildContextBlock } from "@/bridge/prompt-assembly";
 import { asSessionId } from "@phus/core/types/brand.js";
@@ -254,7 +254,7 @@ describe("Evaluation: intelligence loop integration", () => {
         fs.writeFileSync(path.join(dir, "src", "foo.ts"), "export const foo = 1;\n");
         fs.writeFileSync(path.join(dir, "src", "bar.ts"), "export const bar = 2;\n");
 
-        const { RepoFileIndex } = await import("@/core/session/repo-file-index.js");
+        const { RepoFileIndex } = await import("@phus/core/session/repo-file-index.js");
         const index = new RepoFileIndex(dir);
 
         const tape = makeTape().tape;

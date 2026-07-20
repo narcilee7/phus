@@ -8,7 +8,7 @@ import { SessionId } from "@phus/core/types/brand.js";
 import type { CorePort } from "@/bridge/core-port.js";
 import { SkillValidator } from "@/core/runtime/skill/validator";
 import { SkillRegistry } from "@/infra/skills/registry";
-import { PlanStore } from "@/core/session/plan-store";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import type { MemoryStore } from "@/infra/memory/index.js";
 import { Learner } from "./learner";
 

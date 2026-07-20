@@ -6,7 +6,7 @@ import { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import { Planner } from "@/core/runtime/plan/planner";
 import { Executor } from "@/core/runtime/executor/index";
 import { ReplanNeededError } from "@/core/runtime/executor/error";
-import { PlanStore } from "@/core/session/plan-store";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import { HookRegistry } from "@/core/runtime/hook/registry";
 import { resetConfigCache } from "@/infra/config/index";
 import type { Plan, Step } from "@/core/runtime/plan/types";

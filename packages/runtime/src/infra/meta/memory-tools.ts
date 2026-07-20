@@ -9,7 +9,7 @@
 import { Type } from "@mariozechner/pi-ai";
 import type { MetaTool } from "@phus/runtime/types/tool.js";
 import { asSessionId, type SessionId } from "@phus/core/types/brand.js";
-import type { Tape } from "@/core/session/tape.js";
+import type { Tape } from "@phus/core/session/tape.js";
 import {
   MEMORY_CATEGORIES,
   MEMORY_AUTHORITIES,

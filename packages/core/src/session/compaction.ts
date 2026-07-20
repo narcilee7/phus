@@ -4,9 +4,9 @@
 // LLM-backed summarizer (`llmSummarizer`) live in
 // `@phus/runtime/llm/compact-tool.ts`.
 
-import type { Tape } from "@/core/session/tape.js";
+import type { Tape } from "./tape.js";
 import type { Turn } from "@phus/core/types/tape/index.js";
-import { logger } from "@/infra/logging.js";
+// logger import disabled pending Wave E/F (infra move)
 import { asSessionId } from "@phus/core/types/brand.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 
@@ -80,12 +80,7 @@ export async function compactSession(
 		ts: Date.now(),
 	});
 
-	logger.info("compaction.completed", {
-		sessionId,
-		summarized: toSummarize.length,
-		keptRecent: recentKept.length,
-		durationMs: Date.now() - startedAt,
-	});
+	  /* logger call removed: logger.info(... */
 
 	return {
 		sessionId,

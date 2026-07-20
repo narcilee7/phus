@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { Plan, PlanStatus } from "@/core/runtime/plan/types.js";
+import type { Plan, PlanStatus } from "@phus/runtime/core/runtime/plan/types.js";
 
 export interface ValidationMetrics {
   stepCount: number;

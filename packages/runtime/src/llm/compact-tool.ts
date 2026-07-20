@@ -1,13 +1,13 @@
 // packages/runtime/src/llm/compact-tool.ts
 // Meta-tool wrappers around `compactSession` (the pure half lives in
-// `@/core/session/compaction.ts`). Imports Pi types (Agent, Type) and
+// `@phus/core/session/compaction.ts`). Imports Pi types (Agent, Type) and
 // MetaTool — runtime-side dependencies that core/ must not see.
 
 import { Type } from "@mariozechner/pi-ai";
 import type { Agent } from "@mariozechner/pi-agent-core";
 
-import type { Tape } from "@/core/session/tape.js";
-import { compactSession } from "@/core/session/compaction.js";
+import type { Tape } from "@phus/core/session/tape.js";
+import { compactSession } from "@phus/core/session/compaction.js";
 import type { TapeEntry, Turn } from "@phus/core/types/tape/index.js";
 import type { MetaTool } from "@phus/runtime/types/tool.js";
 import { asSessionId } from "@phus/core/types/brand.js";

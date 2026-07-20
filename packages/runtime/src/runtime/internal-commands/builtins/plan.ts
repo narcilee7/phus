@@ -1,6 +1,6 @@
 import { PlanRunner } from "@/core/runtime/plan/plan-runner";
 import type { InternalCommand, InternalCommandServices } from "../types";
-import type { PlanStore } from "@/core/session/plan-store";
+import type { PlanStore } from "@phus/core/session/plan-store.js";
 
 function getPlanRunner(services: InternalCommandServices): PlanRunner | undefined {
   return (services.agent as any).getPlanRunner?.();

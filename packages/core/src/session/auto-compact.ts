@@ -3,9 +3,9 @@
 //
 // Wired into `before_llm_call` hook so it fires before every LLM call.
 
-import type { Tape } from "@/core/session/tape.js";
-import { compactSession } from "@/core/session/compaction.js";
-import { logger } from "@/infra/logging.js";
+import type { Tape } from "./tape.js";
+import { compactSession } from "./compaction.js";
+// logger import disabled pending Wave E/F (infra move)
 import type { SessionId } from "@phus/core/types/brand.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 
@@ -81,12 +81,6 @@ export async function maybeCompact(
 ): Promise<{ fired: boolean; reason?: string; summarized?: number; kept?: number }> {
   const reason = shouldCompact(messages, contextWindow, cfg);
   if (!reason) return { fired: false };
-  logger.info("auto_compact.triggered", { sessionId, reason });
   const result = await compactSession(tape, sessionId, { keepRecent: cfg.keepRecent });
-  logger.info("auto_compact.completed", {
-    sessionId,
-    summarized: result.summarized,
-    kept: result.keptRecent,
-  });
   return { fired: true, reason, summarized: result.summarized, kept: result.keptRecent };
 }

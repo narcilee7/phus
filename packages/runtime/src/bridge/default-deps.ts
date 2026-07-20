@@ -4,7 +4,7 @@
 // manually wiring every dependency.
 
 import { HookRegistry } from "@/core/runtime/hook/registry";
-import { Tape } from "@/core/session/tape.js";
+import { Tape } from "@phus/core/session/tape.js";
 import { SkillRegistry } from "@/infra/skills/registry.js";
 import { defaultPolicy } from "@/infra/safety.js";
 import { resolveProfile, type ProviderProfile } from "@/infra/profile.js";
@@ -21,7 +21,7 @@ import { resolveModelSafe } from "@/bridge/model-resolver.js";
 import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
 import { loadConfig, type ResolvedConfig } from "@/infra/config/index.js";
 import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
-import { PlanStore } from "@/core/session/plan-store.js";
+import { PlanStore } from "@phus/core/session/plan-store.js";
 import * as path from "node:path";
 
 export interface DefaultDepsOptions {
