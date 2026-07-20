@@ -47,7 +47,7 @@ import { loadConfig } from "@/infra/config/index.js";
 import type { SteeringInbox } from "@/types/steering/index.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@/core/session/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@/core/session/checkpoint.js";
-import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/core/llm/provider-mesh/index.js";
+import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/llm/provider-mesh/index.js";
 import { logger } from "@/infra/logging.js";
 import type { ChannelAdapter } from "@/channels/base.js";
 import { toAgentTool } from "@/bridge/agent-tool-adapter.js";

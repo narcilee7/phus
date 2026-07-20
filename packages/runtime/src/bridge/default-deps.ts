@@ -11,11 +11,11 @@ import { resolveProfile, type ProviderProfile } from "@/infra/profile.js";
 import {
   type EndpointSpec,
   type MeshPolicy,
-} from "@/core/llm/provider-mesh/index.js";
-import type { MeshLike } from "@/core/llm/provider-mesh/contract.js";
+} from "@/llm/provider-mesh/index.js";
 import { PiSteeringInbox } from "@/core/runtime/steering";
 import type { SteeringInbox } from "@/types/steering/index.js";
-import { buildMesh } from "@/core/llm/provider-mesh/index.js";
+import { buildMesh } from "@/llm/provider-mesh/index.js";
+import type { MeshLike } from "@/llm/provider-mesh/contract.js";
 import { logger } from "@/infra/logging.js";
 import { resolveModelSafe } from "@/bridge/model-resolver.js";
 import type { PhusAgentDeps } from "@/bridge/pi-agent.js";

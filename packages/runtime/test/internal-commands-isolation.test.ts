@@ -8,7 +8,7 @@ import {
   registerBuiltins,
   type InternalCommandRegistry,
   type InternalCommandServices,
-} from "../src/core/runtime/internal-commands/index";
+} from "../src/runtime/internal-commands/index";
 
 function makeServices(label: string): InternalCommandServices {
   return {

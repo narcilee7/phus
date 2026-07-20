@@ -58,7 +58,7 @@ export function loadPlugins(
         registerChannel: (c) => channels.push(c),
         registerInternalCommand: (cmd) => {
           // Lazy import to avoid circular dep
-          import("@/core/runtime/internal-commands/index.js").then((m) => m.register(cmd));
+          import("@/runtime/internal-commands/index.js").then((m) => m.register(cmd));
         },
         registerCliCommand: (fn) => {
           // Lazy: collect into a queue; phus.ts drains it at startup
