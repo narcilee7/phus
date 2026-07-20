@@ -8,7 +8,7 @@
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"bin": {
-		"phus": "./dist/cli.js"
+		"phus": "./dist/main.js"
 	},
 	"exports": {
 		".": "./dist/index.js"
@@ -18,8 +18,8 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
-		"build:js": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
+		"build": "tsc --outDir dist && node ../../scripts/fix-extensions.mjs dist",
+		"build:js": "tsc --outDir dist && node ../../scripts/fix-extensions.mjs dist",
 		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
 		"dev": "PHUS_HOME=$PHUS_HOME tsx src/main.ts",
 		"chat": "PHUS_HOME=$PHUS_HOME tsx src/main.ts chat",
