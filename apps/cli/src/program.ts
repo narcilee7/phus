@@ -89,7 +89,7 @@ export async function registerPluginCliCommands(program: Command, config: Resolv
   //    continue so help/setup/version commands still work.
   const { PhusAgent } = await import("@phus/runtime/bridge/pi-agent.js");
   const { makeCtx } = await import("@phus/runtime/core/runtime/hook/ctx-builder.js");
-  const { initInternalCommands } = await import("@phus/runtime/core/runtime/internal-commands/index.js");
+  const { initInternalCommands } = await import("@phus/runtime/runtime/internal-commands/index.js");
 
   let tempHandle;
   try {

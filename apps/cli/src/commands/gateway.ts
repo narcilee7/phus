@@ -11,7 +11,7 @@ import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import { bootstrap } from "@phus/runtime/infra/bootstrap.js";
 import { logger } from "@phus/runtime/infra/logging.js";
 import { loadConfig } from "@phus/runtime/infra/config/index.js";
-import { initInternalCommands } from "@phus/runtime/core/runtime/internal-commands/index.js";
+import { initInternalCommands } from "@phus/runtime/runtime/internal-commands/index.js";
 import { channelStatuses, collectChannels } from "@phus/runtime/commands/channels.js";
 import type { ChannelAdapter } from "@phus/runtime/channels/base.js";
 import type { Schedule } from "@phus/runtime/types/scheduler/index.js";

@@ -45,13 +45,6 @@ export type {
 	TapeEntryKind,
 	TapeTurnEntry,
 	TapeAnchorEntry,
-	TapeToolCallEntry,
-	TapeToolResultEntry,
-	TapeErrorEntry,
-	TapeCheckpointEntry,
-	TapeState,
-	Turn,
-	TapeToolCall,
 } from "@phus/runtime/types/tape/index.js";
 
 export type {

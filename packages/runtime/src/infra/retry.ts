@@ -10,7 +10,7 @@
 //   - Meta tools (skill_write etc.) — these are local and should be deterministic.
 //   - User errors (bad input, missing file).
 
-import { sleep } from "@/utils/promise.js";
+import { sleep } from "@phus/core/utils/promise.js";
 import { logger } from "@/infra/logging.js";
 
 // ─── Types ───────────────────────────────────────────────────────
