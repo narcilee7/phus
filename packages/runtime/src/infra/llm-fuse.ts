@@ -17,7 +17,7 @@
 // budget. The fuse is checked BEFORE the request is sent (via the
 // model's onPayload hook), so tripping it costs nothing.
 
-import { logger } from "@/infra/logging.js";
+import { logger } from "./logging.js";
 
 export interface RobustnessConfig {
 	/** Per-HTTP-call timeout handed to the provider SDK (pi-ai Model.timeoutMs). */

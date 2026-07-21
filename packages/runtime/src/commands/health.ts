@@ -4,8 +4,8 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadConfig } from "@/infra/config/index.js";
-import { getLlmFuse } from "@/infra/profile.js";
+import { loadConfig } from "../infra/config/index.js";
+import { getLlmFuse } from "../infra/profile.js";
 
 export interface HealthStatus {
   ok: boolean;

@@ -3,7 +3,7 @@ import type { MetaTool } from "@phus/runtime/types/tool.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 import { Learner } from "@phus/core/runtime/evolution/learner.js";
 import { EvolutionEngine } from "@phus/core/runtime/evolution/engine.js";
-import type { SkillRegistry } from "@/infra/skills/registry.js";
+import type { SkillRegistry } from "../skills/registry.js";
 
 export function defineEvolutionMetaTools(deps: {
   learner: Learner;

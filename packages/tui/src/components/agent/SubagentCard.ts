@@ -2,9 +2,9 @@
 // Subagent progress card. M2: display-only. M3 adds focus + Enter to
 // open the session.
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import type { PlanSubagentState } from "@/state/state.js";
-import { colorize, truncateToWidth } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import type { PlanSubagentState } from "../../state/state.js";
+import { colorize, truncateToWidth } from "../../runtime/text-utils.js";
 
 export class SubagentCard implements Component {
 	constructor(private readonly subagent: PlanSubagentState) {}

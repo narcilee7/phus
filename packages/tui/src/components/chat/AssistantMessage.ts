@@ -2,10 +2,10 @@
 // Assistant turn: optional reasoning block (dim), markdown body, optional
 // metadata footer (model / tokens / cost).
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import type { ChatItem } from "@/state/state.js";
-import { colorize, wrapTextWithAnsi } from "@/runtime/text-utils.js";
-import { renderMarkdown } from "@/components/chat/Markdown.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import type { ChatItem } from "../../state/state.js";
+import { colorize, wrapTextWithAnsi } from "../../runtime/text-utils.js";
+import { renderMarkdown } from "./Markdown.js";
 
 function buildMetadataLine(model?: string, usage?: ChatItem["usage"]): string | undefined {
 	const parts: string[] = [];

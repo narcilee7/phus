@@ -3,8 +3,8 @@
 // Lives in runtime (Stage 1a moved it out of core to break the cycle
 // with @/bridge/pi-agent).
 
-import type { PhusAgentFacade } from "@/bridge/pi-agent";
-import type { ChannelAdapter } from "@/channels/base";
+import type { PhusAgentFacade } from "../../bridge/pi-agent.js";
+import type { ChannelAdapter } from "../../channels/base.js";
 import type { Scheduler } from "../../../core/runtime/scheduler/index.js";
 
 /** Where the command was invoked. */
@@ -38,7 +38,7 @@ export interface ParsedCommand {
 export interface InternalCommandServices {
 	agent: PhusAgentFacade;
 	home: () => string;
-	mesh?: import("@/llm/provider-mesh/contract.js").MeshLike;
+	mesh?: import("../../llm/provider-mesh/contract.js").MeshLike;
 	scheduler?: Scheduler | undefined;
 	extraChannels?: () => ChannelAdapter[];
 }

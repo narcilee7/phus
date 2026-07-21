@@ -4,10 +4,10 @@
 // prompt, start fresh, clear chat area, quit / exit.
 
 import { asSessionId } from "@phus/core/types/brand.js";
-import { TURN_TRACE_CHARS, TURN_TRACE_PREVIEW } from "@/constants.js";
-import { truncate } from "@/state/state.js";
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import { errorMessage, notify } from "@/handler/commands/notice.js";
+import { TURN_TRACE_CHARS, TURN_TRACE_PREVIEW } from "../../constants.js";
+import { truncate } from "../../state/state.js";
+import type { CommandRegistry } from "./context.js";
+import { errorMessage, notify } from "./notice.js";
 
 export function registerSession(): CommandRegistry {
   return {

@@ -9,7 +9,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import yaml from "yaml";
-import { loadConfig } from "@/infra/config/index.js";
+import { loadConfig } from "./config/index.js";
 
 export interface Draft {
   name: string;

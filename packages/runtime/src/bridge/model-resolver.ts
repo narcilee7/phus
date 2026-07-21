@@ -2,8 +2,8 @@
 // Resolve the Pi Model and API key for a provider profile.
 
 import { getModel, type Model } from "@mariozechner/pi-ai";
-import { resolveProfile, modelFromProfile, apiKeyForProfile, type ProviderProfile } from "@/infra/profile.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { resolveProfile, modelFromProfile, apiKeyForProfile, type ProviderProfile } from "../infra/profile.js";
+import { loadConfig } from "../infra/config/index.js";
 
 function providerApiKeyEnvVar(provider: string): string {
   return `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;

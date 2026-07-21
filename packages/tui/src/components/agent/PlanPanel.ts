@@ -2,10 +2,10 @@
 // Active plan visualization. M2: display-only (compact 4-row summary
 // that lists step statuses). M3 adds focus + ↑↓/p/r/c/Enter keybindings.
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import type { PlanState } from "@/state/state.js";
-import { box } from "@/runtime/border.js";
-import { colorize, padRight, truncateToWidth } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import type { PlanState } from "../../state/state.js";
+import { box } from "../../runtime/border.js";
+import { colorize, padRight, truncateToWidth } from "../../runtime/text-utils.js";
 
 function stepGlyph(s: PlanState["steps"][number]["status"]): { glyph: string; color: string } {
 	switch (s) {

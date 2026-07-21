@@ -5,7 +5,7 @@
 // schedules) so the file IS the API. Adding a new top-level YAML
 // section means adding it here + in loader.ts.
 
-import type { ProviderConfig } from "@/infra/profile.js";
+import type { ProviderConfig } from "../profile.js";
 import type { Schedule } from "@phus/core/types/scheduler/index.js";
 import type { LogLevelLiteral } from "./defaults.js";
 import { RobustnessConfig } from "../llm-fuse.js";

@@ -5,22 +5,22 @@
 
 import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Tape } from "@phus/core/session/tape.js";
-import { SkillRegistry } from "@/infra/skills/registry.js";
-import { defaultPolicy } from "@/infra/safety.js";
-import { resolveProfile, type ProviderProfile } from "@/infra/profile.js";
+import { SkillRegistry } from "../infra/skills/registry.js";
+import { defaultPolicy } from "../infra/safety.js";
+import { resolveProfile, type ProviderProfile } from "../infra/profile.js";
 import {
   type EndpointSpec,
   type MeshPolicy,
-} from "@/llm/provider-mesh/index.js";
+} from "../llm/provider-mesh/index.js";
 import { PiSteeringInbox } from "@phus/core/runtime/steering/index.js";
 import type { SteeringInbox } from "@phus/core/types/steering/index.js";
-import { buildMesh } from "@/llm/provider-mesh/index.js";
-import type { MeshLike } from "@/llm/provider-mesh/contract.js";
-import { logger } from "@/infra/logging.js";
-import { resolveModelSafe } from "@/bridge/model-resolver.js";
-import type { PhusAgentDeps } from "@/bridge/pi-agent.js";
-import { loadConfig, type ResolvedConfig } from "@/infra/config/index.js";
-import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
+import { buildMesh } from "../llm/provider-mesh/index.js";
+import type { MeshLike } from "../llm/provider-mesh/contract.js";
+import { logger } from "../infra/logging.js";
+import { resolveModelSafe } from "./model-resolver.js";
+import type { PhusAgentDeps } from "./pi-agent.js";
+import { loadConfig, type ResolvedConfig } from "../infra/config/index.js";
+import { MemoryStore, AutonomyGate } from "../infra/memory/index.js";
 import { PlanStore } from "@phus/core/session/plan-store.js";
 import * as path from "node:path";
 

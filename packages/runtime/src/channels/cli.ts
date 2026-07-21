@@ -4,10 +4,10 @@
 //   - interactive (chat command): line-buffered stdin REPL
 
 import * as readline from "node:readline";
-import { makeTextEnvelope } from "@/channels/base.js";
-import type { ChannelAdapter } from "@/channels/base.js";
-import type { PhusAgent } from "@/bridge/pi-agent.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { makeTextEnvelope } from "./base.js";
+import type { ChannelAdapter } from "./base.js";
+import type { PhusAgent } from "../bridge/pi-agent.js";
+import { loadConfig } from "../infra/config/index.js";
 
 export class CLIChannel implements ChannelAdapter {
   readonly name = "cli";
@@ -29,7 +29,7 @@ export class CLIChannel implements ChannelAdapter {
       }
       // Bub-style internal commands (comma prefix)
       if (text.startsWith(",")) {
-        const { execute, initInternalCommands } = await import("@/runtime/internal-commands/index.js");
+        const { execute, initInternalCommands } = await import("../runtime/internal-commands/index.js");
         initInternalCommands({
           agent,
           home: () => loadConfig().paths.home,
@@ -86,7 +86,7 @@ export class CLIChannel implements ChannelAdapter {
  *  `profileName` overrides the active profile for this run. */
 export async function runOnce(prompt: string, profileName?: string): Promise<void> {
   // Lazy import so `chat` mode doesn't pull in unused code paths.
-  const { PhusAgent } = await import("@/bridge/pi-agent.js");
+  const { PhusAgent } = await import("../bridge/pi-agent.js");
   const handle = await PhusAgent.create(profileName ? { profileName } : {});
   const agent = handle.agent;
   const channel = new CLIChannel();

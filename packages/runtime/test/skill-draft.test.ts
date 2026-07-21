@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { SkillRegistry } from "@/infra/skills/registry";
+import { SkillRegistry } from "../src/infra/skills/registry.js";
 
 function draftInput(name: string) {
   return {

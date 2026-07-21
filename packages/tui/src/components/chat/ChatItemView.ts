@@ -4,13 +4,13 @@
 // snapshot map so file_write results can show a diff against the
 // pre-write contents.
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import type { ChatItem } from "@/state/state.js";
-import type { FileSnapshot } from "@/components/chat/ToolResultCard.js";
-import { UserMessage } from "@/components/chat/UserMessage.js";
-import { AssistantMessage } from "@/components/chat/AssistantMessage.js";
-import { ToolCallCard } from "@/components/chat/ToolCallCard.js";
-import { colorize, wrapTextWithAnsi } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import type { ChatItem } from "../../state/state.js";
+import type { FileSnapshot } from "./ToolResultCard.js";
+import { UserMessage } from "./UserMessage.js";
+import { AssistantMessage } from "./AssistantMessage.js";
+import { ToolCallCard } from "./ToolCallCard.js";
+import { colorize, wrapTextWithAnsi } from "../../runtime/text-utils.js";
 
 export class ChatItemView implements Component {
 	constructor(

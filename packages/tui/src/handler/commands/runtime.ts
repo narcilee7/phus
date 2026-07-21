@@ -3,9 +3,9 @@
 // profile switching, plugin reload, context compaction.
 
 import { loadConfig } from "@phus/runtime/infra/config/index.js";
-import { MODEL_LIST_PREVIEW } from "@/constants.js";
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import { errorMessage, notify } from "@/handler/commands/notice.js";
+import { MODEL_LIST_PREVIEW } from "../../constants.js";
+import type { CommandRegistry } from "./context.js";
+import { errorMessage, notify } from "./notice.js";
 
 const VALID_LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
 

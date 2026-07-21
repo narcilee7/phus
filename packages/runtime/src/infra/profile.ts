@@ -26,9 +26,9 @@ import * as path from "node:path";
 import yaml from "yaml";
 import { getEnvApiKey } from "@mariozechner/pi-ai";
 import type { Model } from "@mariozechner/pi-ai";
-import { logger } from "@/infra/logging.js";
-import { LlmFuse } from "@/infra/llm-fuse.js";
-import { resolveAndCache, validateModelString, loadConfig } from "@/infra/config/index.js";
+import { logger } from "./logging.js";
+import { LlmFuse } from "./llm-fuse.js";
+import { resolveAndCache, validateModelString, loadConfig } from "./config/index.js";
 
 /** Process-wide LLM fuse (billing circuit + call budgets). Lazily built
  *  so config is read on first use; tests can reset between cases. */

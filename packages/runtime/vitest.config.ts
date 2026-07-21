@@ -10,13 +10,10 @@ export default defineConfig({
 	resolve: {
 		extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".json"],
 		alias: [
-			// `@/foo/bar` (no ext) — vite will append `.ts` via extensions.
-			{
-				find: /^@\/(.*)$/,
-				replacement: `${srcRoot}/$1`,
-			},
 			// Strip trailing `.js` from any relative import so vite can
-			// resolve `.ts` instead.
+			// resolve `.ts` instead. Cross-package imports of the form
+			// `@phus/runtime/...` are handled by vitest's normal module
+			// resolution through the workspace symlink.
 			{
 				find: /^([^@].*)\.js$/,
 				replacement: "$1",

@@ -14,8 +14,8 @@ import "prismjs/components/prism-markdown.js";
 import "prismjs/components/prism-python.js";
 import "prismjs/components/prism-typescript.js";
 import "prismjs/components/prism-yaml.js";
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import { colorize, visibleWidth } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import { colorize, visibleWidth } from "../../runtime/text-utils.js";
 
 export interface CodeBlockOptions {
 	code: string;

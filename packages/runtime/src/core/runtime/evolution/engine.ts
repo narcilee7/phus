@@ -1,10 +1,10 @@
 import type { Plan } from "../plan/types.js";
-import type { MemoryAction } from "@/infra/memory/index.js";
+import type { MemoryAction } from "../../../infra/memory/index.js";
 import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
-import type { SkillDraft } from "@/infra/skills/draft";
+import type { SkillDraft } from "../../../infra/skills/draft.js";
 import type { TapeEntry } from "@phus/core/types/tape/index.js";
 import type { ValidationMetrics } from "@phus/core/session/plan-store.js";
-import { logger } from "@/infra/logging.js";
+import { logger } from "../../../infra/logging.js";
 import { EvolutionDeps, Reflection } from "./types";
 
 const PROCEDURE_SECTION = "Procedures";

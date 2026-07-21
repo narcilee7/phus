@@ -6,10 +6,10 @@
 // M3 surface: Focusable + Y/S/A/N/Esc/Enter keybindings routed to
 // the `onResolve` callback supplied by the App.
 
-import type { Component, Focusable } from "@/vendor/pi-tui/tui.js";
-import type { PermissionRequest } from "@/state/state.js";
-import { box } from "@/runtime/border.js";
-import { colorize, wrapTextWithAnsi } from "@/runtime/text-utils.js";
+import type { Component, Focusable } from "../../vendor/pi-tui/tui.js";
+import type { PermissionRequest } from "../../state/state.js";
+import { box } from "../../runtime/border.js";
+import { colorize, wrapTextWithAnsi } from "../../runtime/text-utils.js";
 
 export class PermissionPanel implements Component, Focusable {
 	focused = false;

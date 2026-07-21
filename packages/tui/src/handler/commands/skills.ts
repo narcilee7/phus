@@ -1,8 +1,8 @@
 // src/tui/handler/commands/skills.ts
 // Skill discovery and inspection plus plugin metadata.
 
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import { notify } from "@/handler/commands/notice.js";
+import type { CommandRegistry } from "./context.js";
+import { notify } from "./notice.js";
 
 export function registerSkills(): CommandRegistry {
   return {

@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { DEFAULTS } from "@/infra/config/defaults.js";
+import { DEFAULTS } from "./config/defaults.js";
 
 /** Load `.env` from the Phus home directory if it exists.
  *  Existing process.env values are never overwritten. */

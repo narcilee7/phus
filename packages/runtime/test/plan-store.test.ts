@@ -1,6 +1,6 @@
 import { describe, expect, it, afterEach } from "vitest";
 import { PlanStore } from "@phus/core/session/plan-store.js";
-import type { Plan } from "@/core/runtime/plan/types";
+import type { Plan } from "../src/core/runtime/plan/types.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 
 function makePlan(overrides: Partial<Plan> = {}): Plan {

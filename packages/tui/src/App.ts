@@ -9,17 +9,17 @@
 // comes in M3 (interactive cards) and M4 (Editor + entry swap).
 
 import { readFileSync } from "node:fs";
-import { Container, type TUI, type Component } from "@/vendor/pi-tui/tui.js";
-import { Header, type HeaderStats } from "@/components/base/Header.js";
-import { StatusBar } from "@/components/base/StatusBar.js";
-import { ChatViewport } from "@/components/chat/ChatViewport.js";
-import { PlanPanel } from "@/components/agent/PlanPanel.js";
-import { ResumePrompt } from "@/components/agent/ResumePrompt.js";
-import { TodoPill } from "@/components/todo/TodoPill.js";
-import { PermissionPanel } from "@/components/permission/PermissionPanel.js";
-import { CommandPalette } from "@/components/command-components/CommandPalette.js";
-import { SessionsPanel } from "@/components/session-components/SessionsPanel.js";
-import { InputBox } from "@/components/input/InputBox.js";
+import { Container, type TUI, type Component } from "./vendor/pi-tui/tui.js";
+import { Header, type HeaderStats } from "./components/base/Header.js";
+import { StatusBar } from "./components/base/StatusBar.js";
+import { ChatViewport } from "./components/chat/ChatViewport.js";
+import { PlanPanel } from "./components/agent/PlanPanel.js";
+import { ResumePrompt } from "./components/agent/ResumePrompt.js";
+import { TodoPill } from "./components/todo/TodoPill.js";
+import { PermissionPanel } from "./components/permission/PermissionPanel.js";
+import { CommandPalette } from "./components/command-components/CommandPalette.js";
+import { SessionsPanel } from "./components/session-components/SessionsPanel.js";
+import { InputBox } from "./components/input/InputBox.js";
 import {
 	HEADER_ROWS,
 	STATUS_ROWS,
@@ -31,19 +31,19 @@ import {
 	TODO_ROWS,
 	PERMISSION_ROWS,
 	DANGEROUS_TOOLS,
-} from "@/constants.js";
-import { createAppStore, type AppStore } from "@/runtime/app-state.js";
-import { SisyphusAnimator } from "@/runtime/sisyphus.js";
-import { eventToAction } from "@/transform/events.js";
-import { planEventToAction, type PlanRef } from "@/transform/plan-events.js";
-import { describeMemoryAction, buildMemoryPreview } from "@/transform/memory.js";
+} from "./constants.js";
+import { createAppStore, type AppStore } from "./runtime/app-state.js";
+import { SisyphusAnimator } from "./runtime/sisyphus.js";
+import { eventToAction } from "./transform/events.js";
+import { planEventToAction, type PlanRef } from "./transform/plan-events.js";
+import { describeMemoryAction, buildMemoryPreview } from "./transform/memory.js";
 // import { parseMemoryAction } from "@phus/runtime/infra/meta/index.js";
-import { runSlash, SLASH_COMMANDS } from "@/handler/commands/commands.js";
-import { buildShortcutListener, type GlobalShortcutCallbacks } from "@/runtime/keybindings.js";
-import { submitMessage } from "@/handler/submit-message.js";
-import { tuiChannel } from "@/channel.js";
+import { runSlash, SLASH_COMMANDS } from "./handler/commands/commands.js";
+import { buildShortcutListener, type GlobalShortcutCallbacks } from "./runtime/keybindings.js";
+import { submitMessage } from "./handler/submit-message.js";
+import { tuiChannel } from "./channel.js";
 import type { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
-import type { AppState, PermissionRequest } from "@/state/state.js";
+import type { AppState, PermissionRequest } from "./state/state.js";
 import { parseMemoryAction } from "@phus/runtime/infra/meta/memory-tools.js";
 
 export interface AppDeps {

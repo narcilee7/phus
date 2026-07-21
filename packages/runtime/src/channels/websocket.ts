@@ -2,11 +2,11 @@
 // WebSocket channel — one connection per client, routed by clientId.
 
 import { WebSocketServer, type WebSocket } from "ws";
-import type { ChannelAdapter, ChannelStatus } from "@/channels/base.js";
-import { makeEnvelopeFromChat } from "@/channels/base.js";
+import type { ChannelAdapter, ChannelStatus } from "./base.js";
+import { makeEnvelopeFromChat } from "./base.js";
 import type { Outbound } from "@phus/core/types/channel/index.js";
-import type { PhusAgent } from "@/bridge/pi-agent.js";
-import { logger } from "@/infra/logging.js";
+import type { PhusAgent } from "../bridge/pi-agent.js";
+import { logger } from "../infra/logging.js";
 
 export interface WebSocketChannelConfig {
   port: number;

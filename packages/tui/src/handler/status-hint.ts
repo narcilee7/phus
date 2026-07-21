@@ -3,7 +3,7 @@
 // nesting (palette/focus/permission/sidebar/write) is declarative and
 // unit-testable, instead of a six-deep ternary in the App body.
 
-import type { PermissionRequest, PlanStepState } from "@/state/state.js";
+import type { PermissionRequest, PlanStepState } from "../state/state.js";
 
 export interface StatusHintInput {
   paletteOpen: boolean;

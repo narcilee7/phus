@@ -7,12 +7,12 @@
 //
 // M4: replaces the old MultiLineInput.tsx (React/ink) entirely.
 
-import { Editor, type EditorTheme } from "@/vendor/pi-tui/components/editor.js";
+import { Editor, type EditorTheme } from "../../vendor/pi-tui/components/editor.js";
 import {
 	CombinedAutocompleteProvider,
 	type SlashCommand,
-} from "@/vendor/pi-tui/autocomplete.js";
-import type { Component, Focusable, TUI } from "@/vendor/pi-tui/tui.js";
+} from "../../vendor/pi-tui/autocomplete.js";
+import type { Component, Focusable, TUI } from "../../vendor/pi-tui/tui.js";
 
 export interface InputBoxOptions {
 	readonly tui: TUI;

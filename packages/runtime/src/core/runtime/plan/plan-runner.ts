@@ -1,8 +1,8 @@
 import { HookName } from "@phus/core/types/index.js";
 import { EvolutionEngine } from "../evolution/engine";
 import { Plan, PlanRunnerDeps, Step } from "./types";
-import { logger } from "@/infra/logging";
-import { loadConfig } from "@/infra/config/index.js";
+import { logger } from "../../../infra/logging.js";
+import { loadConfig } from "../../../infra/config/index.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import { ReplanNeededError } from "../executor/error.js";
 

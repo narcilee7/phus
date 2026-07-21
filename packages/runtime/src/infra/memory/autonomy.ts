@@ -10,7 +10,7 @@
 // Pure functions — no I/O, no logging, no clock. Trivially testable.
 
 import type { MemoryAction, MemoryActionKind } from "./store.js";
-import type { MemoryConfig, MemoryMode } from "@/infra/config/schema.js";
+import type { MemoryConfig, MemoryMode } from "../config/schema.js";
 
 export type Decision = "auto" | "approve";
 

@@ -3,7 +3,7 @@
 // caller passes an `emit` callback so this module does not depend
 // on EventEmitter.
 
-import { logger } from "@/infra/logging.js";
+import { logger } from "../../infra/logging.js";
 import type { EndpointState, MeshPolicy } from "./types.js";
 
 /** Event payload emitted whenever an endpoint's circuit state changes. */

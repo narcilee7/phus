@@ -4,7 +4,7 @@
 
 import { SessionId } from "@phus/core/types/brand.js";
 import { LearnerDeps, Reflection } from "./types";
-import { SkillDraft } from "@/infra/skills/draft";
+import { SkillDraft } from "../../../infra/skills/draft.js";
 
 export class Learner {
 	constructor(private deps: LearnerDeps) {}

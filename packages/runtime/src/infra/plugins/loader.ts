@@ -12,13 +12,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createJiti } from "jiti";
 import * as yaml from "yaml";
-import { logger } from "@/infra/logging.js";
+import { logger } from "../logging.js";
 import type { HookRegistry } from "@phus/core/runtime/hook/registry.js";
-import type { ChannelAdapter } from "@/channels/base.js";
+import type { ChannelAdapter } from "../../channels/base.js";
 import { LoadedPlugin, Plugin, PluginContext, PluginLoaderOptions } from "@phus/core/types/plugins/index.js";
 import { Skill } from "@phus/core/types/skill.js";
-import { enqueuePendingCliCommand } from "@/infra/plugins/cli-queue.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { enqueuePendingCliCommand } from "./cli-queue.js";
+import { loadConfig } from "../config/index.js";
 
 export function loadPlugins(
   hooks: HookRegistry,
@@ -58,7 +58,7 @@ export function loadPlugins(
         registerChannel: (c) => channels.push(c),
         registerInternalCommand: (cmd) => {
           // Lazy import to avoid circular dep
-          import("@/runtime/internal-commands/index.js").then((m) => m.register(cmd));
+          import("../../runtime/internal-commands/index.js").then((m) => m.register(cmd));
         },
         registerCliCommand: (fn) => {
           // Lazy: collect into a queue; phus.ts drains it at startup

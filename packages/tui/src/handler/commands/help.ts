@@ -3,9 +3,9 @@
 // renderer. Each entry maps a slash name to the human-readable section
 // it appears under in /help.
 
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import type { CommandDispatch } from "@/handler/commands/context.js";
-import { notify } from "@/handler/commands/notice.js";
+import type { CommandRegistry } from "./context.js";
+import type { CommandDispatch } from "./context.js";
+import { notify } from "./notice.js";
 
 export type CommandGroup = "runtime" | "memory" | "skills" | "exec" | "safety" | "control";
 

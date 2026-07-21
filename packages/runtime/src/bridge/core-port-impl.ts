@@ -10,8 +10,8 @@ import {
 } from "@mariozechner/pi-agent-core";
 import { completeSimple, type Model } from "@mariozechner/pi-ai";
 
-import { getLlmFuse } from "@/infra/profile.js";
-import { extractText } from "@/bridge/text.js";
+import { getLlmFuse } from "../infra/profile.js";
+import { extractText } from "./text.js";
 import type {
 	CoreAgentEvent,
 	CoreAgentLike,

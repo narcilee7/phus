@@ -1,7 +1,7 @@
 // src/tui/events.ts
 // Map PhusAgent events to AppState transitions.
 
-import type { AppAction } from "@/state/state.js";
+import type { AppAction } from "../state/state.js";
 
 /** Convert a Pi Agent event into a state action (or null to ignore).
  *

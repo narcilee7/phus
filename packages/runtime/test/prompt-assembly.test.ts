@@ -6,8 +6,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import { buildContextBlock } from "@/bridge/prompt-assembly";
-import { MemoryStore } from "@/infra/memory/store";
+import { buildContextBlock } from "../src/bridge/prompt-assembly.js";
+import { MemoryStore } from "../src/infra/memory/store.js";
 import type { TapeLike, SkillRegistryLike } from "@phus/core/types/hooks.js";
 
 function makeTape(): TapeLike {

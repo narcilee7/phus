@@ -4,7 +4,7 @@
 // the chat area shows what happened.
 
 import type { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
-import type { AppAction, PlanState, SystemLevel } from "@/state/state.js";
+import type { AppAction, PlanState, SystemLevel } from "../state/state.js";
 
 const ID_PREVIEW_CHARS = 8;
 const STEP_ID_PREVIEW_CHARS = 6;

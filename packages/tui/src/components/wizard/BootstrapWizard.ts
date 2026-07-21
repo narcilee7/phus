@@ -11,10 +11,10 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import yaml from "yaml";
-import type { Component, Focusable } from "@/vendor/pi-tui/tui.js";
-import { matchesKey, Key } from "@/vendor/pi-tui/keys.js";
-import { box } from "@/runtime/border.js";
-import { colorize, padRight, wrapTextWithAnsi, extractPasteContent } from "@/runtime/text-utils.js";
+import type { Component, Focusable } from "../../vendor/pi-tui/tui.js";
+import { matchesKey, Key } from "../../vendor/pi-tui/keys.js";
+import { box } from "../../runtime/border.js";
+import { colorize, padRight, wrapTextWithAnsi, extractPasteContent } from "../../runtime/text-utils.js";
 import { configPath, resetConfigCache } from "@phus/runtime/infra/config/index.js";
 
 type Step = "welcome" | "provider" | "model" | "keyMode" | "apiKey" | "profile" | "confirm" | "done" | "error";

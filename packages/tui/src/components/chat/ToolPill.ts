@@ -1,7 +1,7 @@
 // src/tui/components/chat/ToolPill.ts
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import { colorize, padRight } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import { colorize, padRight } from "../../runtime/text-utils.js";
 
 export type ToolStatus = "running" | "success" | "error";
 

@@ -2,8 +2,8 @@ import { asSessionId } from "@phus/core/types/brand.js";
 import { type PlanPhase, type SubAgentOptions } from "../plan/types";
 import { SubAgentAgentLike } from "./types";
 import { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import { extractText } from "@/bridge/text.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { extractText } from "../../../bridge/text.js";
+import { loadConfig } from "../../../infra/config/index.js";
 
 export class SubAgentTimeoutError extends Error {
   override readonly name = "SubAgentTimeoutError";

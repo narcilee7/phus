@@ -3,7 +3,7 @@
 // implements this so PhusAgent can talk to them uniformly.
 
 import type { Envelope, Outbound } from "@phus/core/types/channel/index.js";
-import type { PhusAgent } from "@/bridge/pi-agent.js";
+import type { PhusAgent } from "../bridge/pi-agent.js";
 
 /** Snapshot returned by {@link ChannelAdapter.status} for diagnostics. */
 export interface ChannelStatus {

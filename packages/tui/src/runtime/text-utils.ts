@@ -11,7 +11,7 @@ import {
 	wrapTextWithAnsi as _wrapTextWithAnsi,
 	truncateToWidth as _truncateToWidth,
 	sliceByColumn as _sliceByColumn,
-} from "@/vendor/pi-tui/utils.js";
+} from "../vendor/pi-tui/utils.js";
 
 export const visibleWidth = _visibleWidth;
 export const wrapTextWithAnsi = _wrapTextWithAnsi;

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
-import { Executor } from "@/core/runtime/executor/index";
-import { ReplanNeededError } from "@/core/runtime/executor/error";
-import { Verifier } from "@/core/runtime/verifier/index";
-import type { Plan, Step } from "@/core/runtime/plan/types";
+import { Executor } from "../src/core/runtime/executor/index.js";
+import { ReplanNeededError } from "../src/core/runtime/executor/error.js";
+import { Verifier } from "../src/core/runtime/verifier/index.js";
+import type { Plan, Step } from "../src/core/runtime/plan/types.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 
 function makePlan(): Plan {

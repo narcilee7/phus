@@ -2,11 +2,11 @@
 // Telegram channel — polling bot with optional user/chat allow-lists.
 
 import { Telegraf } from "telegraf";
-import type { ChannelAdapter, ChannelStatus } from "@/channels/base.js";
-import { makeEnvelopeFromChat } from "@/channels/base.js";
+import type { ChannelAdapter, ChannelStatus } from "./base.js";
+import { makeEnvelopeFromChat } from "./base.js";
 import type { Outbound } from "@phus/core/types/channel/index.js";
-import type { PhusAgent } from "@/bridge/pi-agent.js";
-import { logger } from "@/infra/logging.js";
+import type { PhusAgent } from "../bridge/pi-agent.js";
+import { logger } from "../infra/logging.js";
 
 export interface TelegramChannelConfig {
   /** Bot token. Falls back to TELEGRAM_TOKEN env var. */

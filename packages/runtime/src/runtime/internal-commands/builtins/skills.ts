@@ -24,7 +24,7 @@ export function defineSkillCommands(
       name: "skill-review",
       description: "list skill drafts awaiting human approval (B.4.4)",
       handler: async () => {
-        const { DraftsStore } = await import("@/infra/drafts.js");
+        const { DraftsStore } = await import("../../../infra/drafts.js");
         const drafts = new DraftsStore();
         const list = await drafts.list();
         if (list.length === 0) return "(no drafts)";
@@ -38,7 +38,7 @@ export function defineSkillCommands(
       handler: async ({ args }) => {
         const name = args.name;
         if (!name) return "usage: ,skill-review.approve name=<draft-name>";
-        const { DraftsStore } = await import("@/infra/drafts.js");
+        const { DraftsStore } = await import("../../../infra/drafts.js");
         const drafts = new DraftsStore();
         try {
           const path = await drafts.approve(name);
@@ -55,7 +55,7 @@ export function defineSkillCommands(
       handler: async ({ args }) => {
         const name = args.name;
         if (!name) return "usage: ,skill-review.reject name=<draft-name>";
-        const { DraftsStore } = await import("@/infra/drafts.js");
+        const { DraftsStore } = await import("../../../infra/drafts.js");
         const drafts = new DraftsStore();
         const ok = await drafts.reject(name);
         return ok ? `✗ rejected "${name}"` : `not found: ${name}`;

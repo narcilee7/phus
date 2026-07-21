@@ -2,9 +2,9 @@
 // Tape-backed checkpoints and undo. /checkpoint list|create|restore <n>
 // manages named snapshots; /undo restores the most recent one.
 
-import { CHECKPOINT_PREVIEW } from "@/constants.js";
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import { errorMessage, notify } from "@/handler/commands/notice.js";
+import { CHECKPOINT_PREVIEW } from "../../constants.js";
+import type { CommandRegistry } from "./context.js";
+import { errorMessage, notify } from "./notice.js";
 
 export function registerCheckpoint(): CommandRegistry {
   return {

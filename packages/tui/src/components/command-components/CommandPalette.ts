@@ -6,10 +6,10 @@
 // Kept deliberately small: filtering is prefix-based (SelectList
 // semantics), the palette owns no state beyond the filter string.
 
-import type { Component, Focusable } from "@/vendor/pi-tui/tui.js";
-import { SelectList, type SelectListTheme } from "@/vendor/pi-tui/components/select-list.js";
-import type { SlashCommand } from "@/handler/commands/help.js";
-import { colorize } from "@/runtime/text-utils.js";
+import type { Component, Focusable } from "../../vendor/pi-tui/tui.js";
+import { SelectList, type SelectListTheme } from "../../vendor/pi-tui/components/select-list.js";
+import type { SlashCommand } from "../../handler/commands/help.js";
+import { colorize } from "../../runtime/text-utils.js";
 
 const THEME: SelectListTheme = {
 	selectedPrefix: (s) => colorize(s, "cyan"),

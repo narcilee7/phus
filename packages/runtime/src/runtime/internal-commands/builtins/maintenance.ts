@@ -5,7 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { InternalCommand, InternalCommandServices } from "../types";
-import { healthCheck } from "@/commands/health";
+import { healthCheck } from "../../../commands/health.js";
 
 export function defineMaintenanceCommands(
   services: InternalCommandServices,

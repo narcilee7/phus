@@ -9,20 +9,20 @@ import type {
   CommandContext,
   CommandHandler,
   CommandRegistry,
-} from "@/handler/commands/context.js";
-import type { AppAction, AppState } from "@/state/state.js";
+} from "./context.js";
+import type { AppAction, AppState } from "../../state/state.js";
 import type { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import { loadConfig } from "@phus/runtime/infra/config/index.js";
-import { registerRuntime } from "@/handler/commands/runtime.js";
-import { registerSession } from "@/handler/commands/session.js";
-import { registerSkills } from "@/handler/commands/skills.js";
-import { registerExec } from "@/handler/commands/exec.js";
-import { registerSafety } from "@/handler/commands/safety.js";
-import { registerCheckpoint } from "@/handler/commands/checkpoint.js";
-import { registerPlan } from "@/handler/commands/plan.js";
-import { registerSubagent } from "@/handler/commands/subagent.js";
-import { registerHelp, HELP_TEXT, SLASH_COMMANDS } from "@/handler/commands/help.js";
-import { notify } from "@/handler/commands/notice.js";
+import { registerRuntime } from "./runtime.js";
+import { registerSession } from "./session.js";
+import { registerSkills } from "./skills.js";
+import { registerExec } from "./exec.js";
+import { registerSafety } from "./safety.js";
+import { registerCheckpoint } from "./checkpoint.js";
+import { registerPlan } from "./plan.js";
+import { registerSubagent } from "./subagent.js";
+import { registerHelp, HELP_TEXT, SLASH_COMMANDS } from "./help.js";
+import { notify } from "./notice.js";
 
 export type SlashResult = "quit" | "clear" | void;
 export { HELP_TEXT, SLASH_COMMANDS };

@@ -1,25 +1,15 @@
 {
-	"compilerOptions": {
-		"target": "ES2024",
-		"module": "ESNext",
-		"moduleResolution": "bundler",
-		"lib": ["ES2024", "DOM"],
-		"types": ["node"],
-		"outDir": "dist",
-		"rootDir": "src",
-		"strict": true,
-		"esModuleInterop": true,
-		"skipLibCheck": true,
-		"resolveJsonModule": true,
-		"declaration": true,
-		"sourceMap": true,
-		"allowImportingTsExtensions": false,
-		"noUncheckedIndexedAccess": true,
-		"verbatimModuleSyntax": false,
-		"paths": {
-			"@/*": ["./src/*"]
-		}
-	},
-	"include": ["src/**/*"],
-	"exclude": ["node_modules", "dist", "test"]
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ES2024", "DOM"],
+    "types": ["node"],
+    "tsBuildInfoFile": "./.tsbuildinfo"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", ".tsbuildinfo"],
+  "references": [
+    { "path": "../runtime" }
+  ]
 }

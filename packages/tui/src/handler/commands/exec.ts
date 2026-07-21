@@ -5,9 +5,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile } from "node:fs/promises";
-import { BASH_TIMEOUT_MS } from "@/constants.js";
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import { errorMessage, notify } from "@/handler/commands/notice.js";
+import { BASH_TIMEOUT_MS } from "../../constants.js";
+import type { CommandRegistry } from "./context.js";
+import { errorMessage, notify } from "./notice.js";
 
 const execFileP = promisify(execFile);
 

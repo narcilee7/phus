@@ -7,7 +7,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { Command } from "commander";
 import { execSync } from "node:child_process";
-import { logger } from "@/infra/logging.js";
+import { logger } from "../infra/logging.js";
 
 export interface ServicePaths {
   /** Directory the unit/plist file lives in. */

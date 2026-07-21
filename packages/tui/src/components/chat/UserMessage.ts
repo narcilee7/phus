@@ -1,7 +1,7 @@
 // src/tui/components/chat/UserMessage.ts
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import { colorize, wrapTextWithAnsi } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import { colorize, wrapTextWithAnsi } from "../../runtime/text-utils.js";
 
 export class UserMessage implements Component {
 	constructor(private readonly text: string) {}

@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { MemoryStore, inferCategory } from "@/infra/memory/store";
+import { MemoryStore, inferCategory } from "../src/infra/memory/store.js";
 import type { TapeEntry } from "@phus/core/types/tape.js";
 import type { TapeLike } from "@phus/core/types/hooks.js";
 
@@ -160,7 +160,7 @@ describe("MemoryStore.compact", () => {
 describe("memory_write tape provenance", () => {
     it("passes category + authority into the tape entry", async () => {
         // Reuse the meta tool factory; verify the tape payload.
-        const { defineMemoryMetaTools, parseMemoryAction } = await import("@/infra/meta/memory-tools.js");
+        const { defineMemoryMetaTools, parseMemoryAction } = await import("../src/infra/meta/memory-tools.js");
         expect(parseMemoryAction).toBeDefined();
 
         const store = new MemoryStore(filePath);
@@ -199,7 +199,7 @@ describe("memory_write tape provenance", () => {
     });
 
     it("parseMemoryAction rejects unknown category", async () => {
-        const { parseMemoryAction } = await import("@/infra/meta/memory-tools.js");
+        const { parseMemoryAction } = await import("../src/infra/meta/memory-tools.js");
         expect(() =>
             parseMemoryAction({
                 kind: "append",

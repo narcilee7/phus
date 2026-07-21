@@ -2,8 +2,8 @@
 // Safety and health introspection — policy rules, health check, hard
 // abort of an in-flight turn.
 
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import { notify } from "@/handler/commands/notice.js";
+import type { CommandRegistry } from "./context.js";
+import { notify } from "./notice.js";
 
 export function registerSafety(): CommandRegistry {
   return {

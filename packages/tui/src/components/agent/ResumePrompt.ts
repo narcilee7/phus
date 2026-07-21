@@ -5,10 +5,10 @@
 // choice — resume / abandon / dismiss — instead of silently
 // resurrecting them on the next message (the old implicit-resume bug).
 
-import type { Component, Focusable } from "@/vendor/pi-tui/tui.js";
-import { SelectList, type SelectListTheme } from "@/vendor/pi-tui/components/select-list.js";
+import type { Component, Focusable } from "../../vendor/pi-tui/tui.js";
+import { SelectList, type SelectListTheme } from "../../vendor/pi-tui/components/select-list.js";
 import type { Plan } from "@phus/runtime/core/runtime/plan/types.js";
-import { colorize } from "@/runtime/text-utils.js";
+import { colorize } from "../../runtime/text-utils.js";
 
 const THEME: SelectListTheme = {
 	selectedPrefix: (s) => colorize(s, "cyan"),

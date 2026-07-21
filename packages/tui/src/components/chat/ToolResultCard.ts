@@ -7,13 +7,13 @@
 // M2: passive rendering. M3 will add focus + Enter to toggle expand
 // and a/r/e actions for file_write.
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import type { ChatItem } from "@/state/state.js";
-import { colorize, padRight, wrapTextWithAnsi } from "@/runtime/text-utils.js";
-import { ToolPill } from "@/components/chat/ToolPill.js";
-import { DiffView } from "@/components/chat/DiffView.js";
-import { renderMarkdown } from "@/components/chat/Markdown.js";
-import { formatToolResult, previewToolResult } from "@/components/tool-components/format-result.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import type { ChatItem } from "../../state/state.js";
+import { colorize, padRight, wrapTextWithAnsi } from "../../runtime/text-utils.js";
+import { ToolPill } from "./ToolPill.js";
+import { DiffView } from "./DiffView.js";
+import { renderMarkdown } from "./Markdown.js";
+import { formatToolResult, previewToolResult } from "../tool-components/format-result.js";
 
 export interface FileSnapshot {
 	path: string;

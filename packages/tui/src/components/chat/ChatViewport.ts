@@ -6,12 +6,12 @@
 // The viewport renders chat content ONLY — the busy/rolling-stone
 // indicator lives in TodoPill (one busy surface, no duplicates).
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import type { ChatItem, AppState } from "@/state/state.js";
-import { ChatItemView } from "@/components/chat/ChatItemView.js";
-import type { FileSnapshot } from "@/components/chat/ToolResultCard.js";
-import { bottomAnchoredSlice } from "@/runtime/scroll.js";
-import { colorize, padRight, sliceByColumn, visibleWidth } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import type { ChatItem, AppState } from "../../state/state.js";
+import { ChatItemView } from "./ChatItemView.js";
+import type { FileSnapshot } from "./ToolResultCard.js";
+import { bottomAnchoredSlice } from "../../runtime/scroll.js";
+import { colorize, padRight, sliceByColumn, visibleWidth } from "../../runtime/text-utils.js";
 
 export interface ChatViewportDeps {
 	readonly items: ChatItem[];

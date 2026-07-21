@@ -1,8 +1,8 @@
 // src/tui/components/base/StatusBar.ts
 // Bottom status line: model, skills, tape entries, shortcut hints.
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import { colorize, padRight } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import { colorize, padRight } from "../../runtime/text-utils.js";
 
 const DEFAULT_HINT = "Ctrl+C quit · Ctrl+L clear · PgUp/PgDn scroll";
 

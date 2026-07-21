@@ -6,9 +6,9 @@ import * as readline from "node:readline";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "yaml";
-import type { ResolvedConfig } from "@/infra/config/index.js";
-import { resetConfigCache } from "@/infra/config/index.js";
-import { logger } from "@/infra/logging.js";
+import type { ResolvedConfig } from "../config/index.js";
+import { resetConfigCache } from "../config/index.js";
+import { logger } from "../logging.js";
 
 export type LoadedConfig = ResolvedConfig;
 
@@ -118,7 +118,7 @@ export async function runSetupWizard(_deps: WizardDeps): Promise<void> {
 
 async function pingModel(provider: string, modelId: string, apiKeyEnv: string): Promise<boolean> {
   try {
-    const { resolveAndCache } = await import("@/infra/config/index.js");
+    const { resolveAndCache } = await import("../config/index.js");
     resolveAndCache({ provider, modelId });
     if (apiKeyEnv && !process.env[apiKeyEnv]) {
       logger.warn("setup.wizard.key_missing", { env: apiKeyEnv });

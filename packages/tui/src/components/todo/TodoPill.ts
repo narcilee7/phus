@@ -4,11 +4,11 @@
 // the running-tool pill or a rotating push verb. Idle → zero rows so
 // the frame budget stays exact.
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import type { ChatItem } from "@/state/state.js";
-import { colorize, padRight } from "@/runtime/text-utils.js";
-import { ToolPill } from "@/components/chat/ToolPill.js";
-import type { SisyphusAnimator } from "@/runtime/sisyphus.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import type { ChatItem } from "../../state/state.js";
+import { colorize, padRight } from "../../runtime/text-utils.js";
+import { ToolPill } from "../chat/ToolPill.js";
+import type { SisyphusAnimator } from "../../runtime/sisyphus.js";
 
 export class TodoPill implements Component {
 	constructor(

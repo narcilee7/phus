@@ -4,9 +4,9 @@
 // Esc / q closes. Mounted like the command palette (above the input
 // box, owns focus while open).
 
-import type { Component, Focusable } from "@/vendor/pi-tui/tui.js";
-import { SelectList, type SelectListTheme } from "@/vendor/pi-tui/components/select-list.js";
-import { colorize } from "@/runtime/text-utils.js";
+import type { Component, Focusable } from "../../vendor/pi-tui/tui.js";
+import { SelectList, type SelectListTheme } from "../../vendor/pi-tui/components/select-list.js";
+import { colorize } from "../../runtime/text-utils.js";
 
 const THEME: SelectListTheme = {
 	selectedPrefix: (s) => colorize(s, "cyan"),

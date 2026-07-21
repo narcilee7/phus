@@ -5,11 +5,11 @@
 // channels. De-duplicates by channel name; CLI flags override YAML, and
 // plugins override neither.
 
-import type { ChannelAdapter, ChannelStatus } from "@/channels/base.js";
-import type { ChannelConfig } from "@/infra/config/schema.js";
+import type { ChannelAdapter, ChannelStatus } from "../channels/base.js";
+import type { ChannelConfig } from "../infra/config/schema.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
-import type { PhusAgent } from "@/bridge/pi-agent.js";
-import { logger } from "@/infra/logging.js";
+import type { PhusAgent } from "../bridge/pi-agent.js";
+import { logger } from "../infra/logging.js";
 import { HookContext } from "@phus/core/types/index.js";
 
 export interface ChannelOpts {
@@ -25,7 +25,7 @@ export interface ChannelOpts {
 export async function buildChannelFromConfig(cfg: ChannelConfig): Promise<ChannelAdapter | undefined> {
   switch (cfg.type) {
     case "websocket": {
-      const { WebSocketChannel } = await import("@/channels/websocket.js");
+      const { WebSocketChannel } = await import("../channels/websocket.js");
       return new WebSocketChannel({
         port: cfg.port ?? 3001,
         host: cfg.host,
@@ -33,7 +33,7 @@ export async function buildChannelFromConfig(cfg: ChannelConfig): Promise<Channe
       });
     }
     case "sse": {
-      const { SSEChannel } = await import("@/channels/sse.js");
+      const { SSEChannel } = await import("../channels/sse.js");
       return new SSEChannel({
         port: cfg.port ?? 3002,
         host: cfg.host,
@@ -41,7 +41,7 @@ export async function buildChannelFromConfig(cfg: ChannelConfig): Promise<Channe
       });
     }
     case "telegram": {
-      const { TelegramChannel } = await import("@/channels/telegram.js");
+      const { TelegramChannel } = await import("../channels/telegram.js");
       return new TelegramChannel({
         token: cfg.token,
         allowedUsers: cfg.allowedUsers,
@@ -49,7 +49,7 @@ export async function buildChannelFromConfig(cfg: ChannelConfig): Promise<Channe
       });
     }
     case "slack": {
-      const { SlackChannel } = await import("@/channels/slack.js");
+      const { SlackChannel } = await import("../channels/slack.js");
       return new SlackChannel({
         botToken: cfg.botToken,
         appToken: cfg.appToken,
@@ -57,7 +57,7 @@ export async function buildChannelFromConfig(cfg: ChannelConfig): Promise<Channe
       });
     }
     case "email": {
-      const { EmailChannel } = await import("@/channels/email.js");
+      const { EmailChannel } = await import("../channels/email.js");
       return new EmailChannel({
         host: cfg.host,
         user: cfg.user,
@@ -72,7 +72,7 @@ export async function buildChannelFromConfig(cfg: ChannelConfig): Promise<Channe
       });
     }
     case "whatsapp": {
-      const { WhatsAppChannel } = await import("@/channels/whatsapp.js");
+      const { WhatsAppChannel } = await import("../channels/whatsapp.js");
       return new WhatsAppChannel();
     }
     default:
@@ -91,7 +91,7 @@ export async function collectChannels(
 
   // CLI flags (highest priority)
   if (opts.telegram) {
-    const { TelegramChannel } = await import("@/channels/telegram.js");
+    const { TelegramChannel } = await import("../channels/telegram.js");
     const token = process.env.TELEGRAM_TOKEN;
     if (!token) {
       console.error("[phus] TELEGRAM_TOKEN not set");
@@ -101,17 +101,17 @@ export async function collectChannels(
     fromCli.add("telegram");
   }
   if (opts.websocket) {
-    const { WebSocketChannel } = await import("@/channels/websocket.js");
+    const { WebSocketChannel } = await import("../channels/websocket.js");
     channels.push(new WebSocketChannel({ port: parseInt(opts.websocket, 10) }));
     fromCli.add("websocket");
   }
   if (opts.sse) {
-    const { SSEChannel } = await import("@/channels/sse.js");
+    const { SSEChannel } = await import("../channels/sse.js");
     channels.push(new SSEChannel({ port: parseInt(opts.sse, 10) }));
     fromCli.add("sse");
   }
   if (opts.slack) {
-    const { SlackChannel } = await import("@/channels/slack.js");
+    const { SlackChannel } = await import("../channels/slack.js");
     const botToken = process.env.SLACK_BOT_TOKEN;
     const appToken = process.env.SLACK_APP_TOKEN;
     if (!botToken || !appToken) {
@@ -122,7 +122,7 @@ export async function collectChannels(
     fromCli.add("slack");
   }
   if (opts.email) {
-    const { EmailChannel } = await import("@/channels/email.js");
+    const { EmailChannel } = await import("../channels/email.js");
     if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
       console.error("[phus] EMAIL_HOST, EMAIL_USER and EMAIL_PASSWORD must be set");
       process.exit(1);
@@ -131,7 +131,7 @@ export async function collectChannels(
     fromCli.add("email");
   }
   if (opts.whatsapp) {
-    const { WhatsAppChannel } = await import("@/channels/whatsapp.js");
+    const { WhatsAppChannel } = await import("../channels/whatsapp.js");
     channels.push(new WhatsAppChannel());
     fromCli.add("whatsapp");
   }

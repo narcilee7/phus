@@ -15,7 +15,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { logger } from "@/infra/logging.js";
+import { logger } from "../logging.js";
 
 /** Maximum bytes we load into the system prompt before truncating. */
 export const MEMORY_PROMPT_BUDGET_BYTES = 8 * 1024;

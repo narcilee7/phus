@@ -2,8 +2,8 @@
 // Tiny helpers shared by every command file: error formatting and the
 // system-message shortcut. Keeps the cluster code visually clean.
 
-import type { CommandDispatch } from "@/handler/commands/context.js";
-import type { SystemLevel } from "@/state/state.js";
+import type { CommandDispatch } from "./context.js";
+import type { SystemLevel } from "../../state/state.js";
 
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
