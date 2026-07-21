@@ -34,7 +34,6 @@
     "@mariozechner/pi-agent-core": "^0.73.1",
     "@mariozechner/pi-ai": "^0.73.1",
     "@mariozechner/pi-coding-agent": "^0.73.1",
-    "@phus/tui": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "@slack/bolt": "^4.2.1",
     "better-sqlite3": "^12.11.1",

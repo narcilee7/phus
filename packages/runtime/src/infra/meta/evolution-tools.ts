@@ -1,8 +1,8 @@
 import { Type } from "@mariozechner/pi-ai";
 import type { MetaTool } from "@phus/runtime/types/tool.js";
 import { asSessionId } from "@phus/core/types/brand.js";
-import { Learner } from "@phus/core/runtime/evolution/learner.js";
-import { EvolutionEngine } from "@phus/core/runtime/evolution/engine.js";
+import { Learner } from "@phus/runtime/core/runtime/evolution/learner.js";
+import { EvolutionEngine } from "@phus/runtime/core/runtime/evolution/engine.js";
 import type { SkillRegistry } from "../skills/registry.js";
 
 export function defineEvolutionMetaTools(deps: {

@@ -33,6 +33,7 @@
 		"node": ">=20.0.0"
 	},
 	"dependencies": {
+		"@phus/core": "workspace:*",
 		"@phus/runtime": "workspace:*",
 		"@phus/tui": "workspace:*",
 		"commander": "^14.0.3"

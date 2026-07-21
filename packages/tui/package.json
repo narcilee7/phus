@@ -19,11 +19,11 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsdown && tsc --emitDeclarationOnly --declaration --outDir dist",
+		"build": "rm -rf .tsbuildinfo dist && tsdown && tsc --emitDeclarationOnly --declaration --outDir dist",
 		"build:js": "tsdown",
 		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
 		"dev": "tsx src/index.ts",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc -b ../../tsconfig.json --noEmit",
 		"lint": "oxlint --quiet src test",
 		"test": "vitest run",
 		"smoke": "tsx ../../scripts/smoke-pi-tui.ts"
@@ -31,6 +31,7 @@
 	"dependencies": {
 		"@mariozechner/pi-agent-core": "^0.73.1",
 		"@mariozechner/pi-ai": "^0.73.1",
+		"@phus/core": "workspace:*",
 		"@phus/runtime": "workspace:*",
 		"diff": "^9.0.0",
 		"fuse.js": "^7.5.0",

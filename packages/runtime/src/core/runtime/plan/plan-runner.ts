@@ -124,8 +124,8 @@ export class PlanRunner {
       step.error = undefined;
 
       const deps = step.dependsOn ?? [];
-      const depFailed = deps.some((id) => failed.has(id));
-      const depMissing = deps.some((id) => !completed.has(id));
+      const depFailed = deps.some((id: string) => failed.has(id));
+      const depMissing = deps.some((id: string) => !completed.has(id));
 
       if (depFailed || depMissing) {
         step.status = "skipped";

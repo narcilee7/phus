@@ -1,5 +1,5 @@
 import { type Plan, type PlanPhase, type Step, type VerificationResult } from "../plan/types.js";
-import { SubAgent } from "../subagent.js";
+import { SubAgent } from "../subagent/index.js";
 import { ReplanNeededError } from "./error";
 import { ExecutorDeps } from "./types";
 

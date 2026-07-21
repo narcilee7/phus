@@ -34,9 +34,6 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "peerDependencies": {
-    "@phus/runtime": "workspace:*"
-  },
   "devDependencies": {},
   "dependencies": {
     "commander": "^14.0.3",

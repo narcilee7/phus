@@ -17,14 +17,14 @@ import {
 } from "@mariozechner/pi-agent-core";
 import { streamSimple, type Model } from "@mariozechner/pi-ai";
 import type { Envelope, Outbound } from "@phus/core/types/channel/index.js";
-import { Planner } from '@phus/core/runtime/plan/planner.js';
+import { Planner } from '@phus/runtime/core/runtime/plan/planner.js';
 import type { Plan, PlanStatus, Step, StepStatus } from "../core/runtime/plan/types.js";
 import { PlanStore } from "@phus/core/session/plan-store.js";
 import { createDefaultCorePort } from "./core-port-impl.js";
 import type { CorePort } from "./core-port.js";
-import { Learner } from "@phus/core/runtime/evolution/learner.js";
+import { Learner } from "@phus/runtime/core/runtime/evolution/learner.js";
 import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
-import { EvolutionEngine } from "@phus/core/runtime/evolution/engine.js";
+import { EvolutionEngine } from "@phus/runtime/core/runtime/evolution/engine.js";
 import type { Turn } from "@phus/core/types/tape/index.js";
 import type { MetaTool } from "@phus/runtime/types/tool.js";
 import type { SessionId } from "@phus/core/types/brand.js";
@@ -58,11 +58,11 @@ import { buildContextBlock } from "./prompt-assembly.js";
 import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
 import { MemoryStore, AutonomyGate } from "../infra/memory/index.js";
 import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
-import { Executor } from "@phus/core/runtime/executor.js";
-import { PlanRunner } from "@phus/core/runtime/plan/plan-runner.js";
+import { Executor } from "@phus/runtime/core/runtime/executor/index.js";
+import { PlanRunner } from "@phus/runtime/core/runtime/plan/plan-runner.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import { HookContext } from "@phus/core/types/index.js";
-import { Verifier } from "@phus/core/runtime/verifier.js";
+import { Verifier } from "@phus/runtime/core/runtime/verifier/index.js";
 
 export interface PhusAgentDeps {
   /** Logger used for all diagnostic and error events. */
@@ -257,7 +257,7 @@ export interface PhusAgentFacade {
   /** Suggest startup.sh content based on recent tape. */
   suggestStartup(): Promise<string>;
   /** Reflect on a session and return a structured reflection. */
-  reflect(sessionId: SessionId, task: string): Promise<import("@phus/core/runtime/evolution/types.js").Reflection>;
+  reflect(sessionId: SessionId, task: string): Promise<import("@phus/runtime/core/runtime/evolution/types.js").Reflection>;
   /** Number of entries currently in tape. */
   getTapeTotalEntries(): number;
   /** Number of sessions currently in tape. */
@@ -1389,7 +1389,7 @@ export class PhusAgent implements PhusAgentFacade {
     return advisor.suggestStartup(this.tape);
   }
 
-  async reflect(sessionId: SessionId, task: string): Promise<import("@phus/core/runtime/evolution/types.js").Reflection> {
+  async reflect(sessionId: SessionId, task: string): Promise<import("@phus/runtime/core/runtime/evolution/types.js").Reflection> {
     return this.learner.reflect(sessionId, task);
   }
 
