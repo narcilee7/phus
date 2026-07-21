@@ -51,7 +51,8 @@
     "telegraf": "^4.16.3",
     "ws": "^8.21.1",
     "yaml": "^2.9.0",
-    "@phus/core": "workspace:*"
+    "@phus/core": "workspace:*",
+    "@phus/shared": "workspace:*"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -1,0 +1,38 @@
+{
+  "name": "@phus/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phus shared: common TypeScript types and utilities — Brand, Result, Envelope/Outbound protocol shapes, json/promise/path/env helpers. Pure library, no runtime business logic. See documents/Proposal-Monorepo-Split.md §3.",
+  "license": "ISC",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./types/*": "./dist/types/*",
+    "./protocol/*": "./dist/protocol/*",
+    "./utils/*": "./dist/utils/*"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:js": "tsc",
+    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "typecheck": "tsc -b ../../tsconfig.json --noEmit",
+    "lint": "oxlint --quiet src test",
+    "test": "vitest run --passWithNoTests"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1"
+  }
+}

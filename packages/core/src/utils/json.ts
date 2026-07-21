@@ -1,6 +1,2 @@
-export const stripJson = (text: string): string => {
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (fenced && fenced[1]) return fenced[1].trim();
-    return text.trim();
-}
-
+// Re-export from @phus/shared. Local copy kept for backward-compat.
+export * from "@phus/shared/utils/json.js";

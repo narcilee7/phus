@@ -1,3 +1,2 @@
-export const sleep = (ms: number): Promise<void> => {
-  return new Promise((r) => setTimeout(r, ms))
-}
+// Re-export from @phus/shared. Local copy kept for backward-compat.
+export * from "@phus/shared/utils/promise.js";

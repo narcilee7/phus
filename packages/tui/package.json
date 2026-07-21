@@ -33,6 +33,7 @@
 		"@mariozechner/pi-ai": "^0.73.1",
 		"@phus/core": "workspace:*",
 		"@phus/runtime": "workspace:*",
+		"@phus/shared": "workspace:*",
 		"diff": "^9.0.0",
 		"fuse.js": "^7.5.0",
 		"get-east-asian-width": "1.6.0",
