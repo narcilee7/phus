@@ -65,6 +65,9 @@ importers:
       '@phus/shared':
         specifier: workspace:*
         version: link:../shared
+      better-sqlite3:
+        specifier: ^12.11.1
+        version: 12.11.1
       commander:
         specifier: ^14.0.3
         version: 14.0.3

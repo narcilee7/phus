@@ -22,9 +22,10 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
-    "build:js": "tsc",
-    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false",
+    "build:js": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false",
+    "build:types": "rm -rf .tsbuildinfo dist && tsc --emitDeclarationOnly --declaration --declarationMap false --sourceMap false",
+    "build:full": "rm -rf .tsbuildinfo dist && tsc",
     "typecheck": "tsc -b ../../tsconfig.json --noEmit",
     "lint": "oxlint --quiet src test",
     "test": "vitest run --passWithNoTests"

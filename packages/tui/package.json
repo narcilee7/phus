@@ -5,13 +5,13 @@
 	"description": "Phus terminal UI: pi-tui based chat interface (vendored @mariozechner/pi-tui primitives, no React, no ink).",
 	"license": "ISC",
 	"type": "module",
-	"main": "./dist/index.mjs",
+	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
-			"import": "./dist/index.mjs",
-			"default": "./dist/index.mjs"
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
 		}
 	},
 	"files": [
@@ -19,9 +19,10 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "rm -rf .tsbuildinfo dist && tsdown && tsc --emitDeclarationOnly --declaration --outDir dist",
-		"build:js": "tsdown",
-		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+		"build": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false && node ../../scripts/fix-extensions.mjs dist",
+		"build:js": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false && node ../../scripts/fix-extensions.mjs dist",
+		"build:types": "rm -rf .tsbuildinfo && tsc --emitDeclarationOnly --declaration --declarationMap false --sourceMap false",
+		"build:full": "rm -rf .tsbuildinfo dist && tsc && node ../../scripts/fix-extensions.mjs dist",
 		"dev": "tsx src/index.ts",
 		"typecheck": "tsc -b ../../tsconfig.json --noEmit",
 		"lint": "oxlint --quiet src test",

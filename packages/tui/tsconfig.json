@@ -10,6 +10,7 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test", ".tsbuildinfo"],
   "references": [
-    { "path": "../runtime" }
+    { "path": "../runtime" },
+    { "path": "../shared" }
   ]
 }

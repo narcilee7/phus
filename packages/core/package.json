@@ -24,9 +24,10 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc && node ../../scripts/fix-extensions.mjs dist",
-    "build:js": "tsc && node ../../scripts/fix-extensions.mjs dist",
-    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false && node ../../scripts/fix-extensions.mjs dist",
+    "build:js": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false && node ../../scripts/fix-extensions.mjs dist",
+    "build:types": "rm -rf .tsbuildinfo dist && tsc --emitDeclarationOnly --declaration --declarationMap false --sourceMap false",
+    "build:full": "rm -rf .tsbuildinfo dist && tsc && node ../../scripts/fix-extensions.mjs dist",
     "typecheck": "tsc -b ../../tsconfig.json --noEmit",
     "lint": "oxlint --quiet src test",
     "test": "vitest run --passWithNoTests"
@@ -37,6 +38,7 @@
   "devDependencies": {},
   "dependencies": {
     "@phus/shared": "workspace:*",
+    "better-sqlite3": "^12.11.1",
     "commander": "^14.0.3",
     "cron-parser": "^5.6.2"
   }
