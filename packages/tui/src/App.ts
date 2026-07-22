@@ -61,6 +61,9 @@ interface FileSnapshot {
 	content: string;
 }
 
+/** How long to show the plan panel after a terminal status before auto-dismissing. */
+const PLAN_DISMISS_DELAY_MS = 5_000;
+
 export class App extends Container {
 	private replaceChildByRef(old: Component, next: Component): void {
 		const idx = this.children.indexOf(old);
@@ -114,6 +117,8 @@ export class App extends Container {
 	 *  each turn completes, instead of being silently dropped (the old
 	 *  busy guard ate them after the editor had already cleared). */
 	private readonly pendingInputs: string[] = [];
+	/** Timer for auto-dismissing the plan panel after a terminal status. */
+	private planDismissTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 
 	constructor(deps: AppDeps) {
 		super();
@@ -203,6 +208,22 @@ export class App extends Container {
 			this.planRef.current = this.store.getState().plan;
 			const action = planEventToAction(event as never, this.planRef);
 			if (action) this.store.dispatch(action);
+
+			// Auto-dismiss the plan panel after it reaches a terminal
+			// status (completed / failed / cancelled) so it doesn't
+			// stick around permanently.
+			if (
+				event.type === "plan_completed" ||
+				event.type === "plan_cancelled" ||
+				(event.type === "plan_step_failed" && event.planStatus === "failed")
+			) {
+				if (this.planDismissTimer) clearTimeout(this.planDismissTimer);
+				this.planDismissTimer = setTimeout(() => {
+					this.store.dispatch({ type: "clear_plan" });
+					this.planDismissTimer = undefined;
+				}, PLAN_DISMISS_DELAY_MS);
+			}
+
 			this.rebuildDynamicChildren();
 		});
 
@@ -562,6 +583,7 @@ export class App extends Container {
 		this.animator.stop();
 		if (this.statsInterval) clearInterval(this.statsInterval);
 		this.statsInterval = undefined;
+		if (this.planDismissTimer) clearTimeout(this.planDismissTimer);
 	}
 
 	private captureFileSnapshot(event: unknown): void {
