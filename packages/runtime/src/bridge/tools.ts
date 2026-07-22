@@ -40,8 +40,8 @@ function addLineNumbers(text: string, startLine: number): string {
   }).join('\n');
 }
 
-function textResult(text: string) {
-  return { content: [{ type: "text" as const, text }], details: {} };
+function textResult(text: string, details: Record<string, unknown> = {}) {
+  return { content: [{ type: "text" as const, text }], details };
 }
 
 // ─── Tools ──────────────────────────────────────────────────────
@@ -100,7 +100,10 @@ export function createExternalTools(): AgentTool[] {
               } as any),
             { ...DEFAULT_RETRY, maxAttempts: 2, initialDelayMs: 500, maxDelayMs: 2000, jitter: false },
           );
-          return textResult(String(stdout.stdout ?? "") + String(stdout.stderr ?? ""));
+          return textResult(
+            String(stdout.stdout ?? "") + String(stdout.stderr ?? ""),
+            { durationMs: Date.now() - startedAt },
+          );
         } finally {
           if (heartbeat) clearInterval(heartbeat);
         }
