@@ -152,6 +152,38 @@ export interface PlanEvent {
 
 export type PlanEventHandler = (event: PlanEvent) => void;
 
+/** Auto-compact lifecycle event surfaced to TUI observers. Mirrors
+ *  the `PlanEvent` pattern — a discriminated union the TUI maps to
+ *  `add_system` chat items. */
+export interface CompactEvent {
+  type:
+    | "context_near_limit"
+    | "context_compacting"
+    | "context_compacted"
+    | "compact_failed";
+  sessionId?: string;
+  /** Fraction of input budget used (0..1). */
+  ratio?: number;
+  /** Token count that triggered the event (reported or estimated). */
+  tokens?: number;
+  /** Model's input budget = contextWindow - maxOutputTokens. */
+  inputBudget?: number;
+  /** Model's full context window. */
+  contextWindow?: number;
+  /** Number of older turns collapsed by the compact. */
+  summarized?: number;
+  /** Number of recent turns kept after the compact. */
+  kept?: number;
+  /** Anchor name written to the tape. */
+  anchorName?: string;
+  /** Reason text from the decision. */
+  reason?: string;
+  /** Error message (compact_failed only). */
+  error?: string;
+}
+
+export type CompactEventHandler = (event: CompactEvent) => void;
+
 /** Diagnostics snapshot returned by `getDiagnostics()`. */
 export interface AgentDiagnostics {
   sessionId: SessionId | undefined;
@@ -294,6 +326,10 @@ export interface PhusAgentFacade {
   /** Subscribe to plan lifecycle events (step started/completed/failed,
    *  plan completed). Returns an unsubscribe function. */
   subscribeToPlanEvents(handler: PlanEventHandler): () => void;
+  /** Subscribe to auto-compact lifecycle events (`context_near_limit`,
+   *  `context_compacting`, `context_compacted`, `compact_failed`).
+   *  Returns an unsubscribe function. */
+  subscribeToCompactEvents(handler: CompactEventHandler): () => void;
   /** Pause the active plan (sets plan.status to "paused" and emits the
    *  corresponding event). Returns the affected plan id, or undefined
    *  if there is no active plan. */
@@ -359,6 +395,7 @@ export class PhusAgent implements PhusAgentFacade {
   private autoCompactEnabled: boolean;
   private toolPermissionHandler?: (req: ToolPermissionRequest) => Promise<boolean>;
   private planEventHandlers = new Set<PlanEventHandler>();
+  private compactEventHandlers = new Set<CompactEventHandler>();
   /** CorePort — injection port for planner / verifier / learner and any
    *  other LLM-bound core consumer. Wraps the live Pi Agent loop. */
   private corePort!: CorePort;
@@ -374,6 +411,12 @@ export class PhusAgent implements PhusAgentFacade {
    *  for the full model round-trip. The controller is re-armed
    *  per turn so a later turn isn't poisoned by a stale abort. */
   private abortController: AbortController = new AbortController();
+
+  /** API-reported input token count from the previous turn's last
+   *  assistant message. Set by `handleEvent` on `turn_end`, read by
+   *  `injectContext` to feed the next auto-compact decision. Reset
+   *  by `rearmAbortController` at the start of each turn. */
+  private lastReportedInput?: number;
 
   /** Build the Agent options dict used to construct BOTH the
    *  parent's piAgent and any sub-agent (via `spawnSubAgent`).
@@ -687,13 +730,78 @@ export class PhusAgent implements PhusAgentFacade {
   private async injectContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
     if (this.currentSessionId && this.autoCompactEnabled) {
       const cw = this.piAgent.state.model.contextWindow;
-      await maybeCompact(
-        this.tape,
-        this.currentSessionId,
-        this.piAgent.state.messages,
-        cw,
-        this.autoCompactCfg,
-      );
+      try {
+        const decision = await maybeCompact({
+          tape: this.tape,
+          sessionId: this.currentSessionId,
+          messages: this.piAgent.state.messages,
+          contextWindow: cw,
+          cfg: this.autoCompactCfg,
+          maxOutputTokens: this.piAgent.state.model.maxTokens,
+          systemPrompt: this.piAgent.state.systemPrompt,
+          tools: this.piAgent.state.tools,
+          lastReportedInput: this.lastReportedInput,
+          logger: this.deps.logger,
+        });
+        if (decision.tier === "near_limit") {
+          this.deps.logger.info("context.near_limit", {
+            sessionId: this.currentSessionId,
+            tier: decision.tier,
+            ratio: decision.snapshot.ratio,
+            tokens: decision.snapshot.total,
+            contextWindow: decision.snapshot.contextWindow,
+            inputBudget: decision.snapshot.inputBudget,
+          });
+          this.emitCompactEvent({
+            type: "context_near_limit",
+            sessionId: this.currentSessionId,
+            ratio: decision.snapshot.ratio,
+            tokens: decision.snapshot.total,
+            contextWindow: decision.snapshot.contextWindow,
+            inputBudget: decision.snapshot.inputBudget,
+          });
+        }
+        if (decision.fired && decision.trimmedMessages && decision.trimmedMessages.length > 0) {
+          this.emitCompactEvent({
+            type: "context_compacting",
+            sessionId: this.currentSessionId,
+            ratio: decision.snapshot.ratio,
+            tokens: decision.snapshot.total,
+            contextWindow: decision.snapshot.contextWindow,
+            inputBudget: decision.snapshot.inputBudget,
+            summarized: decision.summarized,
+            kept: decision.kept,
+            anchorName: decision.anchorName,
+            reason: decision.reason,
+          });
+          // Apply the trim to the live state. This is the only writer
+          // that must run before the next LLM call — both the return
+          // value (Pi's `transformContext`) and `state.messages` (state
+          // for subsequent turns) need to reflect the trim.
+          this.piAgent.state.messages = decision.trimmedMessages as AgentMessage[];
+          this.emitCompactEvent({
+            type: "context_compacted",
+            sessionId: this.currentSessionId,
+            summarized: decision.summarized,
+            kept: decision.kept,
+            anchorName: decision.anchorName,
+          });
+          return decision.trimmedMessages as AgentMessage[];
+        }
+      } catch (err) {
+        // `transformContext` must never throw — fall back to the
+        // original messages and let the LLM call proceed.
+        const error = err instanceof Error ? err.message : String(err);
+        this.deps.logger.warn("compact.failed", {
+          sessionId: this.currentSessionId,
+          error,
+        });
+        this.emitCompactEvent({
+          type: "compact_failed",
+          sessionId: this.currentSessionId,
+          error,
+        });
+      }
     }
     return buildContextBlock(messages, {
       hooks: this.hooks,
@@ -707,10 +815,20 @@ export class PhusAgent implements PhusAgentFacade {
     });
   }
 
-  /** Pi event handler — forwards turn_end to the after_llm_call hook. */
+  /** Pi event handler — forwards turn_end to the after_llm_call hook
+   *  and captures the API-reported input token count for the next
+   *  auto-compact decision. */
   private handleEvent(event: AgentEvent): void {
     if (event.type === "turn_end" && event.message?.role === "assistant") {
       const last = event.message as any;
+      // Stash the real input token count so the next `injectContext`
+      // can use a precise budget instead of the char/4 heuristic.
+      // Includes cacheRead so cache-prefixed prompts count their
+      // first-time contribution too.
+      const usage = last.usage as { input?: number; cacheRead?: number } | undefined;
+      if (usage && typeof usage.input === "number") {
+        this.lastReportedInput = (usage.input ?? 0) + (usage.cacheRead ?? 0);
+      }
       void this.hooks.execute(
         "after_llm_call",
         makeCtx({
@@ -1266,6 +1384,10 @@ export class PhusAgent implements PhusAgentFacade {
    *  previous turn's Ctrl+C. */
   private rearmAbortController(): void {
     this.abortController = new AbortController();
+    // The previous turn's API-reported input token count is no longer
+    // trustworthy for the next round — unset it. The next LLM call
+    // will re-populate from `handleEvent` on `turn_end`.
+    this.lastReportedInput = undefined;
   }
 
   /** Public accessor for the runtime-level abort signal. The sub-agent
@@ -1461,6 +1583,13 @@ export class PhusAgent implements PhusAgentFacade {
     };
   }
 
+  subscribeToCompactEvents(handler: CompactEventHandler): () => void {
+    this.compactEventHandlers.add(handler);
+    return () => {
+      this.compactEventHandlers.delete(handler);
+    };
+  }
+
   pauseActivePlan(): string | undefined {
     const sid = this.currentSessionId as string | undefined;
     if (!sid) return undefined;
@@ -1606,6 +1735,18 @@ export class PhusAgent implements PhusAgentFacade {
         h(event);
       } catch (err) {
         logger.warn("plan_event.handler_failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  private emitCompactEvent(event: CompactEvent): void {
+    for (const h of this.compactEventHandlers) {
+      try {
+        h(event);
+      } catch (err) {
+        logger.warn("compact_event.handler_failed", {
           error: err instanceof Error ? err.message : String(err),
         });
       }

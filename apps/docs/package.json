@@ -4,7 +4,7 @@
   "description": "Phus documentation site",
   "scripts": {
     "dev": "rspress dev",
-    "build": "rspress build",
+    "build": "rm -rf doc_build && rspress build",
     "preview": "rspress preview"
   },
   "dependencies": {
