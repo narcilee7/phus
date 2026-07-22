@@ -25,12 +25,17 @@ CURRENT=$(node -p "require('./package.json').version")
 echo "Current version: $CURRENT"
 
 if [ "$BUMP" = "patch" ] || [ "$BUMP" = "minor" ] || [ "$BUMP" = "major" ]; then
+  # `node -p` evaluates a multi-statement script and prints BOTH the
+  # console.log output AND the script's implicit return value (undefined
+  # for scripts that don't have a trailing expression). Take the FIRST
+  # line (head -1) to grab the real version; tail -1 would have caught
+  # the trailing `undefined` and tagged vundefined instead of v0.1.1.
   NEW=$(node -p "
     const [major, minor, patch] = '$CURRENT'.split('.').map(Number);
     if ('$BUMP' === 'major') console.log(\`\${major + 1}.0.0\`);
     else if ('$BUMP' === 'minor') console.log(\`\${major}.\${minor + 1}.0\`);
     else console.log(\`\${major}.\${minor}.\${patch + 1}\`);
-  " | tail -1)
+  " | head -1)
 else
   NEW="$BUMP"
 fi
