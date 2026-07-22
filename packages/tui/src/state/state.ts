@@ -264,7 +264,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             toolName: action.toolName,
             toolCallId: action.toolCallId,
             args: action.args,
-            collapsed: true,
+            collapsed: false, // expanded while running
           },
         ],
       });
@@ -281,6 +281,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         result: action.result,
         isError: action.isError,
         durationMs: Date.now() - call.ts,
+        collapsed: true, // collapse after done
       };
       return withScrollOnNewContent({ ...state, items: updated });
     }
