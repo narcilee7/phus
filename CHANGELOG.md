@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] - 2026-07-22
+
+### Added
+- fix(ci): build workspace packages before test (deep imports need dist/)
+- docs(changelog): curate 0.1.1 and 0.1.2 sections (Added/Changed/Fixed)
+
 ## [0.1.2] - 2026-07-22
 
 CI-green follow-up to 0.1.1. The previous tag ran the release pipeline but
