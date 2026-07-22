@@ -62,6 +62,27 @@ log:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Safety — file_write allowlist + bash blocklist (all optional)
+# ─────────────────────────────────────────────────────────────────────
+#
+# Default fileWriteRoots is `["./"]` so a local session can edit files
+# anywhere in the workspace, with each `file_write` still flowing through
+# the per-call permission gate (Y / N / S / A). Tighten this for shared
+# or multi-tenant deployments where the agent must stay inside a fixed
+# subtree. Bash blocklist patterns (rm -rf /, fork bomb, curl|sh, etc.)
+# are hardcoded in `infra/safety.ts` — loosening them is a code-review
+# change, not a config knob.
+#
+# safety:
+#   fileWriteRoots:
+#     - "./"
+#     # - "./skills"     # narrower example for stricter deployments
+#     # - "./.phus"
+#     # - "./tmp"
+#     # - "./out"
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Robustness — LLM runaway guards (all optional, defaults shown)
 # ─────────────────────────────────────────────────────────────────────
 #

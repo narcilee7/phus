@@ -30,6 +30,7 @@ import type {
   PathsConfig,
   PluginSpec,
   ResolvedConfig,
+  SafetyConfig,
 } from "./schema.js";
 import { ENV_OVERRIDE_VARS } from "./schema.js";
 import type { ProviderConfig, ProviderProfile, MeshSpec } from "../profile.js";
@@ -144,6 +145,10 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   // so existing users get an explicit-permission workflow without changes.
   const memory = parseMemoryConfig(interpolated, warn);
 
+  // Safety policy (file_write allowlist etc.) — defaults to ["./"] so
+  // a local session can edit files in cwd; operators tighten via YAML.
+  const safety = parseSafetyConfig(interpolated, warn);
+
   // LLM runaway guards (timeouts / budgets / billing fuse) — every key
   // optional, conservative defaults from DEFAULT_ROBUSTNESS.
   const robustness = parseRobustness(interpolated);
@@ -206,6 +211,7 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     channels,
     schedules,
     memory,
+    safety,
     robustness,
     profileName,
     raw: interpolated,
@@ -588,6 +594,36 @@ function parseMemoryConfig(
   const logToTape = obj.logToTape !== false; // default true
 
   return { mode, autoApprove, requireApproval, logToTape };
+}
+
+/** Parse the `safety:` section. Currently exposes the `file_write`
+ *  allowlist (relative paths resolved against cwd at evaluation time,
+ *  not at parse time — keep raw strings here so tests can assert). */
+function parseSafetyConfig(
+  interpolated: unknown,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+): SafetyConfig {
+  const raw = (interpolated as { safety?: unknown } | undefined)?.safety;
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const rootsRaw = obj.fileWriteRoots;
+  if (rootsRaw === undefined) {
+    return { fileWriteRoots: ["./"] };
+  }
+  if (!Array.isArray(rootsRaw)) {
+    warn("config.safety.invalid_fileWriteRoots", {
+      value: String(rootsRaw),
+      using: '["./"]',
+    });
+    return { fileWriteRoots: ["./"] };
+  }
+  const roots = rootsRaw.filter((x): x is string => typeof x === "string");
+  if (roots.length === 0) {
+    warn("config.safety.empty_fileWriteRoots", {
+      using: '["./"]',
+    });
+    return { fileWriteRoots: ["./"] };
+  }
+  return { fileWriteRoots: roots };
 }
 
 function parsePluginSpec(raw: unknown): PluginSpec[] {

@@ -44,7 +44,9 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
   const skills = new SkillRegistry(config.paths.skillsDir);
   const memoryStore = new MemoryStore(config.paths.memoryFile);
   const autonomyGate = AutonomyGate.fromConfig(config.memory);
-  const policy = defaultPolicy();
+  const policy = defaultPolicy(process.cwd(), {
+    fileWriteRoots: config.safety?.fileWriteRoots,
+  });
   const hooks = new HookRegistry({ isolateErrors: true });
 
   const endpoints: EndpointSpec[] = profile.mesh && profile.mesh.length > 0

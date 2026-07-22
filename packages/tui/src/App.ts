@@ -37,6 +37,7 @@ import { SisyphusAnimator } from "./runtime/sisyphus.js";
 import { eventToAction } from "./transform/events.js";
 import { planEventToAction, type PlanRef } from "./transform/plan-events.js";
 import { describeMemoryAction, buildMemoryPreview } from "./transform/memory.js";
+import { describeFileWrite, buildFileWritePreview } from "./transform/file-write.js";
 // import { parseMemoryAction } from "@phus/runtime/infra/meta/index.js";
 import { runSlash, SLASH_COMMANDS } from "./handler/commands/commands.js";
 import { buildShortcutListener, type GlobalShortcutCallbacks } from "./runtime/keybindings.js";
@@ -564,8 +565,18 @@ export class App extends Container {
 				toolName: req.toolName,
 				args: req.args,
 				toolCallId: req.toolCallId,
-				caption: req.toolName === "memory_write" ? describeMemoryAction(req.args) : undefined,
-				preview: req.toolName === "memory_write" ? buildMemoryPreview(req.args) : undefined,
+				caption:
+					req.toolName === "memory_write"
+						? describeMemoryAction(req.args)
+						: req.toolName === "file_write"
+							? describeFileWrite(req.args)
+							: undefined,
+				preview:
+					req.toolName === "memory_write"
+						? buildMemoryPreview(req.args)
+						: req.toolName === "file_write"
+							? buildFileWritePreview(req.args)
+							: undefined,
 				resolve,
 			};
 			this.store.dispatch({ type: "push_permission", request });

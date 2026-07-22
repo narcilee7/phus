@@ -49,6 +49,25 @@ export interface LogConfig {
 }
 
 /**
+ * Resolved safety policy config. Mirrors the `safety:` section of
+ * phus.config.yaml. Currently only the `file_write` allowlist is
+ * exposed — bash blocklist patterns stay hardcoded in
+ * `infra/safety.ts` because tightening/loosening them is a security
+ * primitive that should go through code review.
+ *
+ * `fileWriteRoots` is a list of paths (absolute or cwd-relative). When
+ * the agent calls `file_write`, the absolute target must resolve under
+ * one of these roots or the call is rejected by `before_tool_call`
+ * before it ever reaches the user-facing permission gate. Default =
+ * `["./"]` (the workspace root) so a typical session can edit files
+ * locally; tighten to `./skills,./.phus,./tmp` etc. for stricter
+ * deployments.
+ */
+export interface SafetyConfig {
+  fileWriteRoots: string[];
+}
+
+/**
  * PluginSpec as it appears in `phus.config.yaml::plugins`. The plugin
  * loader converts each entry into a LoadedPlugin; this is the parsed
  * input shape.
@@ -101,6 +120,8 @@ export interface ResolvedConfig {
   schedules: Schedule[];
   /** Project memory autonomy + storage config. */
   memory: MemoryConfig;
+  /** Safety policy knobs the operator can tighten/loosen at runtime. */
+  safety: SafetyConfig;
   /** LLM runaway guards: timeouts, call budgets, billing fuse. */
   robustness: RobustnessConfig;
   /** Active profile name (env > YAML > default). */
