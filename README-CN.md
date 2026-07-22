@@ -4,11 +4,11 @@
   <strong>自进化 Agent 运行时 — 每次轮回，皆有成长。</strong>
 </p>
 
-<p>
+<p align="center">
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" align="middle"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20" align="middle">
   <img src="https://img.shields.io/badge/pnpm-10%2B-orange" alt="pnpm 10+" align="middle">
-  <a href="README.md">English</a>
+  <a href="README.md" align="middle">English</a>
 </p>
 
 ---
@@ -177,7 +177,6 @@ sudo systemctl enable --now phus      # systemd 服务
 ## 延伸阅读
 
 - [`documents/Architecture.md`](documents/Architecture.md) — 设计理念、分层架构、Bub/Pi/OpenClaw 借鉴
-- [`documents/Proposal-Monorepo-Split.md`](documents/Proposal-Monorepo-Split.md) — Monorepo 拆分理由
 - [`documents/Plugins.md`](documents/Plugins.md) — 插件开发指南
 - [`documents/Deployment.md`](documents/Deployment.md) — Docker + systemd 部署
 - [`documents/Release-System.md`](documents/Release-System.md) — 发布流程
