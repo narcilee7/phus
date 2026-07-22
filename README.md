@@ -1,126 +1,152 @@
-# Phus
+# ⛰️ Phus
 
-⛰️  Self-evolving agent. Push the stone up the mountain.
+<p align="center">
+  <strong>Self-evolving agent runtime — every turn repeats, every turn grows.</strong>
+</p>
 
-Named after Sisyphus — every turn repeats, every turn grows. Phus is a TypeScript monorepo that wraps [@mariozechner/pi-agent-core](https://www.npmjs.com/package/@mariozechner/pi-agent-core) with a [Bub](https://github.com/bubbuild/bub)-style hook layer, a SQLite tape for context, and an Agent Skills–compatible skill registry. The agent can write new skills to disk at runtime, edit its own startup script, and reflect on its past turns.
-
-```
-Channel (CLI / TUI / Telegram / WebSocket / SSE / Slack / Email)
-       │
-       ▼
-  PhusAgent.turn()
-       │
-       ├─ Hook chain  (resolve_session → load_state → build_prompt)
-       ├─ Pi Agent    (LLM loop, skills + tape injected via transformContext)
-       │     └─ Tool calls → Tape (before_tool_call / after_tool_call)
-       │                   └─ Policy check (operator-equivalence allowlist)
-       ├─ render_outbound → dispatch_outbound
-       └─ save_state → Tape
-```
-
-See [`documents/Architecture.md`](documents/Architecture.md) for the design vision, layered architecture, and what we took from Bub / Pi / OpenClaw.
+<p align="center">
+  <a href="README-CN.md">中文文档</a> ·
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20">
+  <img src="https://img.shields.io/badge/pnpm-10%2B-orange" alt="pnpm 10+">
+</p>
 
 ---
 
-## Install
+Phus is a TypeScript monorepo agent runtime. It wraps [@mariozechner/pi-agent-core](https://www.npmjs.com/package/@mariozechner/pi-agent-core) (LLM loop + tools) with a [Bub](https://github.com/bubbuild/bub)-style hook chain, a SQLite-backed Tape for persistent context, an [Agent Skills](https://agentskills.io)–compatible skill registry, and a self-evolution loop. It runs as a CLI, a TUI, or a multi-channel gateway — same agent, same tools, same safety rules.
 
-```bash
-pnpm install
+## Why Phus?
 
-# Set at least one provider key. Easiest: run `phus setup`
-# (interactive wizard; writes phus.config.yaml). Or export directly:
-export ANTHROPIC_API_KEY=sk-ant-...
-# (OPENAI_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY work the same way
-# — Pi reads them automatically.)
+Most agent frameworks stop at "LLM + tools". Phus adds what a long-running agent actually needs:
+
+### Planner + SubAgent (execution)
+
+The agent creates and runs **multi-step plans** with DAG-based step scheduling. Steps within the same topological level run in **parallel** (capped at 3 sub-agents) — and each step runs in its own **isolated SubAgent** with a private message history that never leaks into the parent. The Planner decomposes a goal into steps, the DAG scheduler levels them, and sub-agents execute with wall-clock timeout + cooperative abort.
+
 ```
+Goal → Planner → [inspect] → [edit, test] (parallel) → [repair] → done
+                      │            │
+                      └─ SubAgent ─┘  (fresh Agent, private messages)
+```
+
+Plans survive restarts (SQLite-backed), support replan on failure, and expose `plan_create` / `plan_run` / `plan_status` as **meta tools the agent itself can call**.
+
+### Self-evolution loop
+
+The agent doesn't just use skills — it **writes them**. 14 meta tools let it modify itself at runtime:
+
+| Category | Tools |
+|---|---|
+| **Skills** | `skill_write` — create new capabilities from experience (Markdown prompt guides, not code) |
+| | `skill_read` / `skill_delete` — inspect or remove skills |
+| | `skill_validate` — A/B test a skill draft vs baseline, auto-promote if better |
+| **System** | `startup_write` — write boot scripts (runs on next gateway start) |
+| | `startup_suggest` — analyze tape + plans, suggest startup additions |
+| | `self_reflect` — read past turns across sessions |
+| | `compact_session` — summarize old turns to free context window |
+| **Memory** | `memory_read` / `memory_write` — maintain `phus.md` cross-session project memory |
+| **Evolution** | `reflect` — analyze a session, extract what worked/failed, suggest reusable procedures |
+| | `plan_create` / `plan_run` / `plan_status` / `plan_list` — create and execute multi-step plans |
+| **Introspection** | `tape_stats` — per-session aggregate counts |
+
+The Evolution Engine runs after every completed plan: it reflects on the outcome, writes skill drafts from reusable procedures, and validates them against baselines — closing the loop from *experience → skill → verified improvement*.
+
+### External tools
+
+The agent interacts with the real world through 6 non-negotiable tools:
+
+| Tool | Purpose |
+|---|---|
+| `bash` | Shell commands via `child_process`, with timeout + abort signal + retry |
+| `file_read` | Read files with line numbers, paging, byte cap |
+| `file_write` | Write/overwrite files, auto-create parent directories |
+| `edit` | String-replace file edits (first-match or replace-all, with uniqueness check) |
+| `grep` | ripgrep search with regex, glob filtering, context lines, sensitive-file filtering |
+| `glob` | File discovery with brace expansion, sorted by mtime |
+
+### Safety by design
+
+Operator equivalence — the agent and you share the same boundary:
+
+- `file_write` restricted to `./skills/`, `./.phus/`, `./tmp/`, `./out/`
+- `bash` blocks `rm -rf /`, fork bombs, `curl|sh`, `dd if=`, `chmod -R 777 /`, `mkfs`
+- Policy enforced at `before_tool_call` — applies to **every** tool, including meta tools, across **every** channel
+- SubAgents inherit the same tool list and safety rules — no escape hatch
 
 ## Quick start
 
 ```bash
-# Interactive TUI (default — `phus` with no args)
+# Prerequisites: Node ≥20, pnpm ≥10
+pnpm install
+
+# Set at least one API key
+export ANTHROPIC_API_KEY=sk-ant-...
+# or: OPENAI_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY / DEEPSEEK_API_KEY
+
+# Launch the TUI (default)
 pnpm dev
 
 # One-shot prompt
 pnpm run "summarize this repo"
 
-# Multi-channel gateway (24/7 service mode)
-pnpm gateway --websocket 8080
+# Gateway mode (WebSocket + SSE)
+pnpm gateway --websocket 8080 --sse 8081
 ```
 
-The first time you run it, Phus creates `./skills/`, `./.phus/`, and `./logs/` automatically. Read [`documents/Architecture.md`](documents/Architecture.md) to understand how it all fits together.
----
+Run `phus setup` for an interactive configuration wizard that writes `phus.config.yaml`.
 
-## Commands
+## Architecture
 
-| Command | Purpose |
-|---|---|
-| `phus` | Launch the interactive **TUI** (default — no args wakes the TUI; there is no `phus tui`) |
-| `phus chat` | Launch the interactive TUI (explicit) |
-| `phus run "<prompt>"` | One-shot execution, prints response, exits |
-| `phus gateway [--websocket N] [--telegram] [--sse N]` | Start channel listeners in foreground |
-| `phus setup` | First-run wizard (writes `phus.config.yaml`, picks provider / model / key) |
-| `phus hooks` | List registered hooks (diagnostic) |
-| `phus skills` | List discovered skills |
-| `phus tape` | Print tape statistics |
-| `phus policy` | Print active safety policy |
-| `phus profiles` | List configured provider profiles |
-| `phus plugins-list` | List loaded plugins |
-| `phus trace <sessionId>` | Print a turn timeline for one session |
-| `phus logs [--follow] [--session S] [--level L]` | Query the structured JSON log |
-| `phus compact <sessionId>` | Summarize old turns into an anchor |
-| `phus resume <sessionId> [prompt]` | Restore from latest checkpoint |
-| `phus tasks` | Show agent state, sessions, schedules, recent checkpoints |
-| `phus metrics` | Show aggregate usage metrics |
-| `phus health` | Health check (used by Docker / systemd) |
-| `phus gateway daemon start|stop|status` | Manage gateway daemon (systemd-style) |
+```
+Channel (CLI / TUI / WebSocket / SSE / Telegram / Slack / Email / WhatsApp)
+  │
+  ▼
+resolve_session → load_state → build_prompt → Pi Agent (LLM + tools)
+                                                  │
+                              ┌───────────────────┘
+                              ▼
+                        before_tool_call → policy check
+                        tool execution (bash, file, meta, …)
+                        after_tool_call  → Tape
+                              │
+                              ▼
+                        render_outbound → dispatch_outbound → save_state → Tape
+```
 
-Run `phus help <command>` for options on any command.
+Every turn is append-only to SQLite Tape. Skills + memory + relevant history are injected into the LLM context. The hook chain (7 stages, 17+ hook points) lets plugins intercept every stage.
 
----
+## Packages
+
+```
+apps/cli/            @phus/cli         — the `phus` binary
+packages/tui/        @phus/tui         — terminal UI (pi-tui primitives)
+packages/runtime/    @phus/runtime     — PhusAgent, bridge, channels, meta tools, provider mesh
+packages/core/       @phus/core        — hook, tape, skill registry, policy, types
+packages/shared/     @phus/shared      — protocol types and utilities
+```
+
+Dependency direction (one-way, no cycles):
+
+```
+apps/cli → packages/tui → packages/runtime → packages/core → packages/shared
+```
 
 ## Configuration
 
-Configuration lives in `phus.config.yaml` (auto-generated by `phus setup`). A few key env vars still override it:
+Configuration lives in `phus.config.yaml` (generated by `phus setup`). Key environment variables:
 
 | Env | Purpose |
 |---|---|
-| `PHUS_HOME` | Phus home directory (skills, tape, startup.sh, plugins). Default `./.phus` |
-| `PHUS_LOG_FILE` | Structured log path. Default `./logs/phus.jsonl` |
-| `PHUS_LOG_LEVEL` | `fatal`/`error`/`warn`/`info`/`debug`/`trace` |
-| `PHUS_PROFILE` | Active provider profile name |
+| `PHUS_HOME` | Home directory (skills, tape, startup.sh). Default `./.phus` |
+| `PHUS_LOG_FILE` | Structured JSONL log path. Default `./logs/phus.jsonl` |
+| `PHUS_LOG_LEVEL` | `fatal` / `error` / `warn` / `info` / `debug` / `trace` |
+| `PHUS_PROFILE` | Active provider profile |
 
-Provider keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`) are read by Pi automatically. Set any one and Phus works.
+Provider keys are read automatically by Pi. See [`phus.config.example.yaml`](phus.config.example.yaml) for the full schema (provider mesh with circuit breakers, schedules, channels, plugins).
 
-For OpenRouter access to DeepSeek: `OPENROUTER_API_KEY=sk-or-...` and configure the model in your profile. See [`phus.config.example.yaml`](phus.config.example.yaml) for the full schema.
+## Plugins & extensibility
 
----
-
-## Observability
-
-All runtime events go to `./logs/phus.jsonl` as one JSON object per line. Tail it with:
-
-```bash
-phus logs --follow                          # stream everything
-phus logs --level warn --follow            # only warnings and above
-phus logs --session tui:user --limit 50    # one session
-phus logs --event tool.blocked_by_policy    # one event type
-```
-
-Notable events: `turn.completed`, `tool.call`, `tool.blocked_by_policy`, `compaction.completed`, `plugin.loaded`, `gateway.started`, `gateway.shutdown`, `startup.found`, `skill.invalid_frontmatter`.
-
-Each line carries `ts`, `level`, `event`, `sessionId` (when applicable), and arbitrary fields.
-
----
-
-## Safety
-
-Operator equivalence (Bub principle): the agent cannot write outside `./skills/`, `./.phus/`, `./tmp/`, `./out/`, and its `bash` tool is blocked against `rm -rf /`, fork bombs, piped-shell, `dd if=`, `chmod -R 777 /`, and `mkfs`. These rules live in `packages/runtime/src/infra/safety.ts` and run inside the `before_tool_call` hook — they apply to every tool call, including meta tools, and cannot be bypassed by the agent. See `phus policy` for the active rule set.
-
----
-
-## Plugins
-
-Plugins let you extend Phus without forking. They can register hooks, skills, and channels. See [`documents/Plugins.md`](documents/Plugins.md) for the full guide.
+Plugins are TypeScript files loaded via `jiti` — no build step. Register hooks, skills, and channels:
 
 ```typescript
 // ~/.phus/plugins/greet-everyone.ts
@@ -137,80 +163,27 @@ export default {
 } satisfies Plugin;
 ```
 
+See [`documents/Plugins.md`](documents/Plugins.md).
+
 ## Deployment
 
-For 24/7 operation, see [`documents/Deployment.md`](documents/Deployment.md). Quick version:
-
 ```bash
-docker compose up -d         # gateway mode, WebSocket on :8080
-sudo systemctl enable --now phus   # or systemd
+docker compose up -d                  # gateway mode, WebSocket on :8080
+sudo systemctl enable --now phus      # systemd service
 ```
 
-The `phus health` command is used by both Docker HEALTHCHECK and systemd watchdog.
+`phus health` for HEALTHCHECK / watchdog. See [`documents/Deployment.md`](documents/Deployment.md).
 
----
+## Further reading
 
-## Self-evolution
-
-The agent can call `skill_write`, `startup_write`, `self_reflect`, `compact_session`, `memory_read`, `memory_write`, and `tape_stats` as built-in meta tools. This is the loop:
-
-```
-user → PhusAgent → Pi Agent loop
-                     ├─ tool: skill_write       → writes skills/<name>/SKILL.md
-                     ├─ tool: startup_write     → writes .phus/startup.sh
-                     ├─ tool: self_reflect      → reads past turns from tape
-                     ├─ tool: memory_read/write → reads/writes phus.md
-                     └─ tool: compact_session   → summarizes old turns
-```
-
-Verify it works end-to-end:
-
-```bash
-bash scripts/verify-self-evolution.sh
-```
-
-Requires at least one provider key set.
-
----
-
-## Package layout
-
-Phus is a pnpm workspace monorepo:
-
-```
-apps/cli/        ← @phus/cli      — the `phus` binary (commander CLI + TUI entry point)
-packages/core/   ← @phus/core     — headless library (hooks, tape, skill registry, policy, types)
-packages/runtime/← @phus/runtime  — PhusAgent, bridge to Pi, channels, meta-tools, provider mesh
-packages/tui/    ← @phus/tui      — terminal UI shell (vendored pi-tui primitives)
-packages/shared/ ← @phus/shared   — shared protocol types and utilities
-apps/desktop/    ← Electron desktop app (Node ≥22.12)
-apps/web/        ← (future) browser host
-apps/mobile/     ← (future) React Native host
-```
-
-Dependency direction (one-way, no cycles):
-
-```
-apps/cli ──→ packages/tui ──→ packages/runtime ──→ packages/core ──→ packages/shared
-```
-
-`pnpm test`, `pnpm build`, `pnpm lint`, `pnpm typecheck` all fan out across the workspace from the repo root — no `cd packages/<x>` needed.
-
-See [`documents/Proposal-Monorepo-Split.md`](documents/Proposal-Monorepo-Split.md) for the full split rationale and migration history.
-
----
-
-## Architecture deep dive
-
-- [`documents/Architecture.md`](documents/Architecture.md) — Design vision, layered architecture, Bub/Pi/OpenClaw inspirations
-- [`documents/Proposal-Monorepo-Split.md`](documents/Proposal-Monorepo-Split.md) — Monorepo split rationale and migration plan
-- [`documents/Intelligence-Alignment.md`](documents/Intelligence-Alignment.md) — Intelligence alignment design
-- [`documents/Intelligence-Implementation-Plan.md`](documents/Intelligence-Implementation-Plan.md) — Implementation roadmap
-- [`documents/Plugins.md`](documents/Plugins.md) — Plugin development guide
-- [`documents/Deployment.md`](documents/Deployment.md) — Docker + systemd deployment
-- [`documents/Release-System.md`](documents/Release-System.md) — Release pipeline and versioning
-- [`documents/TUI-Shortcuts.md`](documents/TUI-Shortcuts.md) — TUI keyboard shortcuts reference
+- [`documents/Architecture.md`](documents/Architecture.md) — design vision, layered architecture, inspirations (Bub / Pi / OpenClaw)
+- [`documents/Proposal-Monorepo-Split.md`](documents/Proposal-Monorepo-Split.md) — monorepo split rationale
+- [`documents/Plugins.md`](documents/Plugins.md) — plugin development guide
+- [`documents/Deployment.md`](documents/Deployment.md) — Docker + systemd
+- [`documents/Release-System.md`](documents/Release-System.md) — release pipeline
+- [`documents/TUI-Shortcuts.md`](documents/TUI-Shortcuts.md) — keyboard shortcuts
+- [`CHANGELOG.md`](CHANGELOG.md) — release history
 
 ## License
 
-MIT
+MIT © 2026 NarciLee

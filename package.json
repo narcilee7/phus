@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"description": "Self-evolving agent runtime. Push the stone up the mountain.",
 	"private": true,
-	"license": "ISC",
+	"license": "MIT",
 	"type": "module",
 	"scripts": {
 		"build": "pnpm -r build",
