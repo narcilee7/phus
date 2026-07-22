@@ -70,18 +70,23 @@ jobs:
       - name: Pack distribution archive
         run: |
           mkdir -p release
-          # The bin lives under apps/cli/dist/ after Stage 2; hoist the
-          # cli-published package.json + pnpm-lock into the archive root
-          # so consumers see the flat `$PHUS_HOME/dist/phus.mjs` layout.
-          cp apps/cli/package.json package.json.cli
+          # The bin lives under apps/cli/dist/ after Stage 2. The installer
+          # (scripts/install.sh) extracts `apps/cli/dist` and hoists
+          # `apps/cli/{package.json,pnpm-lock.yaml}` into $PHUS_HOME, then
+          # runs `pnpm install --frozen-lockfile --prod` against that root.
+          # The previous layout packed the lockfile at the archive root
+          # where the installer did not look, leaving consumers with a
+          # bin that crashed on first run with ERR_MODULE_NOT_FOUND.
+          cp pnpm-lock.yaml apps/cli/pnpm-lock.yaml
           tar -czf "release/phus-${{ steps.dist-tag.outputs.version }}.tar.gz" \
             apps/cli/dist \
-            package.json.cli \
-            pnpm-lock.yaml README.md LICENSE \
+            apps/cli/package.json \
+            apps/cli/pnpm-lock.yaml \
+            README.md LICENSE \
             phus.config.example.yaml scripts/install.sh scripts/install.ps1 \
             scripts/rename-cli-bin.mjs \
             scripts/fix-extensions.mjs
-          rm -f package.json.cli
+          rm -f apps/cli/pnpm-lock.yaml
           cp "release/phus-${{ steps.dist-tag.outputs.version }}.tar.gz" "release/phus-latest.tar.gz"
 
       - name: Create GitHub Release
