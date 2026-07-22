@@ -19,6 +19,9 @@ export interface GlobalShortcutCallbacks {
 	onQuit(): void;
 	onTogglePlan(): void;
 	onUndo(): void;
+	/** Toggle collapse on the currently-focused (or last) collapsible
+	 *  chat item — tool_call / tool_result / long assistant / thinking. */
+	onToggleCollapse(): void;
 	onScrollUp(lines: number): void;
 	onScrollDown(lines: number): void;
 	onScrollBottom(): void;
@@ -33,6 +36,7 @@ export interface ParsedShortcut {
 		| "quit"
 		| "toggle-plan"
 		| "undo"
+		| "toggle-collapse"
 		| "scroll-up"
 		| "scroll-down"
 		| "scroll-bottom";
@@ -45,6 +49,7 @@ const SHORTCUT_TABLE: ReadonlyArray<{ match: string; name: ParsedShortcut["name"
 	{ match: "ctrl+c", name: "abort" },
 	{ match: "ctrl+z", name: "undo" },
 	{ match: "ctrl+t", name: "toggle-plan" },
+	{ match: "ctrl+o", name: "toggle-collapse" },
 	{ match: "pageup", name: "scroll-up" },
 	{ match: "pagedown", name: "scroll-down" },
 	{ match: "ctrl+end", name: "scroll-bottom" },
@@ -113,6 +118,13 @@ export function buildShortcutListener(
 		}
 		if (matchesKey(data, "ctrl+t")) {
 			callbacks.onTogglePlan();
+			return { consume: true };
+		}
+		// Ctrl+O — collapse / expand the focused chat item. Works for
+		// tool_call (args+result), assistant (long replies + thinking),
+		// and any other collapsible item the user has scrolled to.
+		if (matchesKey(data, "ctrl+o")) {
+			callbacks.onToggleCollapse();
 			return { consume: true };
 		}
 		void SHORTCUT_TABLE;

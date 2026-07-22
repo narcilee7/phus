@@ -57,6 +57,7 @@ import { registerDefaultHooks } from "./default-hooks.js";
 import { buildContextBlock } from "./prompt-assembly.js";
 import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
 import { MemoryStore, AutonomyGate } from "../infra/memory/index.js";
+import { TurnReflector, DEFAULT_REFLECTOR, type ReflectorConfig } from "../infra/memory/reflector.js";
 import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Executor } from "@phus/runtime/core/runtime/executor/index.js";
 import { PlanRunner } from "@phus/runtime/core/runtime/plan/plan-runner.js";
@@ -96,6 +97,13 @@ export interface PhusAgentDeps {
   autoCompact?: AutoCompactConfig;
   /** SQLite-backed plan store. If omitted, an in-memory store is used. */
   planStore?: PlanStore;
+  /** Post-turn auto-reflection config. `undefined` → use defaults
+   *  (off). When `autoReflect` is true, every turn runs the
+   *  TurnReflector over the user prompt + assistant output + tool
+   *  results; emitted actions route through the existing
+   *  AutonomyGate so `yolo` / matching `autoApprove` commit them
+   *  straight to phus.md. */
+  reflectorConfig?: ReflectorConfig;
   /** Optional injection port for planner / verifier / learner. If
    *  omitted, PhusAgent constructs a default `CorePort` that wraps
    *  the live Pi Agent. Plugin authors and tests can substitute a
@@ -135,6 +143,11 @@ export interface PlanEvent {
   subagent?: { sessionId: string; label: string; goal: string };
   /** Retry count delta (plan_step_retry). */
   retryDelta?: number;
+  /** DAG level for the step. The plan-runner computes the level
+   *  from `dependsOn` and threads it through every step event so
+   *  the TUI can render a "LvN" badge without re-deriving the
+   *  DAG from the limited PlanStepState. */
+  level?: number;
 }
 
 export type PlanEventHandler = (event: PlanEvent) => void;
@@ -336,6 +349,7 @@ export class PhusAgent implements PhusAgentFacade {
   readonly planner: Planner;
   readonly executor: Executor;
   readonly planRunner: PlanRunner;
+  private readonly turnReflector: TurnReflector;
   readonly learner: Learner;
   readonly evolutionEngine: EvolutionEngine;
   private currentSessionId: SessionId | undefined;
@@ -351,8 +365,91 @@ export class PhusAgent implements PhusAgentFacade {
   /** Captured at construction — plans still "running" with an older
    *  updatedAt belong to a dead process and are reconciled to paused. */
   private readonly processStartedAt = Date.now();
+  /** Single AbortController that the abort() entry-point flips. The
+   *  signal threads into every LLM call the runtime makes — both
+   *  the parent's piAgent.prompt and the sub-agent's corePort.complete.
+   *  When the TUI hits Ctrl+C, `piAgent.abort()` (which has its own
+   *  internal signal) fires AND we abort this controller, so the
+   *  in-flight LLM call resolves immediately instead of waiting
+   *  for the full model round-trip. The controller is re-armed
+   *  per turn so a later turn isn't poisoned by a stale abort. */
+  private abortController: AbortController = new AbortController();
 
-  constructor(deps: PhusAgentDeps) {
+  /** Build the Agent options dict used to construct BOTH the
+   *  parent's piAgent and any sub-agent (via `spawnSubAgent`).
+   *  Pure / no per-instance state — safe to share across the
+   *  sub-agent boundary. */
+  private buildAgentConfig(opts: {
+    systemPrompt: string;
+    tools: AgentTool[];
+    sessionId: SessionId;
+    model: Model<any>;
+  }): ConstructorParameters<typeof Agent>[0] {
+    return {
+      initialState: {
+        systemPrompt: opts.systemPrompt,
+        model: opts.model,
+        tools: opts.tools,
+        messages: [],
+      },
+      streamFn: async (model, context, options = {}) => {
+        const fuse = getLlmFuse();
+        fuse.check(`${model.provider}/${model.id}`);
+        const timeoutMs = loadConfig().robustness.llmTimeoutMs;
+        let response;
+        try {
+          response = await streamSimple(model, context, { ...options, timeoutMs });
+        } catch (e) {
+          fuse.report(e);
+          throw e;
+        }
+        const gen = (async function* () {
+          try {
+            for await (const event of response) yield event;
+          } catch (err) {
+            fuse.report(err);
+            throw err;
+          }
+        })();
+        try {
+          const skip = new Set(["result"]);
+          for (const k of Object.keys(response as any)) {
+            if (skip.has(k)) continue;
+            try {
+              const v = (response as any)[k];
+              if (typeof v === "function") {
+                (gen as any)[k] = v.bind(response);
+              } else if (v === null || (typeof v !== "object" && typeof v !== "undefined")) {
+                (gen as any)[k] = v;
+              }
+            } catch (_) {
+              // ignore
+            }
+          }
+        } catch (_) {
+          // ignore
+        }
+        (gen as any).result = async () => {
+          const r = (response as any).result;
+          if (typeof r === "function") return r.call(response);
+          return (response as any).extractResult
+            ? (response as any).extractResult()
+            : undefined;
+        };
+        return gen as any;
+      },
+      transformContext: async (messages) => this.injectContext(messages),
+      beforeToolCall: async (ctx, signal) => this.beforeToolCall(ctx, signal),
+      afterToolCall: async (ctx, signal) => this.afterToolCall(ctx, signal),
+      getApiKey: (provider) => resolveApiKey(provider),
+      onPayload: process.env.PHUS_DEBUG_WIRE
+        ? (kind, payload) => this.deps.logger.debug("wire.payload", { kind, hasPayload: !!payload })
+        : undefined,
+      toolExecution: this.profile.toolExecution ?? "sequential",
+    };
+  }
+
+  constructor(private deps: PhusAgentDeps) {
     this.tape = deps.tape;
     this.skills = deps.skills;
     this.memoryStore = deps.memoryStore;
@@ -380,65 +477,12 @@ export class PhusAgent implements PhusAgentFacade {
       ? this.modelForEndpoint(initialEp)
       : modelFromProfile(this.profile);
 
-    this.piAgent = new Agent({
-      initialState: {
-        systemPrompt: "phus:init",
-        model: initialModel,
-        tools,
-        messages: [],
-      },
-      // Runaway guards at the single LLM choke point: every request
-      // (main loop + retries) is fuse-checked before sending and carries
-      // an HTTP timeout; failures are classified back into the fuse so
-      // a 402 anywhere opens the billing fuse for everyone.
-      streamFn: async (model, context, options = {}) => {
-        const fuse = getLlmFuse();
-        fuse.check(`${model.provider}/${model.id}`);
-        const timeoutMs = loadConfig().robustness.llmTimeoutMs;
-        let response;
-        try {
-          response = await streamSimple(model, context, { ...options, timeoutMs });
-        } catch (e) {
-          fuse.report(e)
-          throw e
-        };
-        // Wrap the response async-iterator so we can report errors to the
-        // fuse while preserving any extra stream methods/properties the
-        // underlying streamSimple implementation exposes (e.g. isComplete,
-        // extractResult, queue, waiting).
-        const gen = (async function* () {
-          try {
-            for await (const event of response) yield event;
-          } catch (err) {
-            fuse.report(err);
-            throw err;
-          }
-        })();
-        // Copy any enumerable properties from the original response onto
-        // the generated async-iterator so the returned object satisfies
-        // AssistantMessageEventStream shape expected by pi-agent-core.
-        try {
-          for (const k of Object.keys(response as any)) {
-            try {
-              (gen as any)[k] = (response as any)[k];
-            } catch (_) {
-              // ignore property copy failures
-            }
-          }
-        } catch (_) {
-          // ignore
-        }
-        return gen as any;
-      },
-      transformContext: async (messages) => this.injectContext(messages),
-      beforeToolCall: async (ctx, signal) => this.beforeToolCall(ctx, signal),
-      afterToolCall: async (ctx, signal) => this.afterToolCall(ctx, signal),
-      getApiKey: (provider) => resolveApiKey(provider),
-      onPayload: process.env.PHUS_DEBUG_WIRE
-        ? (kind, payload) => deps.logger.debug("wire.payload", { kind, hasPayload: !!payload })
-        : undefined,
-      toolExecution: deps.profile.toolExecution ?? "sequential",
-    });
+    this.piAgent = new Agent(this.buildAgentConfig({
+      systemPrompt: "phus:init",
+      tools,
+      sessionId: asSessionId(this.currentSessionId ?? "tui:user"),
+      model: initialModel,
+    }));
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
     registerDefaultHooks(this.hooks, { tape: this.tape });
@@ -471,6 +515,7 @@ export class PhusAgent implements PhusAgentFacade {
       store: this.planStore,
       hooks: this.hooks,
     });
+    this.turnReflector = new TurnReflector(deps.reflectorConfig ?? DEFAULT_REFLECTOR);
 
     this.learner = new Learner({
       tape: this.tape,
@@ -699,9 +744,69 @@ export class PhusAgent implements PhusAgentFacade {
     );
   }
 
+  /** Run a one-shot LLM call on behalf of a sub-agent. The
+   *  implementation uses `corePort.complete` (not `piAgent.prompt`)
+   *  for two reasons:
+   *    1. The parent's piAgent is already busy with the user turn
+   *       that triggered this sub-task. Calling piAgent.prompt()
+   *       recursively is undefined behavior — pi-agent-core holds
+   *       a single `currentRun` slot and the second call would
+   *       either throw or silently corrupt the parent's state.
+   *    2. We need the AbortSignal plumbed through, which
+   *       corePort.complete forwards to `completeSimple`'s underlying
+   *       fetch. piAgent.prompt uses its own internal signal
+   *       that we can't directly control.
+   *  The returned `AgentMessage[]` is synthesized (a user turn
+   *  + the assistant reply) so the SubAgent extraction logic
+   *  (looking for the last assistant message) works unchanged. */
+  async runTurn(
+    sessionId: SessionId,
+    taskText: string,
+    signal?: AbortSignal,
+  ): Promise<AgentMessage[]> {
+    this.assertModelReady();
+    // Honor the caller's explicit signal, but always also tie the
+    // call to the runtime-level AbortController so a global
+    // `PhusAgent.abort()` reaches this in-flight call. The combined
+    // signal aborts on either source firing.
+    const effectiveSignal = signal
+      ? AbortSignal.any([signal, this.abortController.signal])
+      : this.abortController.signal;
+    const previousSessionId = this.currentSessionId;
+    this.currentSessionId = sessionId;
+    try {
+      const completion = await this.corePort.complete(
+        [{ role: "user", content: taskText }],
+        effectiveSignal,
+      );
+      const ts = Date.now();
+      return [
+        {
+          role: "user",
+          content: [{ type: "text", text: taskText }],
+          timestamp: ts,
+        } as AgentMessage,
+        {
+          role: "assistant",
+          content: [{ type: "text", text: completion.text }],
+          timestamp: ts + 1,
+        } as AgentMessage,
+      ];
+    } finally {
+      // Always restore — even on throw. The caller relies on the
+      // parent's session being unchanged when this returns.
+      this.currentSessionId = previousSessionId;
+    }
+  }
+
   /** Run one inbound envelope through the Bub hook chain. */
   async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
     this.assertModelReady();
+    // Re-arm the runtime-level AbortController so a Ctrl+C in the
+    // previous turn doesn't poison this turn. The previous turn's
+    // signal was already aborted by `abort()` (or the turn ran to
+    // completion, in which case the controller is still fresh).
+    this.rearmAbortController();
     const startedAt = Date.now();
     let sessionId: SessionId | undefined;
 
@@ -810,6 +915,33 @@ export class PhusAgent implements PhusAgentFacade {
         modelOutput = extractText(lastAssistant);
       }
 
+      // If the model produced no text (only tool calls, or a streaming
+      // provider that yielded zero text deltas), surface a visible
+      // placeholder rather than a blank assistant item. The TUI relies
+      // on `channel.send()` text to render a final response when
+      // streaming was empty, and an empty string there means the user
+      // sees nothing for the turn. The placeholder lets the channel
+      // adapter round-trip a system note.
+      const modelProducedText = modelOutput.trim().length > 0;
+      if (!modelProducedText) {
+        const toolCalls = this.collectToolCalls();
+        // Two distinct cases — text-shape matters for the user's
+        // mental model:
+        //   (a) model ran tool(s) but produced no final assistant text
+        //       → the run is "structurally complete", just terse
+        //   (b) model produced neither tool calls nor text
+        //       → almost certainly a provider-side streaming error
+        //         (e.g. "response.result is not a function" mid-stream)
+        const toolSummary = toolCalls.length
+          ? `${toolCalls.length} tool call${toolCalls.length === 1 ? "" : "s"}, no final text`
+          : "no final text and no tool calls (likely a streaming error)";
+        modelOutput = `*[${toolSummary}]*`;
+        logger.warn("turn.empty_model_output", {
+          sessionId,
+          toolCallCount: toolCalls.length,
+        });
+      }
+
       // 6. render_outbound (broadcast → merge)
       const outbounds = (await this.hooks.execute<Outbound[]>(
         "render_outbound",
@@ -866,6 +998,35 @@ export class PhusAgent implements PhusAgentFacade {
         durationMs: Date.now() - startedAt,
       };
       this.tape.append({ kind: "turn", turn });
+
+      // 10. Per-turn checkpoint — exactly one snapshot per turn, keyed
+      // by the turn's own id (not the last toolCallId). Replaces the
+      // per-tool-call checkpoint that previously lived in
+      // `afterToolCall` and inflated the tape.
+      try {
+        saveCheckpoint(
+          this.tape,
+          this.currentSessionId as SessionId,
+          this.piAgent.state.messages,
+          turn.id,
+        );
+      } catch (err: any) {
+        logger.warn("checkpoint.save_failed", { error: err.message });
+      }
+
+      // 11. Post-turn auto-reflection — if enabled, run the heuristic
+      // reflector over the just-committed turn and route the emitted
+      // actions through AutonomyGate. `yolo` and matching
+      // `autoApprove` rules commit them to phus.md; everything else
+      // is dropped (operators can re-run `self_reflect` to inspect
+      // what the reflector saw, or call `memory_write` manually).
+      // Runs only on the success path so a failed turn doesn't
+      // pollute memory with half-baked text.
+      try {
+        this.runPostTurnReflection(turn);
+      } catch (err: any) {
+        logger.warn("turn.reflect_failed", { error: err?.message ?? String(err) });
+      }
 
       logger.info("turn.completed", {
         sessionId,
@@ -1008,16 +1169,11 @@ export class PhusAgent implements PhusAgentFacade {
       isError: ctx.isError,
       ts: Date.now(),
     });
-    try {
-      saveCheckpoint(
-        this.tape,
-        this.currentSessionId,
-        this.piAgent.state.messages,
-        asTurnId(ctx.toolCall.id),
-      );
-    } catch (err: any) {
-      logger.warn("checkpoint.save_failed", { error: err.message });
-    }
+    // Checkpoint is saved ONCE per turn (in `turn()`), not on every tool
+    // call. Writing on every tool call inflated the tape with full
+    // message snapshots per tool — a single tool-using turn of 5 calls
+    // produced 5 duplicate checkpoint rows. The turn-level checkpoint
+    // covers crash recovery just as well and keeps tape size bounded.
     return undefined;
   }
 
@@ -1038,15 +1194,141 @@ export class PhusAgent implements PhusAgentFacade {
     return out;
   }
 
+  /** Heuristic post-turn reflection — no LLM call, no I/O outside
+   *  the memory store. Emitted actions go through the existing
+   *  AutonomyGate so `yolo` and matching `autoApprove` commit them
+   *  silently; everything else is logged to tape for /tape inspection
+   *  but not applied. */
+  private runPostTurnReflection(turn: Turn): void {
+    const { actions, reasons } = this.turnReflector.reflect(turn);
+    if (actions.length === 0) return;
+    let applied = 0;
+    let skipped = 0;
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i]!;
+      const reason = reasons[i] ?? "unknown";
+      const decision = this.autonomyGate.decide(action);
+      if (decision !== "auto") {
+        skipped++;
+        continue;
+      }
+      const result = this.memoryStore.apply(action);
+      if (!result.ok) {
+        logger.warn("turn.reflect_apply_failed", {
+          reason: result.reason,
+          source: reason,
+        });
+        continue;
+      }
+      applied++;
+      logger.info("turn.reflect_applied", {
+        section: "section" in action ? action.section : "(n/a)",
+        kind: action.kind,
+        source: reason,
+      });
+    }
+    if (applied > 0 || skipped > 0) {
+      logger.info("turn.reflect_summary", {
+        applied,
+        skipped,
+        total: actions.length,
+      });
+    }
+  }
+
   // ─── PhusAgentFacade ─────────────────────────────────────────
 
   abort(): void {
     this.piAgent.abort();
+    // Trip the runtime-level AbortController so the sub-agent's
+    // in-flight LLM call (running through corePort.complete, which
+    // does NOT use the piAgent's internal signal) also stops.
+    // Without this, a sub-agent generation keeps streaming for the
+    // full model round-trip after the user hit Ctrl+C — exactly the
+    // "5-10 seconds of phantom work after the status went paused"
+    // symptom.
+    if (!this.abortController.signal.aborted) {
+      this.abortController.abort();
+    }
     // A plan run (plan_create / /plan / active-plan resume) executes
     // outside the Pi loop — piAgent.abort() alone leaves it running and
     // the turn looks hung. Cooperative: stops after the current step.
     this.planRunner?.abort();
+    // Force-mark the active plan as paused right now so the TUI
+    // panel + /resume picker both see the new state immediately
+    // instead of waiting for the in-flight LLM call to settle.
+    this.pauseActivePlan();
     logger.info("turn.aborted");
+  }
+
+  /** Re-arm the abort controller for a fresh turn. Called at the
+   *  start of `turn()` so a fresh turn is never born aborted by a
+   *  previous turn's Ctrl+C. */
+  private rearmAbortController(): void {
+    this.abortController = new AbortController();
+  }
+
+  /** Public accessor for the runtime-level abort signal. The sub-agent
+   *  pipeline reads this and passes it to corePort.complete, which
+   *  forwards it to streamSimple. piAgent.abort() flips this same
+   *  controller (see `abort()`), so a single Ctrl+C reaches both
+   *  the parent's prompt and the sub-agent's LLM call. */
+  getAbortSignal(): AbortSignal {
+    return this.abortController.signal;
+  }
+
+  /** Tool list (external + meta). Exposed so the SubAgent can run
+   *  a fresh Agent with the same tool surface as the parent — its
+   *  tool calls don't pollute the parent's history because they go
+   *  to a separate Agent with a private `messages` array. */
+  getTools(): AgentTool[] {
+    return [...this.piAgent.state.tools];
+  }
+
+  /** The current model + system prompt + API key, exposed so the
+   *  SubAgent can construct a parallel Agent with the same setup. */
+  getModel(): unknown {
+    return this.piAgent.state.model;
+  }
+
+  getApiKey(provider: string): string | undefined {
+    return resolveApiKey(provider);
+  }
+
+  getSystemPrompt(): string {
+    return this.piAgent.state.systemPrompt;
+  }
+
+  getApiKeyEnv(): string | undefined {
+    return this.profile.apiKeyEnv;
+  }
+
+  /** Build a fully-isolated Agent for a sub-agent. The returned
+   *  Agent has:
+   *    - private `state.messages` (caller can re-init via
+   *      `state.messages = []` before each run)
+   *    - its own session id (sub-agent's view of "current session")
+   *    - the same model + tools + system-prompt + hooks as the parent
+   *  The sub-agent's tool calls + tool results stay in its own
+   *  messages array — they never bleed into the parent's history. */
+  spawnSubAgent(opts: {
+    systemPrompt: string;
+    tools: AgentTool[];
+    sessionId: SessionId;
+  }): Agent {
+    return new Agent(
+      this.buildAgentConfig({
+        systemPrompt: opts.systemPrompt,
+        tools: opts.tools,
+        sessionId: opts.sessionId,
+        // Snapshot the parent's currently-active model. The sub-agent
+        // is "frozen" on this model for the rest of its run — if
+        // the user does `/model` mid-plan, the next sub-agent will
+        // see the new model; in-flight ones keep going on the
+        // old one.
+        model: this.piAgent.state.model,
+      }),
+    );
   }
 
   async waitForIdle(): Promise<void> {

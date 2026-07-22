@@ -28,7 +28,13 @@ function renderInline(tokens: Token[] | undefined): string {
 				case "del":
 					return colorize(renderInline((t as Tokens.Del).tokens), "strikethrough");
 				case "codespan":
-					return colorize((t as Tokens.Codespan).text, "yellow", "black");
+					// Inline code: yellow background, BLACK foreground.
+					// The previous `yellow, black` (yellow fg + black bg)
+					// rendered the codespan bg as the same black as the
+					// terminal — on dark themes `startup.sh` literally
+					// disappeared. Inverse the pairing so the bg defines
+					// the highlight and stays visible on both themes.
+					return colorize((t as Tokens.Codespan).text, "black", "yellow");
 				case "link":
 					return colorize(renderInline((t as Tokens.Link).tokens), "cyan", "underline");
 				case "br":

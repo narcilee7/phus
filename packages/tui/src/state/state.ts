@@ -31,6 +31,11 @@ export interface ChatItem {
   model?: string;
   /** Token usage / cost for this assistant message, if reported. */
   usage?: UsageMetadata;
+  /** User-controlled collapse flag. Tool call / tool result / long
+   *  assistant / thinking render collapsed by default; Ctrl+O toggles
+   *  the focused item. Collapsed items show a one-line summary and a
+   *  hint, expanded items show full content. */
+  collapsed?: boolean;
 }
 
 export interface ScrollState {
@@ -63,6 +68,10 @@ export interface PlanStepState {
   error?: string;
   /** Number of retries attempted for this step. */
   retryCount?: number;
+  /** DAG level this step runs at. 0 = no deps, N = depends on
+   *  steps at level < N. Steps in the same level run in parallel.
+   *  Surfaced in the plan panel as a "LvN" badge. */
+  level?: number;
   /** Subagent session id responsible for this step. */
   subagentSessionId?: string;
   /** Short label for the subagent (e.g. "explore", "verify"). */
@@ -112,6 +121,10 @@ export interface AppState {
    *  consume_quit_request handler runs useEffect → exit() so the
    *  unmount path runs cleanly outside the async submit chain. */
   quitRequested?: boolean;
+  /** The chat item id the user is currently pointing at. Used by Ctrl+O
+   *  to know which item to toggle. Set by the ChatViewport on scroll /
+   *  focus, cleared on /clear. */
+  focusedItemId?: string;
 }
 
 export const initialState: AppState = {
@@ -156,7 +169,11 @@ export type AppAction =
   | { type: "consume_sidebar_request" }
   | { type: "clear_plan" }
   | { type: "request_quit" }
-  | { type: "consume_quit_request" };
+  | { type: "consume_quit_request" }
+  | { type: "set_focused_item"; itemId: string | undefined }
+  | { type: "toggle_collapsed"; itemId?: string }
+  | { type: "toggle_collapsed_visible"; itemIds: string[] }
+  | { type: "set_collapsed"; itemId: string; collapsed: boolean };
 
 /** Truncate a string for compact display. */
 export function truncate(s: string, n: number): string {
@@ -236,6 +253,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ),
         });
       }
+      // Default to collapsed — the pill shows the tool name + args
+      // summary; full result/args render only after the user expands
+      // with Ctrl+O. Reduces visual noise from large tool outputs
+      // (curl JSON dumps, multi-page bash output, etc.).
       return withScrollOnNewContent({
         ...state,
         items: [
@@ -247,6 +268,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             toolName: action.toolName,
             toolCallId: action.toolCallId,
             args: action.args,
+            collapsed: false, // expanded while running
           },
         ],
       });
@@ -263,6 +285,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         result: action.result,
         isError: action.isError,
         durationMs: Date.now() - call.ts,
+        collapsed: true, // collapse after done
       };
       return withScrollOnNewContent({ ...state, items: updated });
     }
@@ -420,6 +443,63 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const next: AppState = { ...state };
       delete next.quitRequested;
       return next;
+    }
+    case "set_focused_item":
+      return { ...state, focusedItemId: action.itemId };
+    case "toggle_collapsed": {
+      // Single-item toggle. The default `itemId === undefined` path
+      // was: "focused item, falling back to last collapsible item" —
+      // in practice that fell back too easily (a focusedItemId was
+      // never set anywhere, so Ctrl+O always toggled the most recent
+      // item, even when the user was scrolled up looking at an older
+      // tool call). Now the App.ts handler does per-viewport mass
+      // toggling, so this reducer is the per-item escape hatch.
+      const targetId = action.itemId;
+      if (!targetId) return state;
+      return {
+        ...state,
+        items: state.items.map((it) =>
+          it.id === targetId
+            ? {
+                ...it,
+                collapsed:
+                  it.collapsed === undefined ? true : !it.collapsed,
+              }
+            : it,
+        ),
+      };
+    }
+    case "toggle_collapsed_visible": {
+      // Per-viewport mass toggle: every collapsible item whose
+      // `collapsed` flag is in the "interesting" state flips together.
+      // The set of item ids is supplied by the caller (App.ts) so the
+      // reducer stays pure and doesn't need to know the viewport
+      // height math.
+      const ids = new Set(action.itemIds);
+      if (ids.size === 0) return state;
+      // "Any collapsed → expand all" / "all expanded → collapse all".
+      // Skip items with `collapsed === undefined` (user messages,
+      // system notices) — those don't carry expansion state.
+      const anyCollapsed = state.items.some(
+        (it) => ids.has(it.id) && it.collapsed === true,
+      );
+      const nextCollapsed = !anyCollapsed;
+      return {
+        ...state,
+        items: state.items.map((it) =>
+          ids.has(it.id) && it.kind !== "user" && it.kind !== "system"
+            ? { ...it, collapsed: nextCollapsed }
+            : it,
+        ),
+      };
+    }
+    case "set_collapsed": {
+      return {
+        ...state,
+        items: state.items.map((it) =>
+          it.id === action.itemId ? { ...it, collapsed: action.collapsed } : it,
+        ),
+      };
     }
   }
 }

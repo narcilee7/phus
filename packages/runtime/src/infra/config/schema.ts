@@ -42,10 +42,44 @@ export interface MemoryConfig {
   logToTape: boolean;
 }
 
+/**
+ * Reflection config — the post-turn `TurnReflector` consults these
+ * fields. Off by default. Operators opt in via:
+ *
+ *   memory:
+ *     autoReflect: true
+ *     reflectMinTurnLength: 240
+ *     reflectMaxPerTurn: 2
+ */
+export interface ReflectConfig {
+  autoReflect: boolean;
+  reflectMinTurnLength: number;
+  reflectMaxPerTurn: number;
+}
+
 /** Resolved logger config. */
 export interface LogConfig {
   file: string;
   level: LogLevelLiteral;
+}
+
+/**
+ * Resolved safety policy config. Mirrors the `safety:` section of
+ * phus.config.yaml. Currently only the `file_write` allowlist is
+ * exposed — bash blocklist patterns stay hardcoded in
+ * `infra/safety.ts` because tightening/loosening them is a security
+ * primitive that should go through code review.
+ *
+ * `fileWriteRoots` is a list of paths (absolute or cwd-relative). When
+ * the agent calls `file_write`, the absolute target must resolve under
+ * one of these roots or the call is rejected by `before_tool_call`
+ * before it ever reaches the user-facing permission gate. Default =
+ * `["./"]` (the workspace root) so a typical session can edit files
+ * locally; tighten to `./skills,./.phus,./tmp` etc. for stricter
+ * deployments.
+ */
+export interface SafetyConfig {
+  fileWriteRoots: string[];
 }
 
 /**
@@ -101,6 +135,10 @@ export interface ResolvedConfig {
   schedules: Schedule[];
   /** Project memory autonomy + storage config. */
   memory: MemoryConfig;
+  /** Auto-reflection knobs (per-turn `memory_write` proposals). */
+  reflect: ReflectConfig;
+  /** Safety policy knobs the operator can tighten/loosen at runtime. */
+  safety: SafetyConfig;
   /** LLM runaway guards: timeouts, call budgets, billing fuse. */
   robustness: RobustnessConfig;
   /** Active profile name (env > YAML > default). */

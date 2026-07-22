@@ -30,18 +30,28 @@ describe("SubAgent timeout", () => {
   });
 
   function stuckAgent(): SubAgentAgentLike & { aborted: boolean } {
-    return {
-      aborted: false,
-      steer() {},
-      waitForIdle: () => new Promise<void>(() => {}), // never idles
-      getCurrentSessionId: () => asSessionId("parent"),
-      setNextSessionId() {},
-      subscribeToAgentEvents: () => () => {},
-      abort() { this.aborted = true; },
-    };
-  }
+  // Mock a parent that spawns a sibling Agent whose prompt()
+  // never settles. The timeout race should fire and abort us.
+  return {
+    aborted: false,
+    getSkillsPrompt: () => "",
+    getTools: () => [],
+    getAbortSignal: () => new AbortController().signal,
+    spawnSubAgent: () => {
+      const sibling: any = {
+        state: { messages: [] },
+        sessionId: "sub",
+        prompt: () => new Promise(() => {}), // never resolves
+        continue: () => new Promise(() => {}), // never resolves
+        abort: () => {},
+      };
+      return sibling;
+    },
+    abort() { this.aborted = true; },
+  } as unknown as SubAgentAgentLike & { aborted: boolean };
+}
 
-  it("aborts and throws SubAgentTimeoutError when the loop never idles", async () => {
+  it("aborts and throws SubAgentTimeoutError when the sibling prompt never resolves", async () => {
     const agent = stuckAgent();
     const sub = new SubAgent({ agent });
     await expect(

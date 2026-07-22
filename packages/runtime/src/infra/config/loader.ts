@@ -30,6 +30,7 @@ import type {
   PathsConfig,
   PluginSpec,
   ResolvedConfig,
+  SafetyConfig,
 } from "./schema.js";
 import { ENV_OVERRIDE_VARS } from "./schema.js";
 import type { ProviderConfig, ProviderProfile, MeshSpec } from "../profile.js";
@@ -144,6 +145,14 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   // so existing users get an explicit-permission workflow without changes.
   const memory = parseMemoryConfig(interpolated, warn);
 
+  // Safety policy (file_write allowlist etc.) — defaults to ["./"] so
+  // a local session can edit files in cwd; operators tighten via YAML.
+  const safety = parseSafetyConfig(interpolated, warn);
+
+  // Post-turn auto-reflection. Lives in the `memory:` block alongside
+  // the autonomy config. Off by default — operators opt in.
+  const reflect = parseReflectConfig(memory, interpolated, warn);
+
   // LLM runaway guards (timeouts / budgets / billing fuse) — every key
   // optional, conservative defaults from DEFAULT_ROBUSTNESS.
   const robustness = parseRobustness(interpolated);
@@ -206,6 +215,8 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     channels,
     schedules,
     memory,
+    reflect,
+    safety,
     robustness,
     profileName,
     raw: interpolated,
@@ -588,6 +599,73 @@ function parseMemoryConfig(
   const logToTape = obj.logToTape !== false; // default true
 
   return { mode, autoApprove, requireApproval, logToTape };
+}
+
+/** Parse the reflection knobs out of the `memory:` block. Kept
+ *  inside the memory section so the YAML surface stays small (a
+ *  `memory:` tree holds autonomy + reflection, side-by-side). */
+function parseReflectConfig(
+  memory: MemoryConfig,
+  interpolated: unknown,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+): import("./schema.js").ReflectConfig {
+  // The `memory:` block is the source — fall back to the empty record
+  // if the loader hasn't seen one yet (which can't happen at runtime
+  // but keeps the helper robust in tests).
+  void memory;
+  const obj = ((interpolated as { memory?: unknown } | undefined)?.memory ??
+    {}) as Record<string, unknown>;
+  const bool = (key: string, def: boolean): boolean => {
+    const v = obj[key];
+    if (typeof v === "boolean") return v;
+    if (v !== undefined) {
+      warn("config.memory.invalid_reflect_bool", { key, value: String(v), using: def });
+    }
+    return def;
+  };
+  const num = (key: string, def: number): number => {
+    const v = obj[key];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) return Math.floor(v);
+    if (v !== undefined) {
+      warn("config.memory.invalid_reflect_num", { key, value: String(v), using: def });
+    }
+    return def;
+  };
+  return {
+    autoReflect: bool("autoReflect", false),
+    reflectMinTurnLength: num("reflectMinTurnLength", 240),
+    reflectMaxPerTurn: num("reflectMaxPerTurn", 2),
+  };
+}
+
+/** Parse the `safety:` section. Currently exposes the `file_write`
+ *  allowlist (relative paths resolved against cwd at evaluation time,
+ *  not at parse time — keep raw strings here so tests can assert). */
+function parseSafetyConfig(
+  interpolated: unknown,
+  warn: (event: string, fields: Record<string, unknown>) => void,
+): SafetyConfig {
+  const raw = (interpolated as { safety?: unknown } | undefined)?.safety;
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const rootsRaw = obj.fileWriteRoots;
+  if (rootsRaw === undefined) {
+    return { fileWriteRoots: ["./"] };
+  }
+  if (!Array.isArray(rootsRaw)) {
+    warn("config.safety.invalid_fileWriteRoots", {
+      value: String(rootsRaw),
+      using: '["./"]',
+    });
+    return { fileWriteRoots: ["./"] };
+  }
+  const roots = rootsRaw.filter((x): x is string => typeof x === "string");
+  if (roots.length === 0) {
+    warn("config.safety.empty_fileWriteRoots", {
+      using: '["./"]',
+    });
+    return { fileWriteRoots: ["./"] };
+  }
+  return { fileWriteRoots: roots };
 }
 
 function parsePluginSpec(raw: unknown): PluginSpec[] {

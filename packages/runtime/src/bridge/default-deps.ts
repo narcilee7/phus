@@ -8,6 +8,7 @@ import { Tape } from "@phus/core/session/tape.js";
 import { SkillRegistry } from "../infra/skills/registry.js";
 import { defaultPolicy } from "../infra/safety.js";
 import { resolveProfile, type ProviderProfile } from "../infra/profile.js";
+import { DEFAULT_REFLECTOR, type ReflectorConfig } from "../infra/memory/reflector.js";
 import {
   type EndpointSpec,
   type MeshPolicy,
@@ -44,7 +45,16 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
   const skills = new SkillRegistry(config.paths.skillsDir);
   const memoryStore = new MemoryStore(config.paths.memoryFile);
   const autonomyGate = AutonomyGate.fromConfig(config.memory);
-  const policy = defaultPolicy();
+  const policy = defaultPolicy(process.cwd(), {
+    fileWriteRoots: config.safety?.fileWriteRoots,
+  });
+  const reflectorConfig: ReflectorConfig = {
+    enabled: config.reflect?.autoReflect ?? DEFAULT_REFLECTOR.enabled,
+    minTurnLength:
+      config.reflect?.reflectMinTurnLength ?? DEFAULT_REFLECTOR.minTurnLength,
+    maxMemoriesPerTurn:
+      config.reflect?.reflectMaxPerTurn ?? DEFAULT_REFLECTOR.maxMemoriesPerTurn,
+  };
   const hooks = new HookRegistry({ isolateErrors: true });
 
   const endpoints: EndpointSpec[] = profile.mesh && profile.mesh.length > 0
@@ -100,5 +110,6 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
     profile,
     policy,
     planStore,
+    reflectorConfig,
   };
 }

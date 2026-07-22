@@ -58,6 +58,18 @@ export class ToolCallCard implements Component {
 			? `${pill}  ${colorize(argsSummary, "dim")}`
 			: pill;
 
+		// Collapsed: header line + a one-line "Ctrl+O to expand" hint.
+		// Tool call args (especially bash commands) and large tool
+		// results (curl JSON, multi-page output) easily span dozens of
+		// lines and bury the next user prompt — collapsing by default
+		// keeps the chat scrollable.
+		if (item.collapsed) {
+			const hint = item.result !== undefined
+				? colorize("…  Ctrl+O to expand result", "dim")
+				: colorize("…  running", "dim");
+			return [padRight(`${header}  ${hint}`, width)];
+		}
+
 		const out: string[] = [padRight(header, width)];
 
 		if (item.toolName === "file_write" && snapshot) {
@@ -69,6 +81,16 @@ export class ToolCallCard implements Component {
 				out.push(...new DiffView({ oldText: snapshot.content, newText: newContent }).render(width));
 			}
 			return out;
+		}
+
+		// Show full args when expanded — args are usually a short JSON
+		// blob but the user might want to inspect what was sent.
+		if (item.args !== undefined && Object.keys(item.args as object).length > 0) {
+			const argsJson = JSON.stringify(item.args, null, 2);
+			out.push(colorize("args:", "dim"));
+			for (const line of argsJson.split("\n")) {
+				out.push(padRight(colorize(`  ${line}`, "dim"), width));
+			}
 		}
 
 		if (item.result !== undefined) {

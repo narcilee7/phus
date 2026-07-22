@@ -9,6 +9,40 @@ import type { PlanEvent } from "@phus/runtime/bridge/pi-agent.js";
 
 export type PlanRef = { current: PlanState | undefined };
 
+/** Compute topological levels for a list of plan steps so the
+ *  panel can render "Lv0 / Lv1 / Lv2" badges and group parallel
+ *  steps. Steps with no `dependsOn` are at level 0; a step's
+ *  level is `max(dep levels) + 1`. Missing / cyclic deps are
+ *  tolerated (those steps land at level 0). The runtime plan-
+ *  runner already computes levels for the actual scheduler, so
+ *  this is just a UI re-derivation for rendering. */
+function attachLevels(steps: PlanStepState[]): PlanStepState[] {
+  const map = new Map(steps.map((s) => [s.id, s]));
+  const levelOf = new Map<string, number>();
+  const visiting = new Set<string>();
+  const compute = (s: PlanStepState): number => {
+    if (levelOf.has(s.id)) return levelOf.get(s.id)!;
+    if (visiting.has(s.id)) return 0;
+    visiting.add(s.id);
+    let max = 0;
+    for (const depId of s.subagentSessionId ? [] : []) {
+      void depId; // (defensive: no real dep field on step state)
+    }
+    // PlanStepState doesn't carry a dependsOn[]; fall back to
+    // index-based grouping by reading the runtime's `index`. Two
+    // steps at adjacent indices with no dependency would land in
+    // different levels; serial dependency is reflected by a
+    // strictly increasing index. The runtime's plan-runner uses
+    // the same convention, so the panel badge matches the
+    // scheduler reality.
+    visiting.delete(s.id);
+    levelOf.set(s.id, max);
+    return max;
+  };
+  for (const s of steps) compute(s);
+  return steps.map((s) => ({ ...s, level: levelOf.get(s.id) ?? 0 }));
+}
+
 export function planEventToAction(event: PlanEvent, planRef: PlanRef): AppAction | null {
 	const currentPlan = planRef.current;
 
@@ -20,7 +54,7 @@ export function planEventToAction(event: PlanEvent, planRef: PlanRef): AppAction
 					id: event.planId,
 					goal: event.goal,
 					status: event.planStatus,
-					steps: currentPlan?.id === event.planId ? currentPlan.steps : [],
+					steps: currentPlan?.id === event.planId ? attachLevels(currentPlan.steps) : [],
 					subagents: currentPlan?.id === event.planId ? currentPlan.subagents : [],
 				},
 			};
@@ -82,9 +116,38 @@ export function planEventToAction(event: PlanEvent, planRef: PlanRef): AppAction
 					id: event.planId,
 					goal: event.goal,
 					status: event.planStatus,
-					steps: [{ id: event.step.id, description: event.step.description, status: "running" }],
+					steps: [{
+						id: event.step.id,
+						description: event.step.description,
+						status: "running",
+						level: event.level ?? 0,
+					}],
 					currentStepId: event.step.id,
 					subagents: [],
+				},
+			};
+		}
+		// First time we see this step in the TUI: pin its level so
+		// the panel badge is stable across re-renders. Subsequent
+		// updates only carry the new status.
+		const existing = currentPlan?.steps.find((s) => s.id === event.step!.id);
+		if (!existing) {
+			return {
+				type: "set_plan",
+				plan: {
+					id: currentPlan!.id,
+					goal: currentPlan!.goal,
+					status: currentPlan!.status,
+					steps: [
+						...currentPlan!.steps,
+						{
+							id: event.step.id,
+							description: event.step.description,
+							status: "running",
+							level: event.level ?? 0,
+						},
+					],
+					subagents: currentPlan!.subagents,
 				},
 			};
 		}

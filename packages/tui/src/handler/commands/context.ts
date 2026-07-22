@@ -16,6 +16,14 @@ export interface CommandContext {
   agent: PhusAgent;
   state: AppState;
   dispatch: CommandDispatch;
+  /** Optional callbacks that reach back into the App's UI surface.
+   *  Slash command handlers should not need to know about App directly
+   *  — when a command needs to pop a modal (resume prompt, plan
+   *  picker, etc.) it calls into the supplied callback. App wires
+   *  these in `submitUserInput`. */
+  ui?: {
+    openResumePrompt?: () => void;
+  };
 }
 
 /** A `Partial<Record>` of handlers — cluster files `register()` returns

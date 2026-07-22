@@ -39,15 +39,27 @@ describe("tuiChannel", () => {
     expect(dispatched).toEqual([{ type: "finalize_streaming" }]);
   });
 
-  it("send(text) only finalizes when a finalized assistant already exists", async () => {
+  it("send(text) appends content when only a finalized (non-streaming) assistant exists from a prior turn", async () => {
     const dispatched: AppAction[] = [];
     const items: ChatItem[] = [
-      { id: "1", kind: "assistant", ts: 1, text: "hello", isStreaming: false },
+      { id: "1", kind: "assistant", ts: 1, text: "prior turn reply", isStreaming: false },
     ];
     const ch = tuiChannel((a) => dispatched.push(a), () => ({ items }));
     await ch.send([{ type: "text", content: "hello", to: "u", channel: "tui" } as any]);
 
-    expect(dispatched).toEqual([{ type: "finalize_streaming" }]);
+    // Bug-fix regression: previously the channel suppressed the new
+    // content because it tested `items.some(kind === "assistant")`,
+    // which matched every historical assistant item from prior turns.
+    // That made any multi-turn reply where streaming didn't fire (e.g.
+    // model produced only tool calls, or the provider yielded zero
+    // text deltas) appear to vanish from the TUI. The channel now only
+    // treats a STREAMING assistant item as evidence that the current
+    // turn already rendered, so a finalized item from a previous turn
+    // does not suppress the new content.
+    expect(dispatched).toEqual([
+      { type: "append_delta", delta: "hello" },
+      { type: "finalize_streaming" },
+    ]);
   });
 
   it("skips non-text outbounds", async () => {
@@ -76,12 +88,18 @@ describe("tuiChannel", () => {
     ]);
   });
 
-  it("skips text outbounds with empty content", async () => {
+  it("still finalizes streaming when text outbounds have empty content", async () => {
     const dispatched: AppAction[] = [];
-    const items: ChatItem[] = [];
+    const items: ChatItem[] = [
+      // Pre-existing streaming item from a half-completed turn that
+      // somehow didn't get finalized. The new channel.send behavior is
+      // to always emit a finalize_streaming so stale flags clear,
+      // regardless of content presence.
+      { id: "1", kind: "assistant", ts: 1, text: "half", isStreaming: true },
+    ];
     const ch = tuiChannel((a) => dispatched.push(a), () => ({ items }));
     await ch.send([{ type: "text", content: "", to: "u", channel: "tui" } as any]);
-    expect(dispatched).toEqual([]);
+    expect(dispatched).toEqual([{ type: "finalize_streaming" }]);
   });
 
   it("calls dispatch 2N times for N text outbounds without streaming", async () => {

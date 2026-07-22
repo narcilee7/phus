@@ -23,13 +23,6 @@ export interface PolicyRule {
   evaluate: (args: Record<string, unknown>, cwd: string) => PolicyDecision;
 }
 
-const DEFAULT_FILE_WRITE_ROOTS = [
-  "./skills",
-  "./.phus",
-  "./tmp",
-  "./out",
-];
-
 const DEFAULT_BASH_BLOCKLIST: RegExp[] = [
   // Destructive recursive delete
   /\brm\s+(-[a-z]*f[a-z]*\s+)?-[a-z]*r[a-z]*\s+\/\s*$/i,
@@ -47,10 +40,41 @@ const DEFAULT_BASH_BLOCKLIST: RegExp[] = [
   /\bmkfs(\.[a-z0-9]+)?\s+\/dev\//,
 ];
 
+/**
+ * Default safety config: file writes allowed anywhere in the workspace.
+ * Operators tighten this via `phus.config.yaml`:
+ *
+ *   safety:
+ *     fileWriteRoots:
+ *       - "./skills"
+ *       - "./.phus"
+ *       - "./tmp"
+ *       - "./out"
+ *
+ * The `./` default keeps the typical local-edit flow unblocked while
+ * still routing every `file_write` through the per-call permission
+ * gate (`toolPermissionHandler`), which is where the operator sees
+ * the diff and approves/denies. Setting an explicit, narrower list is
+ * the right move for shared / multi-tenant deployments.
+ */
+export const DEFAULT_FILE_WRITE_ROOTS: readonly string[] = ["./"];
+
+export interface SafetyOptions {
+  /** Override the default `file_write` allowlist. Absolute paths and
+   *  cwd-relative paths are both accepted. */
+  fileWriteRoots?: string[];
+}
+
 /** Build the default policy rule set. */
-export function defaultPolicy(cwd: string = process.cwd()): PolicyRule[] {
+export function defaultPolicy(
+  cwd: string = process.cwd(),
+  opts: SafetyOptions = {},
+): PolicyRule[] {
+  const roots = (opts.fileWriteRoots && opts.fileWriteRoots.length > 0)
+    ? opts.fileWriteRoots
+    : [...DEFAULT_FILE_WRITE_ROOTS];
   return [
-    fileWriteAllowlist(DEFAULT_FILE_WRITE_ROOTS, cwd),
+    fileWriteAllowlist(roots, cwd),
     bashBlocklist(DEFAULT_BASH_BLOCKLIST),
   ];
 }
