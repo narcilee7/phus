@@ -46,6 +46,13 @@ export interface Plan {
 	steps: PlanStep[];
 	createdAt: number;
 	updatedAt: number;
+	/** Free-form failure reason attached when a plan lands in a
+	 *  terminal "failed" / "paused" state — most useful for replan-
+	 *  exhausted plans so the operator can read why the planner
+	 *  couldn't recover. Set by plan-runner when MAX_REPLAN_ATTEMPTS
+	 *  is reached. Optional because the field is new and older plan
+	 *  rows won't have it. */
+	error?: string;
 }
 
 export interface ValidationMetrics {

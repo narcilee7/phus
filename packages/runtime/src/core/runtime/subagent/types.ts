@@ -7,6 +7,11 @@ export interface SubAgentAgentLike {
   getCurrentSessionId(): SessionId | undefined;
   setNextSessionId(id: SessionId): void;
   subscribeToAgentEvents(handler: (event: AgentEvent) => void): () => void;
+  /** Run a one-shot prompt on a specific session id and resolve
+   *  with the final agent messages. The sub-agent uses this instead
+   *  of `steer()` so the sub-task's tool calls + tool results don't
+   *  leak into the parent's message history. */
+  runTurn(sessionId: SessionId, taskText: string): Promise<AgentMessage[]>;
   /** Abort the in-flight run (used by the sub-agent timeout). Optional
    *  so lighter test doubles still satisfy the interface. */
   abort?(): void;

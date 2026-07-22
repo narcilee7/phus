@@ -148,11 +148,36 @@ describe("PlanRunner", () => {
     expect(updated.status).toBe("completed");
   });
 
-  it("pauses a plan when replanning is required", async () => {
+  it("replans when a step throws ReplanNeededError", async () => {
     const store = new PlanStore(":memory:");
     const hooks = new HookRegistry({ isolateErrors: true });
+    // The replan should produce a fresh plan with a different step
+    // list — the new step list is what gets executed next. The mock
+    // here returns a single new step that proceeds cleanly.
     const planner = {
-      createPlan: vi.fn(),
+      createPlan: vi.fn(async (_goal, _sessionId, context) => {
+        // Verify the planner received the prior-attempt context
+        // (otherwise replan is a no-op).
+        expect(context).toContain("Replan attempt 1 of 2");
+        return {
+          id: "plan-1",
+          sessionId: asSessionId("session-1"),
+          goal: "goal",
+          status: "pending" as const,
+          steps: [
+            {
+              id: "b-prime",
+              index: 0,
+              description: "do b differently",
+              phase: "edit" as const,
+              status: "pending" as const,
+              retryCount: 0,
+            },
+          ],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+      }),
     } as unknown as Planner;
     const calls: string[] = [];
     const executor = {
@@ -181,11 +206,13 @@ describe("PlanRunner", () => {
 
     const updated = await runner.runPlan(plan);
 
-    expect(calls).toEqual(["b"]);
-    expect(updated.steps.find((step) => step.id === "b")?.status).toBe("failed");
-    expect(updated.steps.find((step) => step.id === "b")?.error).toContain("need a new plan");
-    expect(updated.steps.find((step) => step.id === "c")?.status).toBe("pending");
-    expect(updated.status).toBe("paused");
+    // Replan replaced the old step list with a new one (just
+    // "b-prime"). The replan path ran the executor twice — once on
+    // the original "b" (which threw ReplanNeededError), once on
+    // "b-prime" (which succeeded).
+    expect(calls).toEqual(["b", "b-prime"]);
+    expect(updated.steps.find((step) => step.id === "b-prime")?.status).toBe("completed");
+    expect(updated.status).toBe("completed");
   });
 
   it("resumePlan loads from store and skips already completed steps", async () => {

@@ -46,35 +46,62 @@ describe("Verifier", () => {
     expect(result.reason).toContain("boom");
   });
 
-  it("uses model verdict when available", async () => {
+  it("uses static substring match when expectedOutput is present", async () => {
+    const verifier = new Verifier();
+    const result = await verifier.verify(makeStep("expected"), "actual contains expected substring");
+    expect(result.ok).toBe(true);
+    expect(result.action).toBe("proceed");
+    expect(result.reason).toMatch(/substring/);
+  });
+
+  it("aborts after retryCount >= 2 even on falsy result (no infinite loops)", async () => {
+    const verifier = new Verifier();
+    const step = makeStep("expected");
+    step.retryCount = 2;
+    const result = await verifier.verify(step, "");
+    expect(result.action).toBe("abort");
+  });
+
+  it("opt-in LLM verify via requireLLMVerify flag (verifyStrict)", async () => {
+    // With requireLLMVerify: true the port is consulted via
+    // verifyStrict() and a {ok: false, action: "replan"} response
+    // routes to "replan". The plain verify() entry stays on the
+    // static path — that gate is what the executor's `wantLlm`
+    // check sets per-call.
     const verifier = new Verifier({
-      port: makePort(JSON.stringify({ ok: true, confidence: 0.9, reason: "matches", action: "proceed" })),
+      requireLLMVerify: true,
+      port: makePort(JSON.stringify({ ok: false, confidence: 0.9, reason: "shape mismatch", action: "replan" })),
     });
-    const result = await verifier.verify(makeStep("expected"), "actual");
-    expect(result.ok).toBe(true);
-    expect(result.confidence).toBe(0.9);
-    expect(result.action).toBe("proceed");
+    const result = await verifier.verifyStrict(makeStep("expected"), "actual");
+    expect(result.ok).toBe(false);
+    expect(result.action).toBe("replan");
   });
 
-  it("falls back to lightweight when model output is malformed", async () => {
-    const verifier = new Verifier({ port: makePort("bad json") });
-    const result = await verifier.verify(makeStep("expected"), "actual");
-    expect(result.ok).toBe(true);
-    expect(result.action).toBe("proceed");
-  });
-
-  it("falls back to lightweight when expectedOutput is empty", async () => {
+  it("LLM verify falls back to static when expectedOutput is empty", async () => {
     const verifier = new Verifier({
-      port: makePort(JSON.stringify({ ok: false, action: "abort" })),
+      requireLLMVerify: true,
+      // The LLM response is irrelevant — empty expectedOutput means
+      // the static path takes over regardless of the model verdict.
+      port: makePort(JSON.stringify({ ok: false, confidence: 0.9, reason: "abort", action: "abort" })),
     });
     const result = await verifier.verify(makeStep(), "actual");
-    expect(result.ok).toBe(true);
     expect(result.action).toBe("proceed");
   });
 
-  it("includes phase and repair context in the verification prompt", async () => {
+  it("LLM verify falls back to static when model output is malformed", async () => {
+    const verifier = new Verifier({
+      requireLLMVerify: true,
+      port: makePort("not json at all"),
+    });
+    const result = await verifier.verify(makeStep("expected"), "actual contains expected");
+    // Static fallback sees the substring match.
+    expect(result.action).toBe("proceed");
+  });
+
+  it("LLM verify includes phase and repair context in the prompt (verifyStrict)", async () => {
     let promptText = "";
     const verifier = new Verifier({
+      requireLLMVerify: true,
       port: {
         complete: async (messages) => {
           promptText = extractText(messages);
@@ -87,7 +114,7 @@ describe("Verifier", () => {
     step.phase = "repair";
     step.repairContext = "previous failure: tests broke";
 
-    await verifier.verify(step, "actual");
+    await verifier.verifyStrict(step, "actual");
 
     expect(promptText).toContain("Phase: repair");
     expect(promptText).toContain("previous failure: tests broke");

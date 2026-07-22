@@ -748,6 +748,33 @@ export class PhusAgent implements PhusAgentFacade {
     );
   }
 
+  /** Run a one-shot prompt on a specific sub-session id and return
+   *  the final agent messages. Used by the sub-agent dispatcher so
+   *  the sub-task's tool calls + results stay isolated to the
+   *  sub-session and don't leak into the parent's message history.
+   *  Returns `AgentMessage[]` (the raw Pi messages) — caller
+   *  extracts the last assistant text. */
+  async runTurn(sessionId: SessionId, taskText: string): Promise<AgentMessage[]> {
+    this.assertModelReady();
+    const previousSessionId = this.currentSessionId;
+    this.currentSessionId = sessionId;
+    this.piAgent.sessionId = sessionId;
+    this.piAgent.state.messages = [];
+    try {
+      await this.piAgent.prompt({
+        role: "user",
+        content: [{ type: "text", text: taskText }],
+        timestamp: Date.now(),
+      });
+    } finally {
+      // Always restore — even on throw. The caller relies on the
+      // parent's session being unchanged when this returns.
+      this.currentSessionId = previousSessionId;
+      this.piAgent.sessionId = previousSessionId as SessionId;
+    }
+    return [...this.piAgent.state.messages];
+  }
+
   /** Run one inbound envelope through the Bub hook chain. */
   async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
     this.assertModelReady();

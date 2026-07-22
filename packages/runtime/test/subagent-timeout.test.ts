@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { SubAgent, SubAgentTimeoutError } from "../src/core/runtime/subagent/index.js";
 import type { SubAgentAgentLike } from "../src/core/runtime/subagent/types.js";
 import { resetConfigCache } from "../src/infra/config/index.js";
@@ -37,11 +38,14 @@ describe("SubAgent timeout", () => {
       getCurrentSessionId: () => asSessionId("parent"),
       setNextSessionId() {},
       subscribeToAgentEvents: () => () => {},
+      // runTurn that never settles — the timeout race should fire
+      // and abort us.
+      runTurn: () => new Promise<AgentMessage[]>(() => {}),
       abort() { this.aborted = true; },
     };
   }
 
-  it("aborts and throws SubAgentTimeoutError when the loop never idles", async () => {
+  it("aborts and throws SubAgentTimeoutError when runTurn never resolves", async () => {
     const agent = stuckAgent();
     const sub = new SubAgent({ agent });
     await expect(

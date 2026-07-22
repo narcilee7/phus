@@ -199,6 +199,18 @@ export class App extends Container {
 			this.captureFileSnapshot(event);
 			const action = eventToAction(event as never);
 			if (action) this.store.dispatch(action);
+
+			// Show the current tool name in the header so the user
+			// knows what's happening instead of just "idle"/"thinking".
+			if (event.type === "tool_execution_start") {
+				this.store.dispatch({
+					type: "set_last_op",
+					op: `running ${event.toolName}…`,
+				});
+			} else if (event.type === "agent_end") {
+				this.store.dispatch({ type: "set_last_op", op: "idle" });
+			}
+
 			// Re-render plan/todo children when busy/items change.
 			this.rebuildDynamicChildren();
 		});

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { Executor } from "../src/core/runtime/executor/index.js";
 import { ReplanNeededError } from "../src/core/runtime/executor/error.js";
 import { Verifier } from "../src/core/runtime/verifier/index.js";
 import type { Plan, Step } from "../src/core/runtime/plan/types.js";
 import { asSessionId } from "@phus/core/types/brand.js";
+import { asSessionId as makeSid } from "@phus/core/types/brand.js";
 
 function makePlan(): Plan {
   return {
@@ -40,37 +41,46 @@ function extractText(message: AgentMessage): string {
     .join(" ");
 }
 
-function makeMockAgent(resultText = "done") {
-  const handlers: Array<(event: AgentEvent) => void> = [];
+interface MockAgent {
+  steered: string[];
+  runTurnCalls: Array<{ sessionId: string; taskText: string }>;
+  steer(msg: AgentMessage): void;
+  waitForIdle(): Promise<void>;
+  getCurrentSessionId(): ReturnType<typeof asSessionId> | undefined;
+  setNextSessionId(id: ReturnType<typeof asSessionId>): void;
+  subscribeToAgentEvents(handler: (event: unknown) => void): () => void;
+  runTurn(sessionId: ReturnType<typeof asSessionId>, taskText: string): Promise<AgentMessage[]>;
+}
+
+function makeMockAgent(resultText = "done"): MockAgent {
   const steered: string[] = [];
+  const runTurnCalls: Array<{ sessionId: string; taskText: string }> = [];
   return {
     steered,
+    runTurnCalls,
     steer: (msg: AgentMessage) => {
       steered.push(extractText(msg));
-      // Simulate a sub-agent run: emit an agent_end event with an assistant reply.
-      handlers.forEach((h) =>
-        h({
-          type: "agent_end",
-          messages: [
-            msg,
-            {
-              role: "assistant",
-              content: [{ type: "text", text: resultText }],
-              timestamp: Date.now(),
-            },
-          ],
-        } as AgentEvent),
-      );
     },
     waitForIdle: async () => {},
-    getCurrentSessionId: () => asSessionId("session-1"),
+    getCurrentSessionId: () => makeSid("session-1"),
     setNextSessionId: () => {},
-    subscribeToAgentEvents: (handler: (event: AgentEvent) => void) => {
-      handlers.push(handler);
-      return () => {
-        const idx = handlers.indexOf(handler);
-        if (idx >= 0) handlers.splice(idx, 1);
-      };
+    subscribeToAgentEvents: () => () => {},
+    runTurn: async (_sessionId: string, taskText: string) => {
+      runTurnCalls.push({ sessionId: _sessionId, taskText });
+      steered.push(taskText);
+      // Simulate a sub-agent run: a single user message + assistant reply.
+      return [
+        {
+          role: "user",
+          content: [{ type: "text", text: taskText }],
+          timestamp: Date.now(),
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: resultText }],
+          timestamp: Date.now(),
+        },
+      ] as AgentMessage[];
     },
   };
 }
@@ -88,6 +98,7 @@ describe("Executor", () => {
   it("retries with repair context after verification requests a retry", async () => {
     let calls = 0;
     const verifier = new Verifier({
+      requireLLMVerify: true,
       port: {
         complete: async () => {
           calls++;
@@ -118,6 +129,7 @@ describe("Executor", () => {
   it("retries a failing step up to maxRetries", async () => {
     let calls = 0;
     const verifier = new Verifier({
+      requireLLMVerify: true,
       port: {
         complete: async () => {
           calls++;
@@ -136,6 +148,7 @@ describe("Executor", () => {
 
   it("marks step failed after max retries", async () => {
     const verifier = new Verifier({
+      requireLLMVerify: true,
       port: {
         complete: async () => ({ text: JSON.stringify({ ok: false, confidence: 0, reason: "no", action: "retry" }) }),
       },
@@ -165,6 +178,7 @@ describe("Executor", () => {
 
   it("throws ReplanNeededError when verifier requests replan", async () => {
     const verifier = new Verifier({
+      requireLLMVerify: true,
       port: {
         complete: async () => ({ text: JSON.stringify({ ok: false, action: "replan", reason: "need replan" }) }),
       },

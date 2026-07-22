@@ -1,7 +1,17 @@
+// packages/runtime/src/core/runtime/subagent/index.ts
+// Sub-agent: dispatches a self-contained task to a fresh session.
+//
+// v2: instead of `steer()`-ing the parent Agent (which leaks the
+// sub-task's tool calls + results back into the parent's message
+// history, polluting the next turn), we now spin up the sub-agent
+// as its own piAgent.prompt() turn on a fresh sub-session id. The
+// sub-agent's messages are isolated to the sub-session and don't
+// bleed back to the parent.
+
 import { asSessionId } from "@phus/core/types/brand.js";
 import { type PlanPhase, type SubAgentOptions } from "../plan/types";
 import { SubAgentAgentLike } from "./types";
-import { AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
+import { AgentMessage } from "@mariozechner/pi-agent-core";
 import { extractText } from "../../../bridge/text.js";
 import { loadConfig } from "../../../infra/config/index.js";
 
@@ -20,7 +30,7 @@ export class SubAgent {
   constructor(private deps: { agent: SubAgentAgentLike }) {}
 
   private buildSubSessionId(parentSessionId: string) {
-    return asSessionId(`${parentSessionId}:sub:${Date.now()}`);
+    return asSessionId(`${parentSessionId}:sub:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`);
   }
 
   async run(options: SubAgentOptions): Promise<unknown> {
@@ -28,49 +38,46 @@ export class SubAgent {
     const subSessionId = this.buildSubSessionId(parentSessionId);
     const previousSessionId = this.deps.agent.getCurrentSessionId();
 
-    const capturedMessages: AgentMessage[] = [];
-    const unsubscribe = this.deps.agent.subscribeToAgentEvents((event: AgentEvent) => {
-      if (event.type === "agent_end") {
-        capturedMessages.push(...event.messages);
-      }
-    });
+    const taskText = this.buildTaskText(options);
 
+    // Wall-clock bound: pi-agent-core's loop is `while(true)` — a
+    // stuck sub-agent (endless tool calls, hung request) must not
+    // stall the whole plan. On timeout: abort the loop and throw;
+    // the Executor treats it as one failed attempt.
+    const timeoutMs = loadConfig().robustness.subagentTimeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      // Switch to the sub-session. setNextSessionId affects the
+      // NEXT turn we kick off, so we have to call this BEFORE
+      // prompt() — pairing it with steer() previously left a race
+      // where the message went into the parent's session and the
+      // session id was only used for the *following* turn.
       this.deps.agent.setNextSessionId(subSessionId);
-      const taskText = this.buildTaskText(options);
 
-      this.deps.agent.steer({
-        role: "user",
-        content: [{ type: "text", text: taskText }],
-        timestamp: Date.now(),
+      const idle = this.deps.agent.runTurn(subSessionId, taskText);
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          this.deps.agent.abort?.();
+          reject(new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+        timer.unref?.();
       });
 
-      // Wall-clock bound: pi-agent-core's loop is `while(true)` — a
-      // stuck sub-agent (endless tool calls, hung request) must not
-      // stall the whole plan. On timeout: abort the loop and throw;
-      // the Executor treats it as one failed attempt.
-      const timeoutMs = loadConfig().robustness.subagentTimeoutMs;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        const idle = this.deps.agent.waitForIdle();
-        const timeout = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            this.deps.agent.abort?.();
-            reject(new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`));
-          }, timeoutMs);
-          timer.unref?.();
-        });
-        await Promise.race([idle, timeout]);
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
-
-      const lastAssistant = [...capturedMessages]
+      const finalMessages = await Promise.race([idle, timeout]);
+      // Extract the last assistant text from the sub-agent's own
+      // messages, not the parent's (which would include any
+      // in-flight parent turn the user kicked off while the
+      // sub-agent was running).
+      const lastAssistant = [...finalMessages]
         .reverse()
         .find((m) => m.role === "assistant");
       return extractText(lastAssistant);
     } finally {
-      unsubscribe();
+      if (timer) clearTimeout(timer);
+      // Restore the parent's session id so the next plan step
+      // (or the next user turn) goes back to the parent's
+      // conversation. Without this, a sub-agent run would leave
+      // the parent "stuck" in the sub-session.
       if (previousSessionId) {
         this.deps.agent.setNextSessionId(previousSessionId);
       }

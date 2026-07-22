@@ -44,7 +44,16 @@ export class Executor {
         lastResult = err instanceof Error ? err : new Error(String(err));
       }
 
-      verification = await this.deps.verifier.verify(step, lastResult);
+      // Forward the verifier's `requireLLMVerify` flag through. When
+      // the verifier was constructed with that flag set, `verify()`
+      // would short-circuit to the static path (the default). Use
+      // `verifyStrict()` so the LLM path is reachable for plans that
+      // opt in.
+      const verifierDeps = (this.deps.verifier as unknown as { deps?: { requireLLMVerify?: boolean } }).deps;
+      const wantLlm = verifierDeps?.requireLLMVerify === true;
+      verification = wantLlm
+        ? await this.deps.verifier.verifyStrict(step, lastResult, { requireLLMVerify: true })
+        : await this.deps.verifier.verify(step, lastResult);
 
       if (verification.action === "proceed") {
         step.status = "completed";
