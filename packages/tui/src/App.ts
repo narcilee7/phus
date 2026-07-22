@@ -90,6 +90,7 @@ export class App extends Container {
 	private planUnsub: (() => void) | undefined;
 	private readonly planRef: PlanRef = { current: undefined };
 	private viewportHeight = MIN_CHAT_HEIGHT;
+	private prevViewportHeight = MIN_CHAT_HEIGHT;
 	private todoChild: TodoPill;
 	private planChild?: PlanPanel;
 	private permissionChild?: PermissionPanel;
@@ -751,5 +752,3 @@ export class App extends Container {
 function emptyStats(): HeaderStats {
 	return { entries: 0, skills: 0, turns: 0, checkpoints: 0 };
 }
-  /** Stable input row count — updated only when the editor content
-   *  changes, not on every frame. Prevents viewport jitter from
