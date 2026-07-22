@@ -2,35 +2,76 @@
 
 ## [0.1.2] - 2026-07-22
 
-### Added
-- fix(release): widen exports wildcards for Node 22+; force Node 20 in CI
+CI-green follow-up to 0.1.1. The previous tag ran the release pipeline but
+its commit predates the Node 22+ exports-wildcard fix below, so its CI
+test job was red on `Node 20 is being deprecated. This workflow is
+running with Node 24 by default` runners. 0.1.2 ships the same release
+content with CI green on the actual published commit. No new user-facing
+behavior; install via `npm install -g @phus/cli@0.1.2` (or use the
+matching `phus-latest.tar.gz` GitHub Release asset).
+
+### Fixed
+- `@phus/core`, `@phus/runtime`, `@phus/shared` package `exports`
+  fields now list explicit `*.js` and `**/*.js` patterns alongside the
+  existing `*` wildcards. Node 22+ tightened wildcard matching so the
+  previous `"./types/*": "./dist/types/*"` no longer matched deep
+  imports like `@phus/core/types/logger/index.js` — causing every
+  runtime test on Node 24 to fail with `ERR_PACKAGE_PATH_NOT_EXPORTED`
+- `ci.yml` adds `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true` so the
+  runner honors `.nvmrc`'s Node 20 instead of silently substituting 24
+  (belt-and-suspenders for the exports fix above)
 
 ## [0.1.1] - 2026-07-22
 
-### Added
-- fix(release): take first line of node -p output (avoid trailing 'undefined')
-- fix(release): include packages/shared in version bump (transitive dep of core/runtime/tui)
-- fix(release): publish all 5 packages in dep order; drop --frozen-lockfile in installers
-- chore(release): unmark @phus/core, @phus/runtime, @phus/tui, @phus/shared as private for npm publish
-- fix(release): pack package.json+lockfile under apps/cli/ to match installer layout
-- chore(release): unmark @phus/cli as private for npm publish (Stage 5)
-- fix(lint): remove unnecessary regex escape in verifier
-- fix(bash): include durationMs in tool result details (B.2.4)
-- fix(ci): drop --noEmit from typecheck (composite project refs require emit)
-- fix(release): align apps/docs version with rest of monorepo (1.0.0 -> 0.1.0)
-- Fix/document aligin (#34)
-- fix: align document links in README files (#33)
-- Chore/update documents by phus self (#32)
-- Chore/update documents by phus self (#31)
-- Chore/update documents by phus self (#30)
-- fix: production (#29)
-- Fix/monorepo err (#28)
-- Refactor/phus (#27)
-- Refactor/monorepo split (#26)
-- Feat/memory os (#24)
-- feat: memory os and tui refactor (#23)
-- Feat/self evolution more (#22)
-- fix(docker): copy tsdown.config.ts into the builder stage (#21)
+First post-monorepo-split release. The five public packages
+(`@phus/shared`, `@phus/core`, `@phus/runtime`, `@phus/tui`,
+`@phus/cli`) publish to npm in dependency order; the GitHub-Release
+tarball matches what `install.sh` / `install.ps1` expect; a fresh
+`npm install -g @phus/cli@0.1.1` resolves cleanly on Node 20. CI on
+Node 24 runners is **red** for this commit (see 0.1.2 for the fix);
+use 0.1.2 on Node 22+ hosts.
+
+### Fixed
+- Release pipeline: `@phus/cli` no longer marked `private: true` so
+  `pnpm publish` succeeds; the four workspace deps
+  (`@phus/core`, `@phus/runtime`, `@phus/tui`, `@phus/shared`) also
+  flip to public so a consumer's `npm install @phus/cli` resolves
+  them transitively from the registry
+- Release pipeline: tarball now packs
+  `apps/cli/{package.json,pnpm-lock.yaml}` where `install.sh`
+  expects them, so a fresh install ends up with a working
+  `node_modules` instead of `ERR_MODULE_NOT_FOUND` on first run
+- Release pipeline: `install.sh` and `install.ps1` drop
+  `--frozen-lockfile` because the published `@phus/cli/package.json`
+  has real version specs for its workspace deps after pnpm rewrites
+  `workspace:*` on publish
+- Release pipeline: publish all five packages in dependency order
+  (`@phus/shared` → `@phus/core` → `@phus/runtime` → `@phus/tui` →
+  `@phus/cli`) so the public registry has a consistent set
+- Release pipeline: include `packages/shared` in the version bump
+  list so its version doesn't drift from `@phus/core` /
+  `@phus/runtime` / `@phus/tui`
+- Release pipeline: take the first line of `node -p` output (the
+  script returns `undefined` after `console.log`, which `tail -1`
+  was catching) — caught on this release; prior runs would have
+  tagged `vundefined`
+- CI: drop `--noEmit` from `pnpm typecheck`. The `composite: true`
+  flag in `tsconfig.base.json` requires composite projects to emit,
+  and TypeScript 7 surfaces this as `TS6310: Referenced project
+  may not disable emit` for every project reference
+- `apps/docs` version aligned with the rest of the monorepo
+  (`1.0.0` → `0.1.0`); v0.1.0 predates its existence so the orphan
+  `1.0.0` had no semantic meaning
+- `bash` tool: `details.durationMs` now populated so the B.2.4
+  heartbeat test passes and the agent can see command timing
+- Lint: removed an unnecessary regex escape in
+  `verifier/index.ts:looksLikeJsonShape`
+
+### Note
+- Memory OS, self-evolution extensions, and the monorepo-split
+  workspace refactor (commits #22–#27 since v0.1.0) are deliberately
+  not in this release — they land in 0.2.0. 0.1.1 is a pure
+  pipeline-fix release.
 
 All notable changes to Phus are documented here. Dates are UTC.
 
