@@ -1188,6 +1188,22 @@ export class PhusAgent implements PhusAgentFacade {
     // outside the Pi loop — piAgent.abort() alone leaves it running and
     // the turn looks hung. Cooperative: stops after the current step.
     this.planRunner?.abort();
+    // The plan-runner's `abort()` only flips an internal flag; the
+    // in-flight LLM step keeps running until it settles, and the
+    // status flip to "paused" only happens at the next step boundary.
+    // For a TUI user hitting Ctrl+C that "wait until the current
+    // step finishes" delay reads as a hang — they keep mashing the
+    // key, the plan status still says "running", nothing changes.
+    //
+    // To close that gap: also force-mark the active plan as paused
+    // in the store RIGHT NOW and emit `plan_paused`, so the TUI
+    // panel + /resume picker both see the new state immediately.
+    // The in-flight sub-agent's LLM call still runs to completion in
+    // the background (we have no AbortSignal plumbed through yet),
+    // but the next iteration of `runPlan`'s step loop sees
+    // `abortRequested = true` and exits without dispatching more
+    // work, so no extra user-visible state changes after that.
+    this.pauseActivePlan();
     logger.info("turn.aborted");
   }
 
