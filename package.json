@@ -14,7 +14,7 @@
 		"run": "PHUS_HOME=$PWD/.phus tsx apps/cli/src/main.ts run",
 		"gateway": "PHUS_HOME=$PWD/.phus tsx apps/cli/src/main.ts gateway",
 		"tui": "PHUS_HOME=$PWD/.phus tsx packages/tui/src/index.ts",
-		"typecheck": "tsc -b --noEmit",
+		"typecheck": "tsc -b",
 		"lint": "oxlint --quiet packages apps test",
 		"lint:fix": "oxlint --fix packages apps test",
 		"test": "pnpm -r test",
