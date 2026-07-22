@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.1.1] - 2026-07-22
+
+### Added
+- fix(release): take first line of node -p output (avoid trailing 'undefined')
+- fix(release): include packages/shared in version bump (transitive dep of core/runtime/tui)
+- fix(release): publish all 5 packages in dep order; drop --frozen-lockfile in installers
+- chore(release): unmark @phus/core, @phus/runtime, @phus/tui, @phus/shared as private for npm publish
+- fix(release): pack package.json+lockfile under apps/cli/ to match installer layout
+- chore(release): unmark @phus/cli as private for npm publish (Stage 5)
+- fix(lint): remove unnecessary regex escape in verifier
+- fix(bash): include durationMs in tool result details (B.2.4)
+- fix(ci): drop --noEmit from typecheck (composite project refs require emit)
+- fix(release): align apps/docs version with rest of monorepo (1.0.0 -> 0.1.0)
+- Fix/document aligin (#34)
+- fix: align document links in README files (#33)
+- Chore/update documents by phus self (#32)
+- Chore/update documents by phus self (#31)
+- Chore/update documents by phus self (#30)
+- fix: production (#29)
+- Fix/monorepo err (#28)
+- Refactor/phus (#27)
+- Refactor/monorepo split (#26)
+- Feat/memory os (#24)
+- feat: memory os and tui refactor (#23)
+- Feat/self evolution more (#22)
+- fix(docker): copy tsdown.config.ts into the builder stage (#21)
+
 All notable changes to Phus are documented here. Dates are UTC.
 
 ## [0.1.0] - 2026-07-17
