@@ -4,11 +4,11 @@
   <strong>自进化 Agent 运行时 — 每次轮回，皆有成长。</strong>
 </p>
 
-<p align="center">
-  <a href="README.md">English</a> ·
-  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a> ·
-  <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20"> ·
-  <img src="https://img.shields.io/badge/pnpm-10%2B-orange" alt="pnpm 10+">
+<p>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" align="middle"></a>
+  <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20" align="middle">
+  <img src="https://img.shields.io/badge/pnpm-10%2B-orange" alt="pnpm 10+" align="middle">
+  <span style="float: right;"><a href="README.md">English</a></span>
 </p>
 
 ---
