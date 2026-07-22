@@ -45,12 +45,16 @@ echo "New version: $NEW"
 # Bump every workspace package.json in lockstep. Stage 5 of the
 # monorepo split pins a single workspace version across root + apps/cli
 # + packages/* (proposal §10 question #4: fixed semver in v1).
+# @phus/shared is in this list because @phus/core, @phus/runtime, and
+# @phus/tui all depend on it; without bumping it in lockstep the
+# published `workspace:*` rewrite would pin to a stale version.
 PACKAGES=(
   package.json
   apps/cli/package.json
   packages/core/package.json
   packages/runtime/package.json
   packages/tui/package.json
+  packages/shared/package.json
 )
 
 for f in "${PACKAGES[@]}"; do
@@ -90,7 +94,7 @@ SECTION="\n## [$NEW] - $TODAY\n\n### Added\n$CHANGES\n"
 } > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
 
 # Commit and tag
-git add package.json apps/cli/package.json packages/core/package.json packages/runtime/package.json packages/tui/package.json CHANGELOG.md
+git add package.json apps/cli/package.json packages/core/package.json packages/runtime/package.json packages/tui/package.json packages/shared/package.json CHANGELOG.md
 git commit -m "release: v$NEW"
 git tag "v$NEW"
 
