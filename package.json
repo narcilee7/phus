@@ -1,6 +1,6 @@
 {
   "name": "phus",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Self-evolving agent runtime. Push the stone up the mountain.",
   "private": true,
   "license": "MIT",

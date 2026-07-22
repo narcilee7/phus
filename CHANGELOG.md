@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.2] - 2026-07-22
+
+### Added
+- fix(release): widen exports wildcards for Node 22+; force Node 20 in CI
+
 ## [0.1.1] - 2026-07-22
 
 ### Added
