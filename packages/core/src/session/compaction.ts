@@ -16,6 +16,44 @@ export interface CompactionResult {
 	anchorName: string;
 	summary: string;
 	durationMs: number;
+	/** A UserMessage-shaped summary that the runtime can prepend to
+	 *  `piAgent.state.messages` after the trim. Kept structural so the
+	 *  core package doesn't depend on `@mariozechner/pi-ai`. The runtime
+	 *  casts it to `AgentMessage` when assigning to the live state. */
+	summaryMessage?: SummaryMessage;
+}
+
+/**
+ * Structural UserMessage shape — compatible with `UserMessage` from
+ * `@mariozechner/pi-ai` and `AgentMessage` from `@mariozechner/pi-agent-core`.
+ * Defined locally so the core module doesn't have to depend on either SDK.
+ */
+export interface SummaryMessage {
+	role: "user";
+	content: string;
+	timestamp: number;
+}
+
+/** Build a UserMessage-shaped summary line. The prefix is fixed so the
+ *  next assistant turn doesn't try to continue the syntactic flow of
+ *  the summary text. The `user` role is the safe choice — every
+ *  provider accepts it; `assistant` would risk pretending the model
+ *  said it. */
+export function buildSummaryMessage(
+	summary: string,
+	opts?: { anchorName?: string; summarizedCount?: number },
+): SummaryMessage {
+	const anchorName = opts?.anchorName ?? "auto";
+	const count = opts?.summarizedCount ?? 0;
+	const text =
+		`[Compaction summary — ${anchorName}; ${count} older turn(s) collapsed]\n` +
+		`${summary}\n` +
+		`[End of compaction summary. The conversation continues with the recent turns below.]`;
+	return {
+		role: "user",
+		content: text,
+		timestamp: Date.now(),
+	};
 }
 
 /**
@@ -64,6 +102,10 @@ export async function compactSession(
 	}
 
 	const anchorName = `compact-${Date.now()}`;
+	const summaryMessage = buildSummaryMessage(summary, {
+		anchorName,
+		summarizedCount: toSummarize.length,
+	});
 	tape.append({
 		kind: "anchor",
 		sessionId: asSessionId(sessionId),
@@ -88,6 +130,7 @@ export async function compactSession(
 		anchorName,
 		summary,
 		durationMs: Date.now() - startedAt,
+		summaryMessage,
 	};
 }
 

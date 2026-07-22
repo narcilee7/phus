@@ -375,6 +375,12 @@ export class PhusAgent implements PhusAgentFacade {
    *  per turn so a later turn isn't poisoned by a stale abort. */
   private abortController: AbortController = new AbortController();
 
+  /** API-reported input token count from the previous turn's last
+   *  assistant message. Set by `handleEvent` on `turn_end`, read by
+   *  `injectContext` to feed the next auto-compact decision. Reset
+   *  by `rearmAbortController` at the start of each turn. */
+  private lastReportedInput?: number;
+
   /** Build the Agent options dict used to construct BOTH the
    *  parent's piAgent and any sub-agent (via `spawnSubAgent`).
    *  Pure / no per-instance state — safe to share across the
@@ -687,13 +693,45 @@ export class PhusAgent implements PhusAgentFacade {
   private async injectContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
     if (this.currentSessionId && this.autoCompactEnabled) {
       const cw = this.piAgent.state.model.contextWindow;
-      await maybeCompact(
-        this.tape,
-        this.currentSessionId,
-        this.piAgent.state.messages,
-        cw,
-        this.autoCompactCfg,
-      );
+      try {
+        const decision = await maybeCompact({
+          tape: this.tape,
+          sessionId: this.currentSessionId,
+          messages: this.piAgent.state.messages,
+          contextWindow: cw,
+          cfg: this.autoCompactCfg,
+          maxOutputTokens: this.piAgent.state.model.maxTokens,
+          systemPrompt: this.piAgent.state.systemPrompt,
+          tools: this.piAgent.state.tools,
+          lastReportedInput: this.lastReportedInput,
+          logger: this.deps.logger,
+        });
+        if (decision.tier === "near_limit") {
+          this.deps.logger.info("context.near_limit", {
+            sessionId: this.currentSessionId,
+            tier: decision.tier,
+            ratio: decision.snapshot.ratio,
+            tokens: decision.snapshot.total,
+            contextWindow: decision.snapshot.contextWindow,
+            inputBudget: decision.snapshot.inputBudget,
+          });
+        }
+        if (decision.fired && decision.trimmedMessages && decision.trimmedMessages.length > 0) {
+          // Apply the trim to the live state. This is the only writer
+          // that must run before the next LLM call — both the return
+          // value (Pi's `transformContext`) and `state.messages` (state
+          // for subsequent turns) need to reflect the trim.
+          this.piAgent.state.messages = decision.trimmedMessages as AgentMessage[];
+          return decision.trimmedMessages as AgentMessage[];
+        }
+      } catch (err) {
+        // `transformContext` must never throw — fall back to the
+        // original messages and let the LLM call proceed.
+        this.deps.logger.warn("compact.failed", {
+          sessionId: this.currentSessionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
     return buildContextBlock(messages, {
       hooks: this.hooks,
@@ -707,10 +745,20 @@ export class PhusAgent implements PhusAgentFacade {
     });
   }
 
-  /** Pi event handler — forwards turn_end to the after_llm_call hook. */
+  /** Pi event handler — forwards turn_end to the after_llm_call hook
+   *  and captures the API-reported input token count for the next
+   *  auto-compact decision. */
   private handleEvent(event: AgentEvent): void {
     if (event.type === "turn_end" && event.message?.role === "assistant") {
       const last = event.message as any;
+      // Stash the real input token count so the next `injectContext`
+      // can use a precise budget instead of the char/4 heuristic.
+      // Includes cacheRead so cache-prefixed prompts count their
+      // first-time contribution too.
+      const usage = last.usage as { input?: number; cacheRead?: number } | undefined;
+      if (usage && typeof usage.input === "number") {
+        this.lastReportedInput = (usage.input ?? 0) + (usage.cacheRead ?? 0);
+      }
       void this.hooks.execute(
         "after_llm_call",
         makeCtx({
@@ -1266,6 +1314,10 @@ export class PhusAgent implements PhusAgentFacade {
    *  previous turn's Ctrl+C. */
   private rearmAbortController(): void {
     this.abortController = new AbortController();
+    // The previous turn's API-reported input token count is no longer
+    // trustworthy for the next round — unset it. The next LLM call
+    // will re-populate from `handleEvent` on `turn_end`.
+    this.lastReportedInput = undefined;
   }
 
   /** Public accessor for the runtime-level abort signal. The sub-agent
