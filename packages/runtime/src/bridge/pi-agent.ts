@@ -810,6 +810,26 @@ export class PhusAgent implements PhusAgentFacade {
         modelOutput = extractText(lastAssistant);
       }
 
+      // If the model produced no text (only tool calls, or a streaming
+      // provider that yielded zero text deltas), surface a visible
+      // placeholder rather than a blank assistant item. The TUI relies
+      // on `channel.send()` text to render a final response when
+      // streaming was empty, and an empty string there means the user
+      // sees nothing for the turn. The placeholder lets the channel
+      // adapter round-trip a system note.
+      const modelProducedText = modelOutput.trim().length > 0;
+      if (!modelProducedText) {
+        const toolCalls = this.collectToolCalls();
+        const toolSummary = toolCalls.length
+          ? ` (${toolCalls.length} tool call${toolCalls.length === 1 ? "" : "s"})`
+          : "";
+        modelOutput = `*[model produced no text${toolSummary} — see tool calls above]*`;
+        logger.info("turn.empty_model_output", {
+          sessionId,
+          toolCallCount: toolCalls.length,
+        });
+      }
+
       // 6. render_outbound (broadcast → merge)
       const outbounds = (await this.hooks.execute<Outbound[]>(
         "render_outbound",
@@ -866,6 +886,21 @@ export class PhusAgent implements PhusAgentFacade {
         durationMs: Date.now() - startedAt,
       };
       this.tape.append({ kind: "turn", turn });
+
+      // 10. Per-turn checkpoint — exactly one snapshot per turn, keyed
+      // by the turn's own id (not the last toolCallId). Replaces the
+      // per-tool-call checkpoint that previously lived in
+      // `afterToolCall` and inflated the tape.
+      try {
+        saveCheckpoint(
+          this.tape,
+          this.currentSessionId as SessionId,
+          this.piAgent.state.messages,
+          turn.id,
+        );
+      } catch (err: any) {
+        logger.warn("checkpoint.save_failed", { error: err.message });
+      }
 
       logger.info("turn.completed", {
         sessionId,
@@ -1008,16 +1043,11 @@ export class PhusAgent implements PhusAgentFacade {
       isError: ctx.isError,
       ts: Date.now(),
     });
-    try {
-      saveCheckpoint(
-        this.tape,
-        this.currentSessionId,
-        this.piAgent.state.messages,
-        asTurnId(ctx.toolCall.id),
-      );
-    } catch (err: any) {
-      logger.warn("checkpoint.save_failed", { error: err.message });
-    }
+    // Checkpoint is saved ONCE per turn (in `turn()`), not on every tool
+    // call. Writing on every tool call inflated the tape with full
+    // message snapshots per tool — a single tool-using turn of 5 calls
+    // produced 5 duplicate checkpoint rows. The turn-level checkpoint
+    // covers crash recovery just as well and keeps tape size bounded.
     return undefined;
   }
 

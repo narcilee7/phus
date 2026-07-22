@@ -107,11 +107,19 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
         sid,
         queryText,
       );
+      // User-side only. Echoing the prior `modelOutput` text back into
+      // the system prompt was the root cause of cross-session content
+      // bleed (e.g. "Hi! 好久不见" from a prior session appearing
+      // mid-response): once the model sees its own short past replies
+      // it tends to continue them, producing fragmented, persona-split
+      // output. For cross-session recall only the user's intent
+      // matters; the live `piAgent.state.messages` already carries the
+      // current session's full conversation, so dropping prior
+      // assistant text here doesn't lose information the model needs.
       tapeSummary = relevant
         .map((t) => {
-          const u = (t.inbound.content ?? "").slice(0, 100).replace(/\n/g, " ");
-          const r = (t.modelOutput ?? "").slice(0, 100).replace(/\n/g, " ");
-          return `[${new Date(t.ts).toISOString().slice(11, 16)}] U: ${u} | P: ${r}`;
+          const u = (t.inbound.content ?? "").slice(0, 120).replace(/\n/g, " ");
+          return `[${new Date(t.ts).toISOString().slice(11, 16)}] user: ${u}`;
         })
         .join("\n") || "(empty)";
     } else {
@@ -123,7 +131,11 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
     dynamicContext =
       `## Current skills\n${skillsCtx}\n\n` +
       `${memoryCtx}\n\n` +
-      `## Relevant past turns (B.4.3 smart select)\n${tapeSummary}\n\n` +
+      `## Relevant past turns (B.4.3 smart select)\n` +
+      // Reference-only framing — the model treats this list as user
+      // intent history, never as content to continue or echo.
+      `(read-only history; do NOT continue, paraphrase, or echo these turns)\n` +
+      `${tapeSummary}\n\n` +
       repoCtx +
       `## Tape statistics\nTotal entries across all sessions: ${stats.totalEntries}\n` +
       `Sessions: ${Object.entries(stats.sessions).map(([s, c]) => `${s}=${c}`).join(", ") || "(none)"}`;
