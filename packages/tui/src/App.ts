@@ -102,6 +102,10 @@ export class App extends Container {
 	private planExpanded = false;
 	private inputListenerUnsub: (() => void) | undefined;
 	private inputBuffer = "";
+	/** Stable input row count — updated only when the editor content
+	 *  changes, not on every frame. Prevents viewport jitter from
+	 *  autocomplete open/close oscillations. */
+	private stableInputRows = INPUT_ROWS;
 	private readonly onQuit?: () => void;
 	/** Messages typed while a turn is running — flushed one-per-turn as
 	 *  each turn completes, instead of being silently dropped (the old
@@ -173,10 +177,12 @@ export class App extends Container {
 			tui,
 			onSubmit: (text) => this.submitUserInput(text),
 			slashCommands: SLASH_COMMANDS,
+			onChange: () => this.onInputChanged(),
 		});
 		this.insertBefore(this.statusBar, this.inputBox);
 		tui.setFocus(this.inputBox);
 		this.viewportHeight = this.computeChatHeight();
+		this.prevViewportHeight = this.viewportHeight;
 		this.viewport.setHeight(this.viewportHeight);
 		this.rebuildDynamicChildren();
 		this.invalidate();
@@ -208,7 +214,13 @@ export class App extends Container {
 			onAbort: () => this.handleAbort(),
 			onQuit: () => this.store.dispatch({ type: "request_quit" }),
 			onTogglePlan: () => this.togglePlan(),
-			onUndo: () => void runSlash("/undo", this.agent, this.store.getState(), this.store.dispatch),
+			onUndo: () => void runSlash("/undo", this.agent, this.store.getState(), this.store.dispatch, {
+				openResumePrompt: () => this.showResumePrompt(),
+			}),
+			// Ctrl+O toggles collapse on the focused (or last collapsible)
+			// chat item. Tool calls default to collapsed — this expands
+			// them on demand without burying the chat scroll.
+			onToggleCollapse: () => this.store.dispatch({ type: "toggle_collapsed" }),
 			onScrollUp: (lines) => this.store.dispatch({ type: "scroll_up", lines }),
 			onScrollDown: (lines) => this.store.dispatch({ type: "scroll_down", lines }),
 			onScrollBottom: () => this.store.dispatch({ type: "scroll_bottom" }),
@@ -216,13 +228,43 @@ export class App extends Container {
 		const listener = buildShortcutListener(shortcuts, () => this.computeChatHeight());
 		this.inputListenerUnsub = tui.addInputListener(listener);
 
-		// Durable-plan check: interrupted (or deliberately paused) plans are
-		// offered for explicit resume at startup. This replaces the old
-		// implicit resume — a bare message must never resurrect a plan.
+		// Paused/interrupted plans used to pop a modal resume prompt at
+		// startup — that stole focus from the input and forced a choice
+		// before the user had typed anything. Now the agent reconciles
+		// interrupted plans to `paused` on boot (PhusAgent.reconcile…)
+		// and the user opens the resume UI explicitly via /resume. A
+		// non-blocking one-line hint is enough.
 		const interrupted = this.agent.getInterruptedPlans();
 		if (interrupted.length > 0) {
-			this.openResumePrompt(interrupted);
+			this.store.dispatch({
+				type: "add_system",
+				text: `${interrupted.length} paused plan${interrupted.length === 1 ? "" : "s"} available — type /resume to continue`,
+				level: "info",
+			});
 		}
+	}
+
+	/** Public wrapper so the /resume slash command can pop the prompt
+	 *  on demand. Replaces the old startup auto-pop. */
+	/** Called by InputBox when the editor content changes. Snapshots the
+	 *  current input height so the frame budget stays stable between
+	 *  keystrokes — only actual text/autocomplete changes move the budget,
+	 *  not every animation frame. */
+	private onInputChanged(): void {
+		this.stableInputRows = this.measureRows(this.inputBox, INPUT_ROWS);
+	}
+
+	public showResumePrompt(): void {
+		const plans = this.agent.getInterruptedPlans();
+		if (plans.length === 0) {
+			this.store.dispatch({
+				type: "add_system",
+				text: "no paused plans to resume",
+				level: "info",
+			});
+			return;
+		}
+		this.openResumePrompt(plans);
 	}
 
 	private openResumePrompt(plans: import("@phus/runtime/core/runtime/plan/types.js").Plan[]): void {
@@ -326,7 +368,9 @@ export class App extends Container {
 			this.agent.getCurrentSessionId(),
 			(sid) => {
 				this.closeSidebar();
-				void runSlash(`/use ${sid}`, this.agent, this.store.getState(), this.store.dispatch);
+				void runSlash(`/use ${sid}`, this.agent, this.store.getState(), this.store.dispatch, {
+					openResumePrompt: () => this.showResumePrompt(),
+				});
 			},
 			() => this.closeSidebar(),
 		);
@@ -440,7 +484,9 @@ export class App extends Container {
 		if (!text.trim()) return;
 		if (text.startsWith("/") || text.startsWith(",")) {
 			void (async () => {
-				const result = await runSlash(text, this.agent, state, this.store.dispatch);
+				const result = await runSlash(text, this.agent, state, this.store.dispatch, {
+					openResumePrompt: () => this.showResumePrompt(),
+				});
 				if (result === "quit") this.store.dispatch({ type: "request_quit" });
 			})();
 			return;
@@ -630,7 +676,17 @@ export class App extends Container {
 			// the chat height math must follow or the frame overflows.
 			this.terminalRows = this.tui.terminal.rows;
 			this.terminalCols = this.tui.terminal.columns;
-			this.viewport.setHeight(this.computeChatHeight());
+			const newHeight = this.computeChatHeight();
+			// When the viewport height changes (e.g. tool_call expanding,
+			// plan panel toggling, input wrapping), force a full TUI redraw
+			// so the differential render doesn't leave stale rows from the
+			// old frame budget overlapping the new layout.
+			if (newHeight !== this.prevViewportHeight) {
+				this.prevViewportHeight = newHeight;
+				this.tui.requestRender(true);
+			}
+			this.viewportHeight = newHeight;
+			this.viewport.setHeight(this.viewportHeight);
 			const s = this.store.getState();
 			this.viewport.setDeps({
 				items: s.items,
@@ -669,10 +725,9 @@ export class App extends Container {
 		const paletteRows = this.paletteOpen ? this.measureRows(this.paletteChild, 0) : 0;
 		const sidebarRows = this.sidebarOpen ? this.measureRows(this.sidebarChild, 0) : 0;
 		const resumeRows = this.resumeChild ? this.measureRows(this.resumeChild, 0) : 0;
-		// The editor grows as the input wraps — measure it instead of
-		// assuming INPUT_ROWS, or every extra input row pushes the frame
-		// one row past the terminal bottom.
-		const inputRows = this.measureRows(this.inputBox, INPUT_ROWS);
+    // Use the stable snapshot so autocomplete open/close doesn't
+    // oscillate the viewport height on every frame.
+    const inputRows = this.stableInputRows;
 		return Math.max(
 			MIN_CHAT_HEIGHT,
 			this.terminalRows -
@@ -696,3 +751,5 @@ export class App extends Container {
 function emptyStats(): HeaderStats {
 	return { entries: 0, skills: 0, turns: 0, checkpoints: 0 };
 }
+  /** Stable input row count — updated only when the editor content
+   *  changes, not on every frame. Prevents viewport jitter from

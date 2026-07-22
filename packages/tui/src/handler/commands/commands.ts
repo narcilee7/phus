@@ -22,6 +22,7 @@ import { registerCheckpoint } from "./checkpoint.js";
 import { registerPlan } from "./plan.js";
 import { registerSubagent } from "./subagent.js";
 import { registerHelp, HELP_TEXT, SLASH_COMMANDS } from "./help.js";
+import { registerResume } from "./resume.js";
 import { notify } from "./notice.js";
 
 export type SlashResult = "quit" | "clear" | void;
@@ -41,6 +42,7 @@ function registry(): CommandRegistry {
     ...registerCheckpoint(),
     ...registerPlan(),
     ...registerSubagent(),
+    ...registerResume(),
     ...registerHelp(),
   };
   return _registry;
@@ -78,6 +80,7 @@ export async function runSlash(
   agent: PhusAgent,
   state: AppState,
   dispatch: (action: AppAction) => void,
+  ui?: CommandContext["ui"],
 ): Promise<SlashResult> {
   const trimmed = cmd.trim();
 
@@ -96,7 +99,7 @@ export async function runSlash(
     notify(dispatch, `unknown command: /${name}. Try /help.`, "warn");
     return;
   }
-  const ctx: CommandContext = { agent, state, dispatch };
+  const ctx: CommandContext = { agent, state, dispatch, ui };
   // `quit` / `clear` from session.ts return the typed `never`; cast to
   // pick those signals back up here.
   const result = (await handler(arg, ctx)) as SlashResult | undefined;

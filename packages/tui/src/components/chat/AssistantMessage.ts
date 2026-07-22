@@ -39,21 +39,36 @@ export class AssistantMessage implements Component {
 				`${colorize(this.stoneFrame, "cyan")} ${colorize("the stone rolls…", "dim", "italic")}`,
 			);
 		}
-		if (this.item.reasoning) {
-			const reasoning = this.item.reasoning.length > 120
-				? this.item.reasoning.slice(0, 117) + "…"
-				: this.item.reasoning;
-			const wrapped = wrapTextWithAnsi(
-				colorize(`💭 ${reasoning.replace(/\n+/g, " ")}`, "dim"),
-				width,
+		// Collapsed: first line of text + a one-line hint. Reasoning is
+		// hidden entirely when collapsed (it's the loudest, lowest-value
+		// part of the assistant item — the model's chain-of-thought that
+		// the user typically doesn't want to see unless they ask).
+		const text = this.item.text ?? "";
+		const textLines = text ? renderMarkdown(text, width) : [];
+		if (this.item.collapsed) {
+			const first = textLines[0] ?? colorize("(empty reply)", "dim");
+			out.push(first);
+			out.push(
+				colorize(
+					`…  Ctrl+O to expand${this.item.reasoning ? " (includes reasoning)" : ""}`,
+					"dim",
+				),
 			);
-			out.push(...wrapped);
-		}
-		if (this.item.text) {
-			out.push(...renderMarkdown(this.item.text, width));
+		} else {
+			if (this.item.reasoning) {
+				const reasoning = this.item.reasoning.length > 120
+					? this.item.reasoning.slice(0, 117) + "…"
+					: this.item.reasoning;
+				const wrapped = wrapTextWithAnsi(
+					colorize(`💭 ${reasoning.replace(/\n+/g, " ")}`, "dim"),
+					width,
+				);
+				out.push(...wrapped);
+			}
+			if (text) out.push(...textLines);
 		}
 		const meta = buildMetadataLine(this.item.model, this.item.usage);
-		if (meta) out.push(colorize(meta, "dim"));
+		if (meta && !this.item.collapsed) out.push(colorize(meta, "dim"));
 		// Prepend the peak to the first CONTENT line (index 0 normally,
 		// index 1 when the streaming status line occupies index 0).
 		const firstContent = this.item.isStreaming ? 1 : 0;

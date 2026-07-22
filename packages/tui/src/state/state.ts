@@ -31,6 +31,11 @@ export interface ChatItem {
   model?: string;
   /** Token usage / cost for this assistant message, if reported. */
   usage?: UsageMetadata;
+  /** User-controlled collapse flag. Tool call / tool result / long
+   *  assistant / thinking render collapsed by default; Ctrl+O toggles
+   *  the focused item. Collapsed items show a one-line summary and a
+   *  hint, expanded items show full content. */
+  collapsed?: boolean;
 }
 
 export interface ScrollState {
@@ -112,6 +117,10 @@ export interface AppState {
    *  consume_quit_request handler runs useEffect → exit() so the
    *  unmount path runs cleanly outside the async submit chain. */
   quitRequested?: boolean;
+  /** The chat item id the user is currently pointing at. Used by Ctrl+O
+   *  to know which item to toggle. Set by the ChatViewport on scroll /
+   *  focus, cleared on /clear. */
+  focusedItemId?: string;
 }
 
 export const initialState: AppState = {
@@ -156,7 +165,10 @@ export type AppAction =
   | { type: "consume_sidebar_request" }
   | { type: "clear_plan" }
   | { type: "request_quit" }
-  | { type: "consume_quit_request" };
+  | { type: "consume_quit_request" }
+  | { type: "set_focused_item"; itemId: string | undefined }
+  | { type: "toggle_collapsed"; itemId?: string }
+  | { type: "set_collapsed"; itemId: string; collapsed: boolean };
 
 /** Truncate a string for compact display. */
 export function truncate(s: string, n: number): string {
@@ -236,6 +248,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           ),
         });
       }
+      // Default to collapsed — the pill shows the tool name + args
+      // summary; full result/args render only after the user expands
+      // with Ctrl+O. Reduces visual noise from large tool outputs
+      // (curl JSON dumps, multi-page bash output, etc.).
       return withScrollOnNewContent({
         ...state,
         items: [
@@ -247,6 +263,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             toolName: action.toolName,
             toolCallId: action.toolCallId,
             args: action.args,
+            collapsed: true,
           },
         ],
       });
@@ -420,6 +437,45 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const next: AppState = { ...state };
       delete next.quitRequested;
       return next;
+    }
+    case "set_focused_item":
+      return { ...state, focusedItemId: action.itemId };
+    case "toggle_collapsed": {
+      // Default to the focused item if no id provided, falling back to
+      // the last collapsible item. Idempotent: toggling an already-
+      // expanded item collapses it; collapsing again expands.
+      const targetId =
+        action.itemId ??
+        state.focusedItemId ??
+        [...state.items]
+          .reverse()
+          .find((it) => it.kind === "tool_call" || it.kind === "assistant")?.id;
+      if (!targetId) return state;
+      return {
+        ...state,
+        items: state.items.map((it) =>
+          it.id === targetId
+            ? {
+                ...it,
+                collapsed:
+                  it.collapsed === undefined
+                    ? // Treat undefined as already-expanded; first toggle
+                      // collapses. Lets `collapsed: true` items start
+                      // hidden and the first Ctrl+O expand them.
+                      true
+                    : !it.collapsed,
+              }
+            : it,
+        ),
+      };
+    }
+    case "set_collapsed": {
+      return {
+        ...state,
+        items: state.items.map((it) =>
+          it.id === action.itemId ? { ...it, collapsed: action.collapsed } : it,
+        ),
+      };
     }
   }
 }

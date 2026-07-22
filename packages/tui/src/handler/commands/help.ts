@@ -45,6 +45,7 @@ const COMMANDS: SlashCommand[] = [
   { name: "checkpoint", group: "control", description: "checkpoint management: list|create|restore <id>" },
   { name: "retry", group: "control", description: "retry last prompt" },
   { name: "plan", group: "control", description: "plan management: create|run|status|list|resume <args>" },
+  { name: "resume", group: "control", description: "show paused-plan picker and resume one" },
   { name: "subagent", group: "control", description: "show subagent sessions in sidebar" },
   { name: "new", group: "control", description: "start a fresh session" },
   { name: "clear", group: "control", description: "clear chat area" },

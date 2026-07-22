@@ -6,11 +6,11 @@
 // final outbound text with the streaming message.
 
 import type { ChannelAdapter } from "@phus/runtime/channels/base.js";
-import type { AppAction } from "./state/state.js";
+import type { AppAction, ChatItem } from "./state/state.js";
 
 export function tuiChannel(
   dispatch: (action: AppAction) => void,
-  getState?: () => { items: { kind: string; isStreaming?: boolean }[] },
+  getState?: () => { items: ChatItem[] },
 ): ChannelAdapter {
   return {
     name: "tui",
@@ -32,7 +32,17 @@ export function tuiChannel(
         const hasStreaming = items.some(
           (it) => it.kind === "assistant" && it.isStreaming,
         );
-        if (!hasStreaming && o.content) {
+        // Streaming already rendered the same text on the last assistant
+        // item — don't double-append. Without this check the success
+        // path ("model streamed text + we got the final outbound too")
+        // renders the assistant reply twice.
+        const last = items.length > 0 ? items[items.length - 1] : undefined;
+        const alreadyRenderedThisTurn =
+          last?.kind === "assistant" &&
+          !last.isStreaming &&
+          typeof o.content === "string" &&
+          last.text === o.content;
+        if (!hasStreaming && !alreadyRenderedThisTurn && o.content) {
           // No streaming happened for this turn (short-circuit path): add
           // the final text. After turn 1 the assistant item from the
           // previous turn is no longer marked streaming, so this branch

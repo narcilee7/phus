@@ -414,13 +414,37 @@ export class PhusAgent implements PhusAgentFacade {
             throw err;
           }
         })();
-        // Copy any enumerable properties from the original response onto
-        // the generated async-iterator so the returned object satisfies
-        // AssistantMessageEventStream shape expected by pi-agent-core.
+        // Copy safe auxiliary methods/props from the underlying stream
+        // onto the wrapped async-iterator so pi-agent-core sees an
+        // `AssistantMessageEventStream`-shaped object.
+        //
+        // IMPORTANT: only copy properties whose value is itself a
+        // function (callable) or a primitive. The previous implementation
+        // blindly copied every enumerable key, which breaks for
+        // providers whose `.result` is a lazy getter returning a fresh
+        // promise on each access — copying that getter onto `gen`
+        // leaves a non-callable value, and pi-agent-core's later
+        // `response.result()` call throws "response.result is not a
+        // function" mid-stream (observed on deepseek-v4-pro via the
+        // openai-completions provider). Bound-callable methods like
+        // `extractResult`, `isComplete`, `queue`, `waiting` are safe to
+        // copy as-is. `result` is rebuilt below as a proper async
+        // function so the lazy-init pattern is preserved.
         try {
+          const skip = new Set(["result"]);
           for (const k of Object.keys(response as any)) {
+            if (skip.has(k)) continue;
             try {
-              (gen as any)[k] = (response as any)[k];
+              const v = (response as any)[k];
+              // Only copy if the value is callable or a plain data
+              // value. Skip live getters (anything that isn't a
+              // function and isn't own-property-stable) to avoid
+              // freezing stale references onto `gen`.
+              if (typeof v === "function") {
+                (gen as any)[k] = v.bind(response);
+              } else if (v === null || (typeof v !== "object" && typeof v !== "undefined")) {
+                (gen as any)[k] = v;
+              }
             } catch (_) {
               // ignore property copy failures
             }
@@ -428,6 +452,21 @@ export class PhusAgent implements PhusAgentFacade {
         } catch (_) {
           // ignore
         }
+        // Rebuild `result()` against the wrapped generator — drain it
+        // and reconstruct the final AssistantMessage from the last
+        // `done` event the provider emitted. This is what
+        // pi-agent-core calls after streaming is over.
+        (gen as any).result = async () => {
+          // If the provider already exposes a working `result()`,
+          // delegate. Otherwise fall back to draining the iterator and
+          // asking the provider's getter (lazy-init pattern) for the
+          // final message.
+          const r = (response as any).result;
+          if (typeof r === "function") return r.call(response);
+          return (response as any).extractResult
+            ? (response as any).extractResult()
+            : undefined;
+        };
         return gen as any;
       },
       transformContext: async (messages) => this.injectContext(messages),
@@ -820,11 +859,18 @@ export class PhusAgent implements PhusAgentFacade {
       const modelProducedText = modelOutput.trim().length > 0;
       if (!modelProducedText) {
         const toolCalls = this.collectToolCalls();
+        // Two distinct cases — text-shape matters for the user's
+        // mental model:
+        //   (a) model ran tool(s) but produced no final assistant text
+        //       → the run is "structurally complete", just terse
+        //   (b) model produced neither tool calls nor text
+        //       → almost certainly a provider-side streaming error
+        //         (e.g. "response.result is not a function" mid-stream)
         const toolSummary = toolCalls.length
-          ? ` (${toolCalls.length} tool call${toolCalls.length === 1 ? "" : "s"})`
-          : "";
-        modelOutput = `*[model produced no text${toolSummary} — see tool calls above]*`;
-        logger.info("turn.empty_model_output", {
+          ? `${toolCalls.length} tool call${toolCalls.length === 1 ? "" : "s"}, no final text`
+          : "no final text and no tool calls (likely a streaming error)";
+        modelOutput = `*[${toolSummary}]*`;
+        logger.warn("turn.empty_model_output", {
           sessionId,
           toolCallCount: toolCalls.length,
         });

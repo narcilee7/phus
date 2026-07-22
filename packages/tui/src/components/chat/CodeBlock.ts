@@ -110,10 +110,21 @@ export class CodeBlock implements Component {
 			const tokenized = tokenizeLine(raw, this.language);
 			const contentLines = wrapPreservingAnsi(tokenized, contentWidth);
 			if (!this.showLineNumbers) return contentLines;
+			// First wrapped line carries the line number + dim ` │ ` sep;
+			// subsequent wrapped (continuation) lines carry an empty gutter
+			// (same width) so the row aligns with the source-line number
+			// only once. Previously every wrapped line repeated the line
+			// number, which read like duplicated rows.
 			const num = colorize(String(i + 1).padStart(gutterWidth - 2, " "), "dim");
-			return contentLines.map((ln, j) => `${num}${j === 0 ? colorize(" │ ", "dim") : " │ "}${ln}`);
+			const emptyGutter = " ".repeat(gutterWidth - 2);
+			return contentLines.map((ln, j) =>
+				`${j === 0 ? num : emptyGutter}${colorize(" │ ", "dim")}${ln}`,
+			);
 		});
-		// Wrap in a single-line border.
+		// Each wrapped visual row gets its own left/right border so the
+		// box stays closed when source lines wrap to multiple visual
+		// rows. `flat()` only collapses the per-source-line arrays into
+		// one stream — the per-row border below still wraps every line.
 		const allRows = rendered.flat();
 		const out: string[] = [];
 		out.push(colorize("┌" + "─".repeat(width - 2) + "┐", "dim"));
