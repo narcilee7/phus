@@ -8,6 +8,15 @@ on:
   workflow_call:        # required so .github/workflows/release.yml can `uses: ./ci.yml`
   workflow_dispatch:
 
+# Force Node 20 on runners where it has been deprecated in favor of Node 24.
+# The .nvmrc pins 20; without this env, the runner silently substitutes 24
+# which trips the deep-import `exports` resolution (Node 22+ no longer
+# matches file extensions in wildcard patterns like `./types/*`). The
+# exports field was also widened (see packages/*/package.json) to handle
+# both Node 20 and 22+; this env is a belt-and-suspenders for now.
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

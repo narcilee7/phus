@@ -13,8 +13,14 @@
       "default": "./dist/index.js"
     },
     "./types/*": "./dist/types/*",
+    "./types/*.js": "./dist/types/*.js",
+    "./types/**/*.js": "./dist/types/**/*.js",
     "./protocol/*": "./dist/protocol/*",
-    "./utils/*": "./dist/utils/*"
+    "./protocol/*.js": "./dist/protocol/*.js",
+    "./protocol/**/*.js": "./dist/protocol/**/*.js",
+    "./utils/*": "./dist/utils/*",
+    "./utils/*.js": "./dist/utils/*.js",
+    "./utils/**/*.js": "./dist/utils/**/*.js"
   },
   "files": [
     "dist",

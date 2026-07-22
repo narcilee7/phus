@@ -13,10 +13,19 @@
       "default": "./dist/index.js"
     },
     "./types/*": "./dist/types/*",
+    "./types/*.js": "./dist/types/*.js",
+    "./types/**/*.js": "./dist/types/**/*.js",
     "./utils/*": "./dist/utils/*",
+    "./utils/*.js": "./dist/utils/*.js",
     "./runtime/*": "./dist/runtime/*",
+    "./runtime/*.js": "./dist/runtime/*.js",
+    "./runtime/**/*.js": "./dist/runtime/**/*.js",
     "./session/*": "./dist/session/*",
-    "./infra/*": "./dist/infra/*"
+    "./session/*.js": "./dist/session/*.js",
+    "./session/**/*.js": "./dist/session/**/*.js",
+    "./infra/*": "./dist/infra/*",
+    "./infra/*.js": "./dist/infra/*.js",
+    "./infra/**/*.js": "./dist/infra/**/*.js"
   },
   "files": [
     "dist",
