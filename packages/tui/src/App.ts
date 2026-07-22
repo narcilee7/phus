@@ -37,6 +37,7 @@ import { createAppStore, type AppStore } from "./runtime/app-state.js";
 import { SisyphusAnimator } from "./runtime/sisyphus.js";
 import { eventToAction } from "./transform/events.js";
 import { planEventToAction, type PlanRef } from "./transform/plan-events.js";
+import { compactEventToAction } from "./transform/compact-events.js";
 import { describeMemoryAction, buildMemoryPreview } from "./transform/memory.js";
 import { describeFileWrite, buildFileWritePreview } from "./transform/file-write.js";
 // import { parseMemoryAction } from "@phus/runtime/infra/meta/index.js";
@@ -93,6 +94,7 @@ export class App extends Container {
 	private statsInterval: ReturnType<typeof setInterval> | undefined;
 	private agentUnsub: (() => void) | undefined;
 	private planUnsub: (() => void) | undefined;
+	private compactUnsub: (() => void) | undefined;
 	private readonly planRef: PlanRef = { current: undefined };
 	private viewportHeight = MIN_CHAT_HEIGHT;
 	private prevViewportHeight = MIN_CHAT_HEIGHT;
@@ -236,6 +238,12 @@ export class App extends Container {
 				}, PLAN_DISMISS_DELAY_MS);
 			}
 
+			this.rebuildDynamicChildren();
+		});
+
+		this.compactUnsub = this.agent.subscribeToCompactEvents((event) => {
+			const action = compactEventToAction(event as never);
+			if (action) this.store.dispatch(action);
 			this.rebuildDynamicChildren();
 		});
 
@@ -600,6 +608,7 @@ export class App extends Container {
 	detach(): void {
 		this.agentUnsub?.();
 		this.planUnsub?.();
+		this.compactUnsub?.();
 		this.inputListenerUnsub?.();
 		this.animator.stop();
 		if (this.statsInterval) clearInterval(this.statsInterval);
