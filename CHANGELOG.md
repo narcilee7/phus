@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.4] - 2026-07-23
+
+### Added
+- fix(docker): copy monorepo source + workspace dist/ trees; add .dockerignore
+- docs(changelog): curate 0.1.3 section (Added/Changed/Fixed)
+
 ## [0.1.3] - 2026-07-22
 
 CI-green follow-up to 0.1.2. The previous tag ran the release pipeline

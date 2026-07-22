@@ -1,6 +1,6 @@
 {
   "name": "@phus/core",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Phus core: headless public surface — types, constants, hook/tape/skill interfaces. Re-exports from @phus/runtime today; physical files will move here in follow-up commits. See documents/Proposal-Monorepo-Split.md §3.",
   "license": "ISC",
   "type": "module",
