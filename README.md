@@ -6,8 +6,8 @@
 
 <p align="center">
   <a href="README-CN.md">中文文档</a> ·
-  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20">
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a> ·
+  <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20"> ·
   <img src="https://img.shields.io/badge/pnpm-10%2B-orange" alt="pnpm 10+">
 </p>
 
