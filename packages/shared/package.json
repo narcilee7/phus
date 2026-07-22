@@ -1,7 +1,6 @@
 {
   "name": "@phus/shared",
   "version": "0.1.0",
-  "private": true,
   "description": "Phus shared: common TypeScript types and utilities — Brand, Result, Envelope/Outbound protocol shapes, json/promise/path/env helpers. Pure library, no runtime business logic. See documents/Proposal-Monorepo-Split.md §3.",
   "license": "ISC",
   "type": "module",
