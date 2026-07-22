@@ -7,6 +7,9 @@
     { "path": "./packages/runtime" },
     { "path": "./packages/tui" },
     { "path": "./packages/phus-design" },
-    { "path": "./apps/cli" }
+    { "path": "./apps/cli" },
+    { "path": "./apps/web" },
+    { "path": "./apps/mobile" },
+    { "path": "./apps/desktop" }
   ]
 }

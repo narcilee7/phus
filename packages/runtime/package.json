@@ -28,7 +28,6 @@
     "build:types": "rm -rf .tsbuildinfo dist && tsc --emitDeclarationOnly --declaration --declarationMap false --sourceMap false",
     "build:full": "rm -rf .tsbuildinfo dist && tsc && node ../../scripts/fix-extensions.mjs dist",
     "typecheck": "tsc -b ../../tsconfig.json --noEmit",
-    "lint": "oxlint --quiet src test",
     "test": "vitest run"
   },
   "dependencies": {

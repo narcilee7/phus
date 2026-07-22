@@ -1,48 +1,30 @@
 {
-  "name": "@phus/phus-design",
+  "name": "@phus/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Phus design system — shadcn/ui-style component library on Radix + Tailwind. Reusable across apps/web, apps/mobile, apps/desktop. TUI lives in @phus/tui (pi-tui, no React).",
+  "description": "Phus web host — browser-based React 19 SPA. Future home for the full Web UI; uses @phus/phus-design for components and @phus/runtime for the headless agent.",
   "license": "ISC",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
-    },
-    "./components/*": "./dist/components/*",
-    "./hooks/*": "./dist/hooks/*",
-    "./lib/*": "./dist/lib/*",
-    "./styles/*": "./dist/styles/*"
-  },
-  "files": [
-    "dist",
-    "tailwind.config.mjs",
-    "postcss.config.mjs",
-    "components.json",
-    "README.md"
-  ],
   "scripts": {
     "build": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false",
     "build:js": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false",
     "build:types": "rm -rf .tsbuildinfo dist && tsc --emitDeclarationOnly --declaration --declarationMap false --sourceMap false",
     "build:full": "rm -rf .tsbuildinfo dist && tsc",
     "typecheck": "tsc -b ../../tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "dev": "tsx src/index.tsx"
   },
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "dependencies": {
-    "@radix-ui/react-avatar": "^1.1.0",
-    "@radix-ui/react-slot": "^1.1.0",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.5.4"
+    "@phus/core": "workspace:*",
+    "@phus/phus-design": "workspace:*",
+    "@phus/runtime": "workspace:*",
+    "@phus/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

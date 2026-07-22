@@ -27,7 +27,6 @@
 		"run": "PHUS_HOME=$PHUS_HOME tsx src/main.ts run",
 		"gateway": "PHUS_HOME=$PHUS_HOME tsx src/main.ts gateway",
 		"typecheck": "tsc -b ../../tsconfig.json --noEmit",
-		"lint": "oxlint --quiet src test",
 		"test": "vitest run --passWithNoTests"
 	},
 	"engines": {

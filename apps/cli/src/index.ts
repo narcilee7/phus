@@ -3,3 +3,4 @@
 // here in Stage 2, once @phus/runtime stops owning the bin.
 
 export const STAGE_0 = true;
+

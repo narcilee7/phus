@@ -1,0 +1,80 @@
+{
+  // apps/cli/.vscode/launch.json
+  //
+  // Debug configs for the `phus` CLI bin. Each config boots the bin
+  // via tsx (no build step required) with PHUS_HOME injected from
+  // $PWD/.phus so config + tape land under the repo root.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "phus (no args → TUI)",
+      "program": "${workspaceRoot}/apps/cli/src/main.ts",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["exec", "tsx"],
+      "cwd": "${workspaceRoot}",
+      "env": {
+        "PHUS_HOME": "${workspaceRoot}/.phus",
+        "NODE_ENV": "development"
+      },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "phus chat (TUI)",
+      "program": "${workspaceRoot}/apps/cli/src/main.ts",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["exec", "tsx"],
+      "args": ["chat"],
+      "cwd": "${workspaceRoot}",
+      "env": {
+        "PHUS_HOME": "${workspaceRoot}/.phus",
+        "NODE_ENV": "development"
+      },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "phus run '<prompt>'",
+      "program": "${workspaceRoot}/apps/cli/src/main.ts",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["exec", "tsx"],
+      "args": ["run", "${input:prompt}"],
+      "cwd": "${workspaceRoot}",
+      "env": {
+        "PHUS_HOME": "${workspaceRoot}/.phus",
+        "NODE_ENV": "development"
+      },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "phus health (diagnostic)",
+      "program": "${workspaceRoot}/apps/cli/src/main.ts",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["exec", "tsx"],
+      "args": ["health"],
+      "cwd": "${workspaceRoot}",
+      "env": {
+        "PHUS_HOME": "${workspaceRoot}/.phus"
+      },
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "prompt",
+      "type": "promptString",
+      "description": "Prompt to send to `phus run`",
+      "default": "hello"
+    }
+  ]
+}
