@@ -168,6 +168,7 @@ export type AppAction =
   | { type: "consume_quit_request" }
   | { type: "set_focused_item"; itemId: string | undefined }
   | { type: "toggle_collapsed"; itemId?: string }
+  | { type: "toggle_collapsed_visible"; itemIds: string[] }
   | { type: "set_collapsed"; itemId: string; collapsed: boolean };
 
 /** Truncate a string for compact display. */
@@ -441,15 +442,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "set_focused_item":
       return { ...state, focusedItemId: action.itemId };
     case "toggle_collapsed": {
-      // Default to the focused item if no id provided, falling back to
-      // the last collapsible item. Idempotent: toggling an already-
-      // expanded item collapses it; collapsing again expands.
-      const targetId =
-        action.itemId ??
-        state.focusedItemId ??
-        [...state.items]
-          .reverse()
-          .find((it) => it.kind === "tool_call" || it.kind === "assistant")?.id;
+      // Single-item toggle. The default `itemId === undefined` path
+      // was: "focused item, falling back to last collapsible item" —
+      // in practice that fell back too easily (a focusedItemId was
+      // never set anywhere, so Ctrl+O always toggled the most recent
+      // item, even when the user was scrolled up looking at an older
+      // tool call). Now the App.ts handler does per-viewport mass
+      // toggling, so this reducer is the per-item escape hatch.
+      const targetId = action.itemId;
       if (!targetId) return state;
       return {
         ...state,
@@ -458,13 +458,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             ? {
                 ...it,
                 collapsed:
-                  it.collapsed === undefined
-                    ? // Treat undefined as already-expanded; first toggle
-                      // collapses. Lets `collapsed: true` items start
-                      // hidden and the first Ctrl+O expand them.
-                      true
-                    : !it.collapsed,
+                  it.collapsed === undefined ? true : !it.collapsed,
               }
+            : it,
+        ),
+      };
+    }
+    case "toggle_collapsed_visible": {
+      // Per-viewport mass toggle: every collapsible item whose
+      // `collapsed` flag is in the "interesting" state flips together.
+      // The set of item ids is supplied by the caller (App.ts) so the
+      // reducer stays pure and doesn't need to know the viewport
+      // height math.
+      const ids = new Set(action.itemIds);
+      if (ids.size === 0) return state;
+      // "Any collapsed → expand all" / "all expanded → collapse all".
+      // Skip items with `collapsed === undefined` (user messages,
+      // system notices) — those don't carry expansion state.
+      const anyCollapsed = state.items.some(
+        (it) => ids.has(it.id) && it.collapsed === true,
+      );
+      const nextCollapsed = !anyCollapsed;
+      return {
+        ...state,
+        items: state.items.map((it) =>
+          ids.has(it.id) && it.kind !== "user" && it.kind !== "system"
+            ? { ...it, collapsed: nextCollapsed }
             : it,
         ),
       };

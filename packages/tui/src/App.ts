@@ -25,6 +25,7 @@ import {
 	STATUS_ROWS,
 	INPUT_ROWS,
 	MIN_CHAT_HEIGHT,
+	MAX_ITEM_ROWS,
 	STATS_TICK_MS,
 	PLAN_ROWS_COLLAPSED,
 	PLAN_ROWS_EXPANDED,
@@ -219,10 +220,25 @@ export class App extends Container {
 			onUndo: () => void runSlash("/undo", this.agent, this.store.getState(), this.store.dispatch, {
 				openResumePrompt: () => this.showResumePrompt(),
 			}),
-			// Ctrl+O toggles collapse on the focused (or last collapsible)
-			// chat item. Tool calls default to collapsed — this expands
-			// them on demand without burying the chat scroll.
-			onToggleCollapse: () => this.store.dispatch({ type: "toggle_collapsed" }),
+			// Ctrl+O: toggle collapse on every collapsible item the
+			// viewport currently shows. "Any collapsed → expand all",
+			// "all expanded → collapse all" — so a single key press
+			// opens a wall of reasoning + tool args in one go, and
+			// a second press folds it back. Per-item focus tracking
+			// was tried first but with no cursor in the chat
+			// viewport there was no honest "the item I'm looking at"
+			// signal to fall back on, so Ctrl+O always toggled the
+			// most recent item even when the user was scrolled up
+			// reading history. Per-viewport mass toggle sidesteps
+			// the focus question entirely.
+			onToggleCollapse: () => {
+				const ids = this.collectVisibleCollapsibleIds();
+				if (ids.length === 0) return;
+				this.store.dispatch({
+					type: "toggle_collapsed_visible",
+					itemIds: ids,
+				});
+			},
 			onScrollUp: (lines) => this.store.dispatch({ type: "scroll_up", lines }),
 			onScrollDown: (lines) => this.store.dispatch({ type: "scroll_down", lines }),
 			onScrollBottom: () => this.store.dispatch({ type: "scroll_bottom" }),
@@ -631,6 +647,48 @@ export class App extends Container {
 		} catch {
 			// Agent may be mid-bootstrap; skip this tick.
 		}
+	}
+
+		/**
+	 * Walk `state.items` from the bottom up, accumulating approximate
+	 * rendered heights until we cover the viewport. Returns the ids of
+	 * every collapsible item (`tool_call` / `assistant`) inside that
+	 * window — what Ctrl+O should target. Heuristic only: we don't
+	 * have the actual rendered heights here, so we estimate each
+	 * item at `MAX_ITEM_ROWS`. That deliberately over-estimates, so
+	 * the visible window may include a couple of "barely off-screen"
+	 * items at the top edge — those are part of the toggle group too
+	 * and toggling them is harmless.
+	 */
+	private collectVisibleCollapsibleIds(): string[] {
+		const state = this.store.getState();
+		const { items, scroll } = state;
+		if (items.length === 0) return [];
+		// Approximate the viewport's row budget as terminal rows minus
+		// everything that ISN'T chat. The exact arithmetic lives in
+		// computeChatHeight, but the small discrepancy (a few rows)
+		// is well within the "fine to toggle" tolerance for a mass
+		// collapse action.
+		const viewportRows = Math.max(6, (this.terminalRows ?? 24) - 8);
+		const offset = Math.max(0, scroll.offset);
+		// Bottom-anchored: start from the end, walk backwards.
+		let rowsFromBottom = 0;
+		const want = viewportRows + offset;
+		const start = (() => {
+			for (let i = items.length - 1; i >= 0; i--) {
+				rowsFromBottom += MAX_ITEM_ROWS;
+				if (rowsFromBottom >= want) return i;
+			}
+			return 0;
+		})();
+		const out: string[] = [];
+		for (let i = start; i < items.length; i++) {
+			const it = items[i]!;
+			if (it.kind === "tool_call" || it.kind === "assistant") {
+				out.push(it.id);
+			}
+		}
+		return out;
 	}
 
 	private refreshHeaderAndStatusBar(): void {

@@ -29,6 +29,19 @@ export const PALETTE_ROWS = 14;
 /** Minimum chat viewport height — guarantees the spinner stays readable. */
 export const MIN_CHAT_HEIGHT = 6;
 
+/**
+ * Upper-bound estimate for the rendered row count of a single chat
+ * item. Used by the Ctrl+O mass-toggle heuristic in App.ts: we
+ * don't have actual rendered heights in the App layer, so we walk
+ * the items list assuming each one is at most this many rows tall.
+ * Deliberately over-sized — the visible window may include a couple
+ * of "barely off-screen" items at the top, and toggling those is
+ * harmless. 60 is enough for a long markdown assistant reply or a
+ * multi-line tool result; anything beyond is genuinely off-screen
+ * for the standard 30+ row terminal.
+ */
+export const MAX_ITEM_ROWS = 60;
+
 /** Minimum sidebar height so the tree doesn't get truncated to a sliver. */
 export const MIN_SIDEBAR_HEIGHT = 10;
 
