@@ -121,6 +121,8 @@ export interface AppState {
    *  consume_quit_request handler runs useEffect → exit() so the
    *  unmount path runs cleanly outside the async submit chain. */
   quitRequested?: boolean;
+  /** Set when user presses Ctrl+C to confirm quit. Cleared on timeout or second Ctrl+C. */
+  quitConfirmPending?: boolean;
   /** The chat item id the user is currently pointing at. Used by Ctrl+O
    *  to know which item to toggle. Set by the ChatViewport on scroll /
    *  focus, cleared on /clear. */
@@ -170,6 +172,7 @@ export type AppAction =
   | { type: "clear_plan" }
   | { type: "request_quit" }
   | { type: "consume_quit_request" }
+  | { type: "set_quit_confirm_pending"; pending: boolean }
   | { type: "set_focused_item"; itemId: string | undefined }
   | { type: "toggle_collapsed"; itemId?: string }
   | { type: "toggle_collapsed_visible"; itemIds: string[] }
@@ -444,6 +447,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       delete next.quitRequested;
       return next;
     }
+    case "set_quit_confirm_pending":
+      return { ...state, quitConfirmPending: action.pending };
     case "set_focused_item":
       return { ...state, focusedItemId: action.itemId };
     case "toggle_collapsed": {

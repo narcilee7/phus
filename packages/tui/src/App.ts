@@ -547,8 +547,17 @@ export class App extends Container {
 						: "⚠ the stone slipped — turn aborted",
 				level: "warn",
 			});
-		} else {
+		} else if (state.quitConfirmPending) {
+			// Second Ctrl+C: actually quit
 			this.store.dispatch({ type: "request_quit" });
+		} else {
+			// First Ctrl+C: show confirmation prompt
+			this.store.dispatch({ type: "add_system", text: "⏎ Ctrl+C again to quit", level: "info" });
+			this.store.dispatch({ type: "set_quit_confirm_pending", pending: true });
+			// Auto-clear confirmation after 3 seconds
+			setTimeout(() => {
+				this.store.dispatch({ type: "set_quit_confirm_pending", pending: false });
+			}, 3000);
 		}
 	}
 
