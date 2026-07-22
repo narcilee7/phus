@@ -57,6 +57,7 @@ import { registerDefaultHooks } from "./default-hooks.js";
 import { buildContextBlock } from "./prompt-assembly.js";
 import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
 import { MemoryStore, AutonomyGate } from "../infra/memory/index.js";
+import { TurnReflector, DEFAULT_REFLECTOR, type ReflectorConfig } from "../infra/memory/reflector.js";
 import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Executor } from "@phus/runtime/core/runtime/executor/index.js";
 import { PlanRunner } from "@phus/runtime/core/runtime/plan/plan-runner.js";
@@ -96,6 +97,13 @@ export interface PhusAgentDeps {
   autoCompact?: AutoCompactConfig;
   /** SQLite-backed plan store. If omitted, an in-memory store is used. */
   planStore?: PlanStore;
+  /** Post-turn auto-reflection config. `undefined` → use defaults
+   *  (off). When `autoReflect` is true, every turn runs the
+   *  TurnReflector over the user prompt + assistant output + tool
+   *  results; emitted actions route through the existing
+   *  AutonomyGate so `yolo` / matching `autoApprove` commit them
+   *  straight to phus.md. */
+  reflectorConfig?: ReflectorConfig;
   /** Optional injection port for planner / verifier / learner. If
    *  omitted, PhusAgent constructs a default `CorePort` that wraps
    *  the live Pi Agent. Plugin authors and tests can substitute a
@@ -336,6 +344,7 @@ export class PhusAgent implements PhusAgentFacade {
   readonly planner: Planner;
   readonly executor: Executor;
   readonly planRunner: PlanRunner;
+  private readonly turnReflector: TurnReflector;
   readonly learner: Learner;
   readonly evolutionEngine: EvolutionEngine;
   private currentSessionId: SessionId | undefined;
@@ -510,6 +519,7 @@ export class PhusAgent implements PhusAgentFacade {
       store: this.planStore,
       hooks: this.hooks,
     });
+    this.turnReflector = new TurnReflector(deps.reflectorConfig ?? DEFAULT_REFLECTOR);
 
     this.learner = new Learner({
       tape: this.tape,
@@ -948,6 +958,20 @@ export class PhusAgent implements PhusAgentFacade {
         logger.warn("checkpoint.save_failed", { error: err.message });
       }
 
+      // 11. Post-turn auto-reflection — if enabled, run the heuristic
+      // reflector over the just-committed turn and route the emitted
+      // actions through AutonomyGate. `yolo` and matching
+      // `autoApprove` rules commit them to phus.md; everything else
+      // is dropped (operators can re-run `self_reflect` to inspect
+      // what the reflector saw, or call `memory_write` manually).
+      // Runs only on the success path so a failed turn doesn't
+      // pollute memory with half-baked text.
+      try {
+        this.runPostTurnReflection(turn);
+      } catch (err: any) {
+        logger.warn("turn.reflect_failed", { error: err?.message ?? String(err) });
+      }
+
       logger.info("turn.completed", {
         sessionId,
         durationMs: turn.durationMs,
@@ -1112,6 +1136,48 @@ export class PhusAgent implements PhusAgentFacade {
       });
     }
     return out;
+  }
+
+  /** Heuristic post-turn reflection — no LLM call, no I/O outside
+   *  the memory store. Emitted actions go through the existing
+   *  AutonomyGate so `yolo` and matching `autoApprove` commit them
+   *  silently; everything else is logged to tape for /tape inspection
+   *  but not applied. */
+  private runPostTurnReflection(turn: Turn): void {
+    const { actions, reasons } = this.turnReflector.reflect(turn);
+    if (actions.length === 0) return;
+    let applied = 0;
+    let skipped = 0;
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i]!;
+      const reason = reasons[i] ?? "unknown";
+      const decision = this.autonomyGate.decide(action);
+      if (decision !== "auto") {
+        skipped++;
+        continue;
+      }
+      const result = this.memoryStore.apply(action);
+      if (!result.ok) {
+        logger.warn("turn.reflect_apply_failed", {
+          reason: result.reason,
+          source: reason,
+        });
+        continue;
+      }
+      applied++;
+      logger.info("turn.reflect_applied", {
+        section: "section" in action ? action.section : "(n/a)",
+        kind: action.kind,
+        source: reason,
+      });
+    }
+    if (applied > 0 || skipped > 0) {
+      logger.info("turn.reflect_summary", {
+        applied,
+        skipped,
+        total: actions.length,
+      });
+    }
   }
 
   // ─── PhusAgentFacade ─────────────────────────────────────────

@@ -42,6 +42,21 @@ export interface MemoryConfig {
   logToTape: boolean;
 }
 
+/**
+ * Reflection config — the post-turn `TurnReflector` consults these
+ * fields. Off by default. Operators opt in via:
+ *
+ *   memory:
+ *     autoReflect: true
+ *     reflectMinTurnLength: 240
+ *     reflectMaxPerTurn: 2
+ */
+export interface ReflectConfig {
+  autoReflect: boolean;
+  reflectMinTurnLength: number;
+  reflectMaxPerTurn: number;
+}
+
 /** Resolved logger config. */
 export interface LogConfig {
   file: string;
@@ -120,6 +135,8 @@ export interface ResolvedConfig {
   schedules: Schedule[];
   /** Project memory autonomy + storage config. */
   memory: MemoryConfig;
+  /** Auto-reflection knobs (per-turn `memory_write` proposals). */
+  reflect: ReflectConfig;
   /** Safety policy knobs the operator can tighten/loosen at runtime. */
   safety: SafetyConfig;
   /** LLM runaway guards: timeouts, call budgets, billing fuse. */

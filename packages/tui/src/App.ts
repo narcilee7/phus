@@ -254,6 +254,14 @@ export class App extends Container {
 	 *  not every animation frame. */
 	private onInputChanged(): void {
 		this.stableInputRows = this.measureRows(this.inputBox, INPUT_ROWS);
+		// Input height changed (typing, autocomplete open/close, multi-
+		// line wrap) → re-measure every dynamic child and refit the
+		// chat viewport. Without this, the input box visually grows
+		// but the viewport keeps its old height, so the bottom rows
+		// of the chat are overlapped by the new input — the user sees
+		// the conversation "pushed up" or "scroll to top" depending
+		// on which rows get covered.
+		this.rebuildDynamicChildren();
 	}
 
 	public showResumePrompt(): void {

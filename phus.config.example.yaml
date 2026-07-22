@@ -62,6 +62,25 @@ log:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Post-turn auto-reflection (all optional, defaults shown)
+# ─────────────────────────────────────────────────────────────────────
+#
+# When `autoReflect: true`, every completed turn runs the
+# `TurnReflector` over the user prompt + assistant output + tool
+# results. Emitted memory actions route through the `AutonomyGate`
+# above — `yolo` and matching `autoApprove` rules commit them
+# silently, everything else is dropped (you can always re-run
+# `self_reflect` to inspect what the reflector saw and `memory_write`
+# manually). Off by default.
+#
+# memory:
+#   mode: propose
+#   autoReflect: true
+#   reflectMinTurnLength: 240   # skip very short turns (greetings etc.)
+#   reflectMaxPerTurn: 2        # hard cap to avoid flooding phus.md
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Safety — file_write allowlist + bash blocklist (all optional)
 # ─────────────────────────────────────────────────────────────────────
 #
