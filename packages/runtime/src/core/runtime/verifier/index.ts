@@ -212,7 +212,7 @@ export class Verifier {
   }
 
   private looksLikeJsonShape(s: string): boolean {
-    return /^\s*[\[{]/.test(s) || /^\s*"[^"]+"\s*:/.test(s);
+    return /^\s*[{[]/.test(s) || /^\s*"[^"]+"\s*:/.test(s);
   }
 
   private tryParseJsonish(x: unknown): unknown | undefined {
