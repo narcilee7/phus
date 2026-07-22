@@ -40,34 +40,60 @@ export class SubAgent {
 
     const taskText = this.buildTaskText(options);
 
-    // Wall-clock bound: pi-agent-core's loop is `while(true)` — a
-    // stuck sub-agent (endless tool calls, hung request) must not
-    // stall the whole plan. On timeout: abort the loop and throw;
-    // the Executor treats it as one failed attempt.
+    // Wall-clock bound: a stuck sub-agent (hung request) must not
+    // stall the whole plan. On timeout: abort the in-flight LLM
+    // call via the agent-level abort, and throw; the Executor treats
+    // it as one failed attempt.
     const timeoutMs = loadConfig().robustness.subagentTimeoutMs;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Compose a per-run AbortSignal that fires on either:
+    //   - the wall-clock timeout (so a stuck LLM call gets killed)
+    //   - the agent-level abort (Ctrl+C, plan cancellation)
+    // Either source aborts the signal; the LLM call resolves with
+    // an AbortError and the race below settles to the timeout
+    // (or the user abort, whichever fires first).
+    const timeoutController = new AbortController();
+    timer = setTimeout(() => {
+      this.deps.agent.abort?.();
+      timeoutController.abort();
+    }, timeoutMs);
+    timer.unref?.();
     try {
-      // Switch to the sub-session. setNextSessionId affects the
-      // NEXT turn we kick off, so we have to call this BEFORE
-      // prompt() — pairing it with steer() previously left a race
-      // where the message went into the parent's session and the
-      // session id was only used for the *following* turn.
+      // Switch to the sub-session. runTurn flips the active
+      // sessionId back to the parent in its finally block, but we
+      // also restore defensively here in case the call throws
+      // before the finally runs.
       this.deps.agent.setNextSessionId(subSessionId);
 
-      const idle = this.deps.agent.runTurn(subSessionId, taskText);
-      const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          this.deps.agent.abort?.();
-          reject(new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`));
-        }, timeoutMs);
-        timer.unref?.();
-      });
-
-      const finalMessages = await Promise.race([idle, timeout]);
-      // Extract the last assistant text from the sub-agent's own
-      // messages, not the parent's (which would include any
-      // in-flight parent turn the user kicked off while the
-      // sub-agent was running).
+      let finalMessages: AgentMessage[];
+      try {
+        // Race the LLM call against a timeout-driven reject. The
+        // controller only fires if the timer pops OR the agent-level
+        // abort lands (we mirror the agent's `abort()` to the same
+        // controller in the timer's callback). Without the race, a
+        // stuck `runTurn` that never resolves would block until
+        // vitest's outer test timeout — exactly the symptom the
+        // `subagent-timeout.test.ts` test guards against.
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutController.signal.addEventListener(
+            "abort",
+            () => reject(new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`)),
+            { once: true },
+          );
+        });
+        finalMessages = await Promise.race([
+          this.deps.agent.runTurn(subSessionId, taskText, timeoutController.signal),
+          timeoutPromise,
+        ]);
+      } catch (err) {
+        // Map abort / timeout to a structured error so the
+        // executor's retry/abort/replan logic can decide what to
+        // do.
+        if (timeoutController.signal.aborted) {
+          throw new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`);
+        }
+        throw err;
+      }
       const lastAssistant = [...finalMessages]
         .reverse()
         .find((m) => m.role === "assistant");

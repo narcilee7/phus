@@ -58,9 +58,9 @@ export interface CoreAgentLike {
  *  the impl — only this structural type. */
 export interface CorePort {
 	/** Single-shot completion for planner / verifier / learner / summarizer. */
-	complete(prompt: CoreMessage[]): Promise<CoreCompletion>;
+	complete(prompt: CoreMessage[], signal?: AbortSignal): Promise<CoreCompletion>;
 	/** Streaming-friendly prompt. Defaults to `complete` when not overridden. */
-	promptStream?(prompt: CoreMessage[]): Promise<CoreCompletion>;
+	promptStream?(prompt: CoreMessage[], signal?: AbortSignal): Promise<CoreCompletion>;
 	/** Used by SubAgent to dispatch onto the live Pi loop. */
 	agent: CoreAgentLike;
 }

@@ -111,14 +111,31 @@ export function createDefaultCorePort(
 		getCurrentSessionId: session.getCurrentSessionId,
 	};
 
-	const complete = async (prompt: CoreMessage[]): Promise<CoreCompletion> => {
+	const complete = async (
+		prompt: CoreMessage[],
+		signal?: AbortSignal,
+	): Promise<CoreCompletion> => {
 		try {
+			// `signal` is plumbed all the way down to streamSimple's
+			// underlying fetch — Ctrl+C in the TUI calls
+			// `piAgent.abort()` which triggers the signal, the fetch
+			// gets aborted, and the in-flight LLM call resolves
+			// immediately instead of waiting for the full model
+			// round-trip. The billing fuse still gets the abort as a
+			// reported error so a flapping user doesn't burn a retry.
 			const assistant = await completeSimple(model, {
 				messages: prompt.map(toAgentMessage) as any,
-			});
+				signal,
+			} as any);
 			return { text: extractText(assistant as any) };
 		} catch (err) {
 			// Mirror planner-model: classify failures so the billing fuse can trip.
+			// AbortError gets a softer classification (no LLM-call
+			// counted) so a Ctrl+C during a long generation doesn't
+			// trip the per-hour budget.
+			if ((err as any)?.name === "AbortError" || signal?.aborted) {
+				throw err;
+			}
 			getLlmFuse().report(err);
 			throw err;
 		}

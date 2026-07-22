@@ -360,6 +360,15 @@ export class PhusAgent implements PhusAgentFacade {
   /** Captured at construction — plans still "running" with an older
    *  updatedAt belong to a dead process and are reconciled to paused. */
   private readonly processStartedAt = Date.now();
+  /** Single AbortController that the abort() entry-point flips. The
+   *  signal threads into every LLM call the runtime makes — both
+   *  the parent's piAgent.prompt and the sub-agent's corePort.complete.
+   *  When the TUI hits Ctrl+C, `piAgent.abort()` (which has its own
+   *  internal signal) fires AND we abort this controller, so the
+   *  in-flight LLM call resolves immediately instead of waiting
+   *  for the full model round-trip. The controller is re-armed
+   *  per turn so a later turn isn't poisoned by a stale abort. */
+  private abortController: AbortController = new AbortController();
 
   constructor(deps: PhusAgentDeps) {
     this.tape = deps.tape;
@@ -748,36 +757,69 @@ export class PhusAgent implements PhusAgentFacade {
     );
   }
 
-  /** Run a one-shot prompt on a specific sub-session id and return
-   *  the final agent messages. Used by the sub-agent dispatcher so
-   *  the sub-task's tool calls + results stay isolated to the
-   *  sub-session and don't leak into the parent's message history.
-   *  Returns `AgentMessage[]` (the raw Pi messages) — caller
-   *  extracts the last assistant text. */
-  async runTurn(sessionId: SessionId, taskText: string): Promise<AgentMessage[]> {
+  /** Run a one-shot LLM call on behalf of a sub-agent. The
+   *  implementation uses `corePort.complete` (not `piAgent.prompt`)
+   *  for two reasons:
+   *    1. The parent's piAgent is already busy with the user turn
+   *       that triggered this sub-task. Calling piAgent.prompt()
+   *       recursively is undefined behavior — pi-agent-core holds
+   *       a single `currentRun` slot and the second call would
+   *       either throw or silently corrupt the parent's state.
+   *    2. We need the AbortSignal plumbed through, which
+   *       corePort.complete forwards to `completeSimple`'s underlying
+   *       fetch. piAgent.prompt uses its own internal signal
+   *       that we can't directly control.
+   *  The returned `AgentMessage[]` is synthesized (a user turn
+   *  + the assistant reply) so the SubAgent extraction logic
+   *  (looking for the last assistant message) works unchanged. */
+  async runTurn(
+    sessionId: SessionId,
+    taskText: string,
+    signal?: AbortSignal,
+  ): Promise<AgentMessage[]> {
     this.assertModelReady();
+    // Honor the caller's explicit signal, but always also tie the
+    // call to the runtime-level AbortController so a global
+    // `PhusAgent.abort()` reaches this in-flight call. The combined
+    // signal aborts on either source firing.
+    const effectiveSignal = signal
+      ? AbortSignal.any([signal, this.abortController.signal])
+      : this.abortController.signal;
     const previousSessionId = this.currentSessionId;
     this.currentSessionId = sessionId;
-    this.piAgent.sessionId = sessionId;
-    this.piAgent.state.messages = [];
     try {
-      await this.piAgent.prompt({
-        role: "user",
-        content: [{ type: "text", text: taskText }],
-        timestamp: Date.now(),
-      });
+      const completion = await this.corePort.complete(
+        [{ role: "user", content: taskText }],
+        effectiveSignal,
+      );
+      const ts = Date.now();
+      return [
+        {
+          role: "user",
+          content: [{ type: "text", text: taskText }],
+          timestamp: ts,
+        } as AgentMessage,
+        {
+          role: "assistant",
+          content: [{ type: "text", text: completion.text }],
+          timestamp: ts + 1,
+        } as AgentMessage,
+      ];
     } finally {
       // Always restore — even on throw. The caller relies on the
       // parent's session being unchanged when this returns.
       this.currentSessionId = previousSessionId;
-      this.piAgent.sessionId = previousSessionId as SessionId;
     }
-    return [...this.piAgent.state.messages];
   }
 
   /** Run one inbound envelope through the Bub hook chain. */
   async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
     this.assertModelReady();
+    // Re-arm the runtime-level AbortController so a Ctrl+C in the
+    // previous turn doesn't poison this turn. The previous turn's
+    // signal was already aborted by `abort()` (or the turn ran to
+    // completion, in which case the controller is still fresh).
+    this.rearmAbortController();
     const startedAt = Date.now();
     let sessionId: SessionId | undefined;
 
@@ -1211,27 +1253,41 @@ export class PhusAgent implements PhusAgentFacade {
 
   abort(): void {
     this.piAgent.abort();
+    // Trip the runtime-level AbortController so the sub-agent's
+    // in-flight LLM call (running through corePort.complete, which
+    // does NOT use the piAgent's internal signal) also stops.
+    // Without this, a sub-agent generation keeps streaming for the
+    // full model round-trip after the user hit Ctrl+C — exactly the
+    // "5-10 seconds of phantom work after the status went paused"
+    // symptom.
+    if (!this.abortController.signal.aborted) {
+      this.abortController.abort();
+    }
     // A plan run (plan_create / /plan / active-plan resume) executes
     // outside the Pi loop — piAgent.abort() alone leaves it running and
     // the turn looks hung. Cooperative: stops after the current step.
     this.planRunner?.abort();
-    // The plan-runner's `abort()` only flips an internal flag; the
-    // in-flight LLM step keeps running until it settles, and the
-    // status flip to "paused" only happens at the next step boundary.
-    // For a TUI user hitting Ctrl+C that "wait until the current
-    // step finishes" delay reads as a hang — they keep mashing the
-    // key, the plan status still says "running", nothing changes.
-    //
-    // To close that gap: also force-mark the active plan as paused
-    // in the store RIGHT NOW and emit `plan_paused`, so the TUI
-    // panel + /resume picker both see the new state immediately.
-    // The in-flight sub-agent's LLM call still runs to completion in
-    // the background (we have no AbortSignal plumbed through yet),
-    // but the next iteration of `runPlan`'s step loop sees
-    // `abortRequested = true` and exits without dispatching more
-    // work, so no extra user-visible state changes after that.
+    // Force-mark the active plan as paused right now so the TUI
+    // panel + /resume picker both see the new state immediately
+    // instead of waiting for the in-flight LLM call to settle.
     this.pauseActivePlan();
     logger.info("turn.aborted");
+  }
+
+  /** Re-arm the abort controller for a fresh turn. Called at the
+   *  start of `turn()` so a fresh turn is never born aborted by a
+   *  previous turn's Ctrl+C. */
+  private rearmAbortController(): void {
+    this.abortController = new AbortController();
+  }
+
+  /** Public accessor for the runtime-level abort signal. The sub-agent
+   *  pipeline reads this and passes it to corePort.complete, which
+   *  forwards it to streamSimple. piAgent.abort() flips this same
+   *  controller (see `abort()`), so a single Ctrl+C reaches both
+   *  the parent's prompt and the sub-agent's LLM call. */
+  getAbortSignal(): AbortSignal {
+    return this.abortController.signal;
   }
 
   async waitForIdle(): Promise<void> {
