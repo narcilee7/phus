@@ -143,6 +143,11 @@ export interface PlanEvent {
   subagent?: { sessionId: string; label: string; goal: string };
   /** Retry count delta (plan_step_retry). */
   retryDelta?: number;
+  /** DAG level for the step. The plan-runner computes the level
+   *  from `dependsOn` and threads it through every step event so
+   *  the TUI can render a "LvN" badge without re-deriving the
+   *  DAG from the limited PlanStepState. */
+  level?: number;
 }
 
 export type PlanEventHandler = (event: PlanEvent) => void;
@@ -370,7 +375,81 @@ export class PhusAgent implements PhusAgentFacade {
    *  per turn so a later turn isn't poisoned by a stale abort. */
   private abortController: AbortController = new AbortController();
 
-  constructor(deps: PhusAgentDeps) {
+  /** Build the Agent options dict used to construct BOTH the
+   *  parent's piAgent and any sub-agent (via `spawnSubAgent`).
+   *  Pure / no per-instance state — safe to share across the
+   *  sub-agent boundary. */
+  private buildAgentConfig(opts: {
+    systemPrompt: string;
+    tools: AgentTool[];
+    sessionId: SessionId;
+    model: Model<any>;
+  }): ConstructorParameters<typeof Agent>[0] {
+    return {
+      initialState: {
+        systemPrompt: opts.systemPrompt,
+        model: opts.model,
+        tools: opts.tools,
+        messages: [],
+      },
+      streamFn: async (model, context, options = {}) => {
+        const fuse = getLlmFuse();
+        fuse.check(`${model.provider}/${model.id}`);
+        const timeoutMs = loadConfig().robustness.llmTimeoutMs;
+        let response;
+        try {
+          response = await streamSimple(model, context, { ...options, timeoutMs });
+        } catch (e) {
+          fuse.report(e);
+          throw e;
+        }
+        const gen = (async function* () {
+          try {
+            for await (const event of response) yield event;
+          } catch (err) {
+            fuse.report(err);
+            throw err;
+          }
+        })();
+        try {
+          const skip = new Set(["result"]);
+          for (const k of Object.keys(response as any)) {
+            if (skip.has(k)) continue;
+            try {
+              const v = (response as any)[k];
+              if (typeof v === "function") {
+                (gen as any)[k] = v.bind(response);
+              } else if (v === null || (typeof v !== "object" && typeof v !== "undefined")) {
+                (gen as any)[k] = v;
+              }
+            } catch (_) {
+              // ignore
+            }
+          }
+        } catch (_) {
+          // ignore
+        }
+        (gen as any).result = async () => {
+          const r = (response as any).result;
+          if (typeof r === "function") return r.call(response);
+          return (response as any).extractResult
+            ? (response as any).extractResult()
+            : undefined;
+        };
+        return gen as any;
+      },
+      transformContext: async (messages) => this.injectContext(messages),
+      beforeToolCall: async (ctx, signal) => this.beforeToolCall(ctx, signal),
+      afterToolCall: async (ctx, signal) => this.afterToolCall(ctx, signal),
+      getApiKey: (provider) => resolveApiKey(provider),
+      onPayload: process.env.PHUS_DEBUG_WIRE
+        ? (kind, payload) => this.deps.logger.debug("wire.payload", { kind, hasPayload: !!payload })
+        : undefined,
+      toolExecution: this.profile.toolExecution ?? "sequential",
+    };
+  }
+
+  constructor(private deps: PhusAgentDeps) {
     this.tape = deps.tape;
     this.skills = deps.skills;
     this.memoryStore = deps.memoryStore;
@@ -398,104 +477,12 @@ export class PhusAgent implements PhusAgentFacade {
       ? this.modelForEndpoint(initialEp)
       : modelFromProfile(this.profile);
 
-    this.piAgent = new Agent({
-      initialState: {
-        systemPrompt: "phus:init",
-        model: initialModel,
-        tools,
-        messages: [],
-      },
-      // Runaway guards at the single LLM choke point: every request
-      // (main loop + retries) is fuse-checked before sending and carries
-      // an HTTP timeout; failures are classified back into the fuse so
-      // a 402 anywhere opens the billing fuse for everyone.
-      streamFn: async (model, context, options = {}) => {
-        const fuse = getLlmFuse();
-        fuse.check(`${model.provider}/${model.id}`);
-        const timeoutMs = loadConfig().robustness.llmTimeoutMs;
-        let response;
-        try {
-          response = await streamSimple(model, context, { ...options, timeoutMs });
-        } catch (e) {
-          fuse.report(e)
-          throw e
-        };
-        // Wrap the response async-iterator so we can report errors to the
-        // fuse while preserving any extra stream methods/properties the
-        // underlying streamSimple implementation exposes (e.g. isComplete,
-        // extractResult, queue, waiting).
-        const gen = (async function* () {
-          try {
-            for await (const event of response) yield event;
-          } catch (err) {
-            fuse.report(err);
-            throw err;
-          }
-        })();
-        // Copy safe auxiliary methods/props from the underlying stream
-        // onto the wrapped async-iterator so pi-agent-core sees an
-        // `AssistantMessageEventStream`-shaped object.
-        //
-        // IMPORTANT: only copy properties whose value is itself a
-        // function (callable) or a primitive. The previous implementation
-        // blindly copied every enumerable key, which breaks for
-        // providers whose `.result` is a lazy getter returning a fresh
-        // promise on each access — copying that getter onto `gen`
-        // leaves a non-callable value, and pi-agent-core's later
-        // `response.result()` call throws "response.result is not a
-        // function" mid-stream (observed on deepseek-v4-pro via the
-        // openai-completions provider). Bound-callable methods like
-        // `extractResult`, `isComplete`, `queue`, `waiting` are safe to
-        // copy as-is. `result` is rebuilt below as a proper async
-        // function so the lazy-init pattern is preserved.
-        try {
-          const skip = new Set(["result"]);
-          for (const k of Object.keys(response as any)) {
-            if (skip.has(k)) continue;
-            try {
-              const v = (response as any)[k];
-              // Only copy if the value is callable or a plain data
-              // value. Skip live getters (anything that isn't a
-              // function and isn't own-property-stable) to avoid
-              // freezing stale references onto `gen`.
-              if (typeof v === "function") {
-                (gen as any)[k] = v.bind(response);
-              } else if (v === null || (typeof v !== "object" && typeof v !== "undefined")) {
-                (gen as any)[k] = v;
-              }
-            } catch (_) {
-              // ignore property copy failures
-            }
-          }
-        } catch (_) {
-          // ignore
-        }
-        // Rebuild `result()` against the wrapped generator — drain it
-        // and reconstruct the final AssistantMessage from the last
-        // `done` event the provider emitted. This is what
-        // pi-agent-core calls after streaming is over.
-        (gen as any).result = async () => {
-          // If the provider already exposes a working `result()`,
-          // delegate. Otherwise fall back to draining the iterator and
-          // asking the provider's getter (lazy-init pattern) for the
-          // final message.
-          const r = (response as any).result;
-          if (typeof r === "function") return r.call(response);
-          return (response as any).extractResult
-            ? (response as any).extractResult()
-            : undefined;
-        };
-        return gen as any;
-      },
-      transformContext: async (messages) => this.injectContext(messages),
-      beforeToolCall: async (ctx, signal) => this.beforeToolCall(ctx, signal),
-      afterToolCall: async (ctx, signal) => this.afterToolCall(ctx, signal),
-      getApiKey: (provider) => resolveApiKey(provider),
-      onPayload: process.env.PHUS_DEBUG_WIRE
-        ? (kind, payload) => deps.logger.debug("wire.payload", { kind, hasPayload: !!payload })
-        : undefined,
-      toolExecution: deps.profile.toolExecution ?? "sequential",
-    });
+    this.piAgent = new Agent(this.buildAgentConfig({
+      systemPrompt: "phus:init",
+      tools,
+      sessionId: asSessionId(this.currentSessionId ?? "tui:user"),
+      model: initialModel,
+    }));
 
     this.piAgent.subscribe((event) => this.handleEvent(event));
     registerDefaultHooks(this.hooks, { tape: this.tape });
@@ -1288,6 +1275,60 @@ export class PhusAgent implements PhusAgentFacade {
    *  the parent's prompt and the sub-agent's LLM call. */
   getAbortSignal(): AbortSignal {
     return this.abortController.signal;
+  }
+
+  /** Tool list (external + meta). Exposed so the SubAgent can run
+   *  a fresh Agent with the same tool surface as the parent — its
+   *  tool calls don't pollute the parent's history because they go
+   *  to a separate Agent with a private `messages` array. */
+  getTools(): AgentTool[] {
+    return [...this.piAgent.state.tools];
+  }
+
+  /** The current model + system prompt + API key, exposed so the
+   *  SubAgent can construct a parallel Agent with the same setup. */
+  getModel(): unknown {
+    return this.piAgent.state.model;
+  }
+
+  getApiKey(provider: string): string | undefined {
+    return resolveApiKey(provider);
+  }
+
+  getSystemPrompt(): string {
+    return this.piAgent.state.systemPrompt;
+  }
+
+  getApiKeyEnv(): string | undefined {
+    return this.profile.apiKeyEnv;
+  }
+
+  /** Build a fully-isolated Agent for a sub-agent. The returned
+   *  Agent has:
+   *    - private `state.messages` (caller can re-init via
+   *      `state.messages = []` before each run)
+   *    - its own session id (sub-agent's view of "current session")
+   *    - the same model + tools + system-prompt + hooks as the parent
+   *  The sub-agent's tool calls + tool results stay in its own
+   *  messages array — they never bleed into the parent's history. */
+  spawnSubAgent(opts: {
+    systemPrompt: string;
+    tools: AgentTool[];
+    sessionId: SessionId;
+  }): Agent {
+    return new Agent(
+      this.buildAgentConfig({
+        systemPrompt: opts.systemPrompt,
+        tools: opts.tools,
+        sessionId: opts.sessionId,
+        // Snapshot the parent's currently-active model. The sub-agent
+        // is "frozen" on this model for the rest of its run — if
+        // the user does `/model` mid-plan, the next sub-agent will
+        // see the new model; in-flight ones keep going on the
+        // old one.
+        model: this.piAgent.state.model,
+      }),
+    );
   }
 
   async waitForIdle(): Promise<void> {

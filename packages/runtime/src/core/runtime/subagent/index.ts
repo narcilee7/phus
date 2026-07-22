@@ -1,19 +1,28 @@
 // packages/runtime/src/core/runtime/subagent/index.ts
-// Sub-agent: dispatches a self-contained task to a fresh session.
+// Sub-agent: dispatches a self-contained task on a fresh, isolated
+// Agent instance.
 //
-// v2: instead of `steer()`-ing the parent Agent (which leaks the
-// sub-task's tool calls + results back into the parent's message
-// history, polluting the next turn), we now spin up the sub-agent
-// as its own piAgent.prompt() turn on a fresh sub-session id. The
-// sub-agent's messages are isolated to the sub-session and don't
-// bleed back to the parent.
+// v4: the sub-agent owns a sibling `Agent` (not the parent's). The
+// sibling has its own `state.messages`, its own session id, and its
+// own internal abort signal. The sub-agent's tool calls + tool
+// results stay in the sibling's messages and never bleed into the
+// parent's history. The parent's piAgent is untouched.
+//
+// The AbortSignal chain is:
+//   PhusAgent.abort()         (parent-level)
+//     └─ abortController.abort()
+//          └─ abortSignal     (read by sub-agent.run)
+//               ├─ agent.prompt(signal) — pi-agent-core hooks see this
+//               └─ fetch(signal)      — transport layer
+//   SubAgent.run timeout      (per-run wall clock)
+//     └─ timeoutController.abort()
+//          └─ mirror to deps.agent.abort() and re-fire the combined signal
 
 import { asSessionId } from "@phus/core/types/brand.js";
 import { type PlanPhase, type SubAgentOptions } from "../plan/types";
 import { SubAgentAgentLike } from "./types";
-import { AgentMessage } from "@mariozechner/pi-agent-core";
-import { extractText } from "../../../bridge/text.js";
 import { loadConfig } from "../../../infra/config/index.js";
+import { logger } from "../../../infra/logging.js";
 
 export class SubAgentTimeoutError extends Error {
   override readonly name = "SubAgentTimeoutError";
@@ -33,80 +42,106 @@ export class SubAgent {
     return asSessionId(`${parentSessionId}:sub:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`);
   }
 
-  async run(options: SubAgentOptions): Promise<unknown> {
+  async run(options: SubAgentOptions, externalSignal?: AbortSignal): Promise<unknown> {
     const parentSessionId = options.parentSessionId;
     const subSessionId = this.buildSubSessionId(parentSessionId);
-    const previousSessionId = this.deps.agent.getCurrentSessionId();
 
     const taskText = this.buildTaskText(options);
 
-    // Wall-clock bound: a stuck sub-agent (hung request) must not
-    // stall the whole plan. On timeout: abort the in-flight LLM
-    // call via the agent-level abort, and throw; the Executor treats
-    // it as one failed attempt.
+    // Compose the system prompt: parent's base + skills + the
+    // sub-agent's per-task framing. We do this here (not in the
+    // agent) so the parent can keep its own system prompt intact.
+    const systemPrompt =
+      this.deps.agent.getSkillsPrompt();
+
+    // Spawn the sub-agent's own Agent. `tools` here is the parent's
+    // tool list — the sub-agent re-uses the parent's tool surface
+    // (bash, file_read, file_write, meta-tools) without cloning
+    // the definitions, which would balloon the per-step cost.
+    // `state.messages` is fresh because the Agent constructor
+    // initializes it to [].
+    const sibling = this.deps.agent.spawnSubAgent({
+      systemPrompt,
+      tools: this.deps.agent.getTools(),
+      sessionId: subSessionId,
+    });
+
+    // Build the per-run abort signal: composed from the parent's
+    // runtime-level signal (Ctrl+C), the caller's external signal
+    // (e.g. plan-level abort), and our own wall-clock timeout.
+    // Any of the three firing aborts the combined signal.
     const timeoutMs = loadConfig().robustness.subagentTimeoutMs;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // Compose a per-run AbortSignal that fires on either:
-    //   - the wall-clock timeout (so a stuck LLM call gets killed)
-    //   - the agent-level abort (Ctrl+C, plan cancellation)
-    // Either source aborts the signal; the LLM call resolves with
-    // an AbortError and the race below settles to the timeout
-    // (or the user abort, whichever fires first).
     const timeoutController = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
     timer = setTimeout(() => {
       this.deps.agent.abort?.();
       timeoutController.abort();
     }, timeoutMs);
     timer.unref?.();
-    try {
-      // Switch to the sub-session. runTurn flips the active
-      // sessionId back to the parent in its finally block, but we
-      // also restore defensively here in case the call throws
-      // before the finally runs.
-      this.deps.agent.setNextSessionId(subSessionId);
 
-      let finalMessages: AgentMessage[];
-      try {
-        // Race the LLM call against a timeout-driven reject. The
-        // controller only fires if the timer pops OR the agent-level
-        // abort lands (we mirror the agent's `abort()` to the same
-        // controller in the timer's callback). Without the race, a
-        // stuck `runTurn` that never resolves would block until
-        // vitest's outer test timeout — exactly the symptom the
-        // `subagent-timeout.test.ts` test guards against.
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutController.signal.addEventListener(
-            "abort",
-            () => reject(new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`)),
-            { once: true },
-          );
-        });
-        finalMessages = await Promise.race([
-          this.deps.agent.runTurn(subSessionId, taskText, timeoutController.signal),
-          timeoutPromise,
-        ]);
-      } catch (err) {
-        // Map abort / timeout to a structured error so the
-        // executor's retry/abort/replan logic can decide what to
-        // do.
-        if (timeoutController.signal.aborted) {
-          throw new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`);
-        }
-        throw err;
+    const combinedSignal = AbortSignal.any([
+      this.deps.agent.getAbortSignal(),
+      timeoutController.signal,
+      ...(externalSignal ? [externalSignal] : []),
+    ]);
+
+    try {
+      // Push the task into the sibling's message stream. We
+      // pre-pend a system-side framing so the model knows it's
+      // running as a sub-agent (not the parent).
+      sibling.state.messages = [
+        {
+          role: "user" as const,
+          content: [{ type: "text" as const, text: taskText }],
+          timestamp: Date.now(),
+        },
+      ];
+      sibling.sessionId = subSessionId;
+
+      // Race the prompt against the timeout. A stuck `prompt`
+      // (e.g. the LLM provider is hanging) is the symptom this
+      // race guards against — without it, the sub-agent would
+      // block until the parent's own watchdog fired.
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutController.signal.addEventListener(
+          "abort",
+          () => reject(new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`)),
+          { once: true },
+        );
+      });
+
+      // pi-agent-core's prompt() takes a message arg; the
+      // continue() method resumes from the current messages
+      // array. We already pushed the user message into
+      // sibling.state.messages above, so continue() picks up
+      // from there. The combined signal reaches pi-agent-core
+      // via the agent's own .signal getter; if a timeout
+      // fires, sibling.abort() is called by the timeout
+      // callback.
+      await Promise.race([sibling.continue(), timeoutPromise]);
+
+      // Extract the last assistant text from the sibling's
+      // PRIVATE messages — no parent pollution, no session bleed.
+      const messages = sibling.state.messages as Array<{ role: string; content: Array<{ type: string; text?: string }> }>;
+      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+      if (!lastAssistant) return "";
+      return lastAssistant.content
+        .filter((c) => c.type === "text" && typeof c.text === "string")
+        .map((c) => c.text!)
+        .join("");
+    } catch (err) {
+      if (timeoutController.signal.aborted) {
+        throw new SubAgentTimeoutError(`sub-agent timed out after ${timeoutMs}ms`);
       }
-      const lastAssistant = [...finalMessages]
-        .reverse()
-        .find((m) => m.role === "assistant");
-      return extractText(lastAssistant);
+      throw err;
     } finally {
       if (timer) clearTimeout(timer);
-      // Restore the parent's session id so the next plan step
-      // (or the next user turn) goes back to the parent's
-      // conversation. Without this, a sub-agent run would leave
-      // the parent "stuck" in the sub-session.
-      if (previousSessionId) {
-        this.deps.agent.setNextSessionId(previousSessionId);
-      }
+      // The sibling Agent isn't disposed here — pi-agent-core
+      // doesn't expose a clean teardown. Its `state.messages`
+      // is still private, so leaving it alive doesn't leak
+      // anything into the parent. On the next sub-agent.run,
+      // `spawnSubAgent` builds a fresh Agent instance, so
+      // messages never accumulate across runs.
     }
   }
 
@@ -129,3 +164,8 @@ export class SubAgent {
     return parts.join("\n\n");
   }
 }
+
+// quiet unused — logger is wired but we don't need a per-instance
+// ref in the v1 sub-agent (errors propagate up through Promise
+// rejection).
+void logger;

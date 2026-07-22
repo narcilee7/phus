@@ -61,7 +61,7 @@ export function createExternalTools(): AgentTool[] {
         cwd: Type.Optional(Type.String({ description: "Working directory. Defaults to $PWD." })),
         timeoutMs: Type.Optional(Type.Number({ description: "Max execution time in ms. Default 30000." })),
       }),
-      execute: async (toolCallId, params) => {
+      execute: async (toolCallId, params, signal) => {
         const p = params as { command: unknown; cwd?: unknown; timeoutMs?: number };
         const cmd = String(p.command);
         const cwd = (p.cwd as string | undefined) ?? process.cwd();
@@ -84,10 +84,23 @@ export function createExternalTools(): AgentTool[] {
                 cwd,
                 timeout: timeoutMs,
                 maxBuffer: 5 * 1024 * 1024,
-              }),
+                // Encode stdout/stderr as utf-8 so the .stdout /
+                // .stderr fields are strings, not Buffers. The
+                // tool returns text to the model, so we don't
+                // need binary.
+                encoding: "utf-8",
+                // Forward the abort signal to the child process. When
+                // the parent Aborts (Ctrl+C, plan cancel, sub-agent
+                // timeout), Node's child_process tears down the sh
+                // subprocess and resolves the promise with an
+                // AbortError — exactly what we want. Without this,
+                // a long-running `npm install` or `cargo build`
+                // keeps the child alive until the OS-level timeout.
+                signal,
+              } as any),
             { ...DEFAULT_RETRY, maxAttempts: 2, initialDelayMs: 500, maxDelayMs: 2000, jitter: false },
           );
-          return textResult((stdout.stdout ?? "") + (stdout.stderr ?? ""));
+          return textResult(String(stdout.stdout ?? "") + String(stdout.stderr ?? ""));
         } finally {
           if (heartbeat) clearInterval(heartbeat);
         }
@@ -107,12 +120,16 @@ export function createExternalTools(): AgentTool[] {
         offset: Type.Optional(Type.Number({ description: "Line number to start reading from. Defaults to 1." })),
         limit: Type.Optional(Type.Number({ description: `Max lines to read. Defaults to ${MAX_READ_LINES}.` })),
       }),
-      execute: async (_id, params) => {
+      execute: async (_id, params, signal) => {
         const p = params as { path: unknown; offset?: number; limit?: number };
         const filePath = String(p.path);
         const startLine = Math.max(1, p.offset ?? 1);
         const maxLines = Math.min(p.limit ?? MAX_READ_LINES, MAX_READ_LINES);
-        const raw = await readFile(filePath, "utf-8");
+        // Forward signal: slow network mounts may block readFile for
+        // a long time; abort cuts the read short. The cast widens
+        // the result type — with `encoding: "utf-8"` set, Node
+        // returns a string at runtime.
+        const raw = (await readFile(filePath, { encoding: "utf-8", signal } as any)) as unknown as string;
         const allLines = raw.split('\n');
         if (allLines.length > 0 && allLines[allLines.length - 1] === '') allLines.pop();
         const totalLines = allLines.length;
@@ -152,11 +169,15 @@ export function createExternalTools(): AgentTool[] {
         path: Type.String({ description: "Absolute or cwd-relative path." }),
         content: Type.String({ description: "File content." }),
       }),
-      execute: async (_id, params) => {
+      execute: async (_id, params, signal) => {
         const p = params as { path: unknown; content: unknown };
         const filePath = String(p.path);
         await mkdir(path.dirname(filePath), { recursive: true });
-        await writeFile(filePath, String(p.content), "utf-8");
+        // Forward the abort signal — Node's fs rejects with
+        // AbortError when the signal fires mid-write, which the
+        // executor's error-handling path treats as a clean
+        // "aborted by user" rather than a tool failure.
+        await writeFile(filePath, String(p.content), { encoding: "utf-8", signal } as any);
         return textResult(`Wrote ${String(p.content).length} bytes to ${filePath}`);
       },
     },

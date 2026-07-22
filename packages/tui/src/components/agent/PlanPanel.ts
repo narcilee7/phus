@@ -36,9 +36,23 @@ export class PlanPanel implements Component {
 			return box([titleLine, this.progressLine(width)], "round", width, "cyan");
 		}
 		const rows: string[] = [titleLine];
+		// Group steps by level so the operator can see the parallel
+		// "lanes" at a glance. A separator line between levels
+		// makes the dependency boundary visible.
+		let lastLevel: number | undefined;
 		for (const step of this.plan.steps) {
+			const level = step.level ?? 0;
+			if (lastLevel !== undefined && level !== lastLevel) {
+				// Dotted separator between DAG levels — a faint
+				// visual hint that the dependency graph drops one
+				// tier.
+				rows.push(colorize("  ·  ".padEnd(width, "·"), "dim"));
+			}
+			lastLevel = level;
 			const { glyph, color } = stepGlyph(step.status);
-			const line = `${colorize(glyph, color)} ${truncateToWidth(step.description, width - 4, "…")}`;
+			const levelBadge = colorize(`Lv${level}`, "dim");
+			const line =
+				`${colorize(glyph, color)} ${levelBadge}  ${truncateToWidth(step.description, width - 12, "…")}`;
 			rows.push(padRight(line, width));
 		}
 		while (rows.length < 4) rows.push(padRight("", width));

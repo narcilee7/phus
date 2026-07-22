@@ -68,6 +68,10 @@ export interface PlanStepState {
   error?: string;
   /** Number of retries attempted for this step. */
   retryCount?: number;
+  /** DAG level this step runs at. 0 = no deps, N = depends on
+   *  steps at level < N. Steps in the same level run in parallel.
+   *  Surfaced in the plan panel as a "LvN" badge. */
+  level?: number;
   /** Subagent session id responsible for this step. */
   subagentSessionId?: string;
   /** Short label for the subagent (e.g. "explore", "verify"). */

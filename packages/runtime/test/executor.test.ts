@@ -43,44 +43,54 @@ function extractText(message: AgentMessage): string {
 
 interface MockAgent {
   steered: string[];
-  runTurnCalls: Array<{ sessionId: string; taskText: string }>;
-  steer(msg: AgentMessage): void;
-  waitForIdle(): Promise<void>;
-  getCurrentSessionId(): ReturnType<typeof asSessionId> | undefined;
-  setNextSessionId(id: ReturnType<typeof asSessionId>): void;
-  subscribeToAgentEvents(handler: (event: unknown) => void): () => void;
-  runTurn(sessionId: ReturnType<typeof asSessionId>, taskText: string): Promise<AgentMessage[]>;
+  spawnCalls: Array<{ sessionId: string }>;
+  getSkillsPrompt(): string;
+  getTools(): unknown[];
+  getAbortSignal(): AbortSignal;
+  spawnSubAgent(opts: { systemPrompt: string; tools: unknown[]; sessionId: ReturnType<typeof asSessionId> }): unknown;
+  abort?(): void;
 }
 
 function makeMockAgent(resultText = "done"): MockAgent {
   const steered: string[] = [];
-  const runTurnCalls: Array<{ sessionId: string; taskText: string }> = [];
+  const spawnCalls: Array<{ sessionId: string }> = [];
   return {
     steered,
-    runTurnCalls,
-    steer: (msg: AgentMessage) => {
-      steered.push(extractText(msg));
-    },
-    waitForIdle: async () => {},
-    getCurrentSessionId: () => makeSid("session-1"),
-    setNextSessionId: () => {},
-    subscribeToAgentEvents: () => () => {},
-    runTurn: async (_sessionId: string, taskText: string) => {
-      runTurnCalls.push({ sessionId: _sessionId, taskText });
-      steered.push(taskText);
-      // Simulate a sub-agent run: a single user message + assistant reply.
-      return [
-        {
-          role: "user",
-          content: [{ type: "text", text: taskText }],
-          timestamp: Date.now(),
-        },
-        {
-          role: "assistant",
-          content: [{ type: "text", text: resultText }],
-          timestamp: Date.now(),
-        },
-      ] as AgentMessage[];
+    spawnCalls,
+    getSkillsPrompt: () => "",
+    getTools: () => [],
+    getAbortSignal: () => new AbortController().signal,
+    abort: () => {},
+    // New v4 contract: spawnSubAgent returns a sibling Agent whose
+    // .state.messages is private. SubAgent.run pushes the task
+    // into sibling.state.messages BEFORE calling sibling.continue(),
+    // so the mock reads the task text from there to record the call.
+    spawnSubAgent: (opts) => {
+      spawnCalls.push({ sessionId: opts.sessionId });
+      const runOnce = () => {
+        // The first message is the user-pushed task; record its
+        // text so the test can assert the retry call's content.
+        const userMsg = (sibling.state.messages as Array<any>).find((m) => m.role === "user");
+        const taskText =
+          userMsg?.content?.[0]?.text ?? "(no task text)";
+        steered.push(taskText);
+        sibling.state.messages = [
+          ...(sibling.state.messages as unknown[]),
+          {
+            role: "assistant",
+            content: [{ type: "text", text: resultText }],
+            timestamp: Date.now() + 1,
+          },
+        ];
+      };
+      const sibling: any = {
+        state: { messages: [] as unknown[] },
+        sessionId: opts.sessionId,
+        prompt: runOnce,
+        continue: runOnce,
+        abort: () => {},
+      };
+      return sibling;
     },
   };
 }

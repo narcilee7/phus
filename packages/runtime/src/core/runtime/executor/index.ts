@@ -31,7 +31,11 @@ export class Executor {
 
   readonly defaultMaxRetries = 3
 
-  async executeStep(step: Step, plan: Plan): Promise<{ step: Step; verification: VerificationResult }> {
+  async executeStep(
+    step: Step,
+    plan: Plan,
+    signal?: AbortSignal,
+  ): Promise<{ step: Step; verification: VerificationResult }> {
     const maxRetries = this.deps.maxRetries ?? this.defaultMaxRetries;
     let lastResult: unknown;
     let verification: VerificationResult | undefined;
@@ -39,7 +43,7 @@ export class Executor {
     while (step.retryCount <= maxRetries) {
       try {
         step.status = "running";
-        lastResult = await this.runStep(step, plan);
+        lastResult = await this.runStep(step, plan, signal);
       } catch (err) {
         lastResult = err instanceof Error ? err : new Error(String(err));
       }
@@ -94,7 +98,7 @@ export class Executor {
     };
   }
 
-  private async runStep(step: Step, plan: Plan): Promise<unknown> {
+  private async runStep(step: Step, plan: Plan, signal?: AbortSignal): Promise<unknown> {
     if (step.tool && this.deps.tools?.has(step.tool)) {
       const tool = this.deps.tools.get(step.tool)!;
       return tool({
@@ -106,13 +110,16 @@ export class Executor {
     }
 
     const subAgent = new SubAgent({ agent: this.deps.agent });
-    return subAgent.run({
-      task: step.description,
-      parentSessionId: plan.sessionId,
-      context: step.expectedOutput,
-      phase: step.phase,
-      repairContext: step.repairContext,
-    });
+    return subAgent.run(
+      {
+        task: step.description,
+        parentSessionId: plan.sessionId,
+        context: step.expectedOutput,
+        phase: step.phase,
+        repairContext: step.repairContext,
+      },
+      signal,
+    );
   }
 
   private buildRepairContext(

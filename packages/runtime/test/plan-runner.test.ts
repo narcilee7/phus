@@ -317,7 +317,17 @@ describe("PlanRunner", () => {
   it("abort() stops the run after the current step and leaves it resumable", async () => {
     const store = new PlanStore(":memory:");
     const hooks = new HookRegistry({ isolateErrors: true });
-    const steps = [makeStep(0, { id: "a" }), makeStep(1, { id: "b" }), makeStep(2, { id: "c" })];
+    // Linear chain (a → b → c) so the DAG scheduler runs them
+    // one per level — the test asserts only "a" runs (the others
+    // are skipped when the abort lands mid-step). An independent
+    // 3-step plan would put all three in level 0 and the new
+    // parallel runner would dispatch them all before the abort
+    // takes effect, defeating the test's intent.
+    const steps = [
+      makeStep(0, { id: "a" }),
+      makeStep(1, { id: "b", dependsOn: ["a"] }),
+      makeStep(2, { id: "c", dependsOn: ["b"] }),
+    ];
     const planner = {
       createPlan: vi.fn().mockResolvedValue(makePlan(steps)),
     } as unknown as Planner;
@@ -412,6 +422,23 @@ describe("PlanRunner runaway budgets", () => {
       ),
     }) as unknown as Planner;
 
+  // Linear chain planner — every step depends on the previous.
+  // Used by the wall-clock budget test: under the new parallel
+  // DAG, three independent steps all run in one level and finish
+  // too quickly for the budget to trigger. Chaining forces one
+  // step per level, which is what the test was originally written
+  // to exercise.
+  const chainedPlanner = () =>
+    ({
+      createPlan: vi.fn().mockResolvedValue(
+        makePlan([
+          makeStep(0, { id: "a" }),
+          makeStep(1, { id: "b", dependsOn: ["a"] }),
+          makeStep(2, { id: "c", dependsOn: ["b"] }),
+        ]),
+      ),
+    }) as unknown as Planner;
+
   it("stops at planMaxSteps, marks the rest skipped, and pauses", async () => {
     writeRobustness("robustness:\n  planMaxSteps: 1\n");
     const store = new PlanStore(":memory:");
@@ -434,7 +461,10 @@ describe("PlanRunner runaway budgets", () => {
     const hooks = new HookRegistry({ isolateErrors: true });
     const executor = completingExecutor(5); // each step burns >1ms
 
-    const runner = new PlanRunner({ planner: threeStepPlanner(), executor, store, hooks });
+    // Linear chain (a → b → c) so each level runs exactly one
+    // step; otherwise the new parallel DAG finishes the whole
+    // level in ~5ms and the wall-clock budget never trips.
+    const runner = new PlanRunner({ planner: chainedPlanner(), executor, store, hooks });
     const plan = await runner.createAndRun("goal", "session-1");
 
     expect(plan.status).toBe("paused");
