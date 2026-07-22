@@ -90,13 +90,18 @@ install_from_release() {
   rm -rf "$install_dir/staging"
 
   # Rebuild native deps if needed (better-sqlite3).
+  # Drop --frozen-lockfile: after the multi-package publish, the published
+  # @phus/cli/package.json has real version specs for its workspace deps
+  # (e.g. @phus/core: 0.1.1) while the shipped pnpm-lock.yaml still
+  # records the monorepo's workspace:* entries. pnpm resolves fresh
+  # against the registry instead of failing on a stale lockfile.
   if [ -f "$install_dir/package.json" ]; then
     ensure_node
     ensure_pnpm
     log "Installing native dependencies..."
     (
       cd "$install_dir"
-      pnpm install --frozen-lockfile --prod
+      pnpm install --prod
     )
   fi
 

@@ -55,10 +55,48 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      # Stage-5 of the monorepo split: only @phus/cli is published in v1
-      # (proposal §6.3). @phus/runtime, @phus/core, @phus/tui stay
-      # private and are consumed only via the workspace.
-      - name: Publish @phus/cli to npm
+      # Stage-5 of the monorepo split: publish the 5 public packages in
+      # dependency order so a consumer's `npm install @phus/cli` resolves
+      # all of @phus/core / @phus/runtime / @phus/tui / @phus/shared from
+      # the registry. pnpm's workspace protocol rewrites the `workspace:*`
+      # specifiers in each package.json to the real version on publish.
+      - name: Publish @phus/shared
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          pnpm --filter @phus/shared publish \
+            --no-git-checks \
+            --access public \
+            --tag ${{ steps.dist-tag.outputs.tag }}
+
+      - name: Publish @phus/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          pnpm --filter @phus/core publish \
+            --no-git-checks \
+            --access public \
+            --tag ${{ steps.dist-tag.outputs.tag }}
+
+      - name: Publish @phus/runtime
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          pnpm --filter @phus/runtime publish \
+            --no-git-checks \
+            --access public \
+            --tag ${{ steps.dist-tag.outputs.tag }}
+
+      - name: Publish @phus/tui
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          pnpm --filter @phus/tui publish \
+            --no-git-checks \
+            --access public \
+            --tag ${{ steps.dist-tag.outputs.tag }}
+
+      - name: Publish @phus/cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |

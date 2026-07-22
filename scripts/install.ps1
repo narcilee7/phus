@@ -81,7 +81,11 @@ function Install-FromRelease {
     Ensure-pnpm
     Log "Installing native dependencies..."
     Push-Location $PhusHome
-    try { pnpm install --frozen-lockfile --prod } finally { Pop-Location }
+    # Drop --frozen-lockfile: after the multi-package publish, the
+    # published @phus/cli/package.json has real version specs for its
+    # workspace deps while the shipped pnpm-lock.yaml still records the
+    # monorepo's workspace:* entries. Resolve fresh against the registry.
+    try { pnpm install --prod } finally { Pop-Location }
   }
 
   Log "Phus $tag installed at $PhusHome"
