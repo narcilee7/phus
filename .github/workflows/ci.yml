@@ -78,6 +78,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Build the workspace before test: the runtime tests deep-import
+      # `@phus/core/dist/...` etc. via the package exports field, so
+      # every published package needs its `dist/` populated. A clean
+      # `pnpm install` symlinks the workspace packages but does not
+      # invoke their build scripts; this step fills in the dist tree
+      # so vitest can resolve the cross-package imports.
+      - name: Build workspace packages
+        run: pnpm -r build
+
       - name: Test
         run: pnpm test
 
