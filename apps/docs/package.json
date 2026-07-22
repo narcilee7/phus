@@ -1,0 +1,13 @@
+{
+  "name": "@phus/docs",
+  "version": "1.0.0",
+  "description": "Phus documentation site",
+  "scripts": {
+    "dev": "rspress dev",
+    "build": "rspress build",
+    "preview": "rspress preview"
+  },
+  "dependencies": {
+    "rspress": "^1.39.0"
+  }
+}

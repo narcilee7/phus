@@ -25,6 +25,7 @@ export class KeyWizard implements Component, Focusable {
 	private step: Step = "mode";
 	private mode: "envVar" | "inline" = "envVar";
 	private value = "";
+	private valuePristine = true;
 	private errorMsg: string | undefined;
 	private provider: string | undefined;
 	private done = false;
@@ -54,8 +55,10 @@ export class KeyWizard implements Component, Focusable {
 			if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) {
 				this.mode = this.mode === "envVar" ? "inline" : "envVar";
 				this.value = this.mode === "envVar" ? defaultEnvVarName(this.provider) : "";
+				this.valuePristine = true;
 			} else if (matchesKey(data, Key.enter) || data === "\r") {
 				this.step = "value";
+				this.valuePristine = true;
 			} else if (matchesKey(data, Key.escape)) {
 				this.finish(false);
 			}
@@ -66,10 +69,18 @@ export class KeyWizard implements Component, Focusable {
 			else if (matchesKey(data, Key.escape)) this.step = "mode";
 			else if (matchesKey(data, Key.backspace) || matchesKey(data, Key.delete)) {
 				this.value = this.value.slice(0, -1);
+				this.valuePristine = false;
 			} else if (data.length > 0) {
 				const pasted = extractPasteContent(data);
-				if (pasted !== null) this.value += pasted;
-				else if (!data.startsWith("\x1b")) this.value += data;
+				if (pasted !== null) {
+					if (this.valuePristine) this.value = pasted;
+					else this.value += pasted;
+					this.valuePristine = false;
+				} else if (!data.startsWith("\x1b")) {
+					if (this.valuePristine) this.value = data;
+					else this.value += data;
+					this.valuePristine = false;
+				}
 			}
 			return;
 		}

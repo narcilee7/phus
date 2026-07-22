@@ -38,8 +38,10 @@ export class BootstrapWizard implements Component, Focusable {
 	private providerIndex = 0;
 	private modelIndex = 0;
 	private apiKey = "";
+	private apiKeyPristine = true;
 	private keyMode: "envVar" | "inline" = "envVar";
 	private profileName = "default";
+	private profilePristine = true;
 	private errorMsg: string | undefined;
 	private done = false;
 
@@ -109,21 +111,34 @@ export class BootstrapWizard implements Component, Focusable {
 			if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) {
 				this.keyMode = this.keyMode === "envVar" ? "inline" : "envVar";
 				this.apiKey = this.keyMode === "envVar" ? defaultEnvVarName(this.currentProvider()) : "";
+				this.apiKeyPristine = true;
 			} else if (matchesKey(data, Key.enter) || data === "\r") {
 				this.step = "apiKey";
+				this.apiKeyPristine = true;
 			} else if (matchesKey(data, Key.escape)) this.step = "model";
 			return;
 		}
 		if (this.step === "apiKey") {
 			if (matchesKey(data, Key.enter) || data === "\r") {
-				if (this.apiKey.trim().length > 0) this.step = "profile";
+				if (this.apiKey.trim().length > 0) {
+					this.step = "profile";
+					this.profilePristine = true;
+				}
 			} else if (matchesKey(data, Key.escape)) this.step = "keyMode";
 			else if (matchesKey(data, Key.backspace) || matchesKey(data, Key.delete)) {
 				this.apiKey = this.apiKey.slice(0, -1);
+				this.apiKeyPristine = false;
 			} else if (data.length > 0) {
 				const pasted = extractPasteContent(data);
-				if (pasted !== null) this.apiKey += pasted;
-				else if (!data.startsWith("\x1b")) this.apiKey += data;
+				if (pasted !== null) {
+					if (this.apiKeyPristine) this.apiKey = pasted;
+					else this.apiKey += pasted;
+					this.apiKeyPristine = false;
+				} else if (!data.startsWith("\x1b")) {
+					if (this.apiKeyPristine) this.apiKey = data;
+					else this.apiKey += data;
+					this.apiKeyPristine = false;
+				}
 			}
 			return;
 		}
@@ -132,10 +147,18 @@ export class BootstrapWizard implements Component, Focusable {
 			else if (matchesKey(data, Key.escape)) this.step = "keyMode";
 			else if (matchesKey(data, Key.backspace) || matchesKey(data, Key.delete)) {
 				this.profileName = this.profileName.slice(0, -1);
+				this.profilePristine = false;
 			} else if (data.length > 0) {
 				const pasted = extractPasteContent(data);
-				if (pasted !== null) this.profileName += pasted;
-				else if (!data.startsWith("\x1b")) this.profileName += data;
+				if (pasted !== null) {
+					if (this.profilePristine) this.profileName = pasted;
+					else this.profileName += pasted;
+					this.profilePristine = false;
+				} else if (!data.startsWith("\x1b")) {
+					if (this.profilePristine) this.profileName = data;
+					else this.profileName += data;
+					this.profilePristine = false;
+				}
 			}
 			return;
 		}

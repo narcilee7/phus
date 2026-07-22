@@ -1,0 +1,35 @@
+---
+pageType: home
+
+hero:
+  name: Phus
+  text: 西西弗斯
+  tagline: 自进化的 AI Agent 运行时
+  actions:
+    - theme: brand
+      text: 快速开始
+      link: /guide/
+    - theme: alt
+      text: GitHub
+      link: https://github.com/phus-lang/phus
+
+features:
+  - icon: 🔄
+    title: 自进化
+    details: 通过 skill_write 和 startup_write，Agent 可以在运行时编写新的技能和启动脚本
+  - icon: 🎣
+    title: Hook 架构
+    details: 基于 Bub 的 Hook 链设计，7 个阶段可扩展，支持 first_result、chain、broadcast 三种模式
+  - icon: 📼
+    title: Tape 持久化
+    details: SQLite 追加日志，跨会话记忆，支持重放和聚合查询
+  - icon: 🔒
+    title: 安全边界
+    details: 人类和 Agent 共享同一套安全策略，before_tool_call hook 在每次工具调用前检查
+  - icon: 🔌
+    title: 多通道支持
+    details: CLI、TUI、WebSocket 等通道即插即用，统一通过 Envelope 抽象
+  - icon: 🧠
+    title: 技能系统
+    details: Agent Skills 标准格式，Markdown + YAML frontmatter，热加载无需重启
+---
