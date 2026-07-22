@@ -478,9 +478,24 @@ export class App extends Container {
 		if (state.busy) {
 			void this.agent.abort?.();
 			this.store.dispatch({ type: "set_busy", busy: false });
+			// Drain the pending-input queue. The render trigger fires
+			// off every busy→false transition and would otherwise
+			// shift the next queued message into a fresh turn —
+			// a hot loop of "abort turn N → queue dispatches turn N+1
+			// → user hits Ctrl+C again". Clearing here matches the
+			// user's intent: "stop everything that was queued behind
+			// the turn I'm killing." Lost messages are surfaced as
+			// a single system warn so the user can re-submit if they
+			// care; the cost of dropping is bounded to one
+			// confirmation line.
+			const dropped = this.pendingInputs.length;
+			if (dropped > 0) this.pendingInputs.length = 0;
 			this.store.dispatch({
 				type: "add_system",
-				text: "⚠ the stone slipped — turn aborted",
+				text:
+					dropped > 0
+						? `⚠ the stone slipped — turn aborted, ${dropped} queued message${dropped === 1 ? "" : "s"} dropped`
+						: "⚠ the stone slipped — turn aborted",
 				level: "warn",
 			});
 		} else {
