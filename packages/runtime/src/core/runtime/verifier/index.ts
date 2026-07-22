@@ -3,7 +3,7 @@
 // expected output. Reaches the LLM via the injected `port: CorePort`.
 
 import type { Step, VerificationResult, PlanPhase } from "../plan/types.js";
-import type { CorePort } from "@/bridge/core-port.js";
+import type { CorePort } from "../../../bridge/core-port.js";
 
 const PHASE_HINTS: Record<PlanPhase, string> = {
 	inspect: "For inspect steps, prefer proceed when the result explains the codepath clearly enough to support the next action.",

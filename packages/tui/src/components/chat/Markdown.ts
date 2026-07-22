@@ -9,9 +9,9 @@
 // Tables are rendered as plain pipe-separated lines.
 
 import { marked, type Token, type Tokens } from "marked";
-import { colorize, visibleWidth, wrapTextWithAnsi } from "@/runtime/text-utils.js";
-import { CodeBlock } from "@/components/chat/CodeBlock.js";
-import type { Component } from "@/vendor/pi-tui/tui.js";
+import { colorize, visibleWidth, wrapTextWithAnsi } from "../../runtime/text-utils.js";
+import { CodeBlock } from "./CodeBlock.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
 
 function renderInline(tokens: Token[] | undefined): string {
 	if (!tokens) return "";

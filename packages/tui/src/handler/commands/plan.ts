@@ -2,8 +2,8 @@
 // Plan runner wrapper. /plan create <goal> spins up a new plan;
 // /plan run|status|list|resume work on existing plans.
 
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import { errorMessage, notify } from "@/handler/commands/notice.js";
+import type { CommandRegistry } from "./context.js";
+import { errorMessage, notify } from "./notice.js";
 
 export function registerPlan(): CommandRegistry {
   return {

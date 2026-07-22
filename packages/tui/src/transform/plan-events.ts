@@ -4,7 +4,7 @@
 // code (the pi-tui App class) can use it without dragging in React's
 // MutableRefObject.
 
-import type { AppAction, PlanState, PlanStepState } from "@/state/state.js";
+import type { AppAction, PlanState, PlanStepState } from "../state/state.js";
 import type { PlanEvent } from "@phus/runtime/bridge/pi-agent.js";
 
 export type PlanRef = { current: PlanState | undefined };

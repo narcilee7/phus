@@ -7,9 +7,9 @@
 // TODO: implement a lightweight webhook-based adapter when a stable
 //       WhatsApp Business API client is available without puppeteer.
 
-import type { ChannelAdapter, ChannelStatus } from "@/channels/base.js";
+import type { ChannelAdapter, ChannelStatus } from "./base.js";
 import type { Outbound } from "@phus/core/types/channel/index.js";
-import type { PhusAgent } from "@/bridge/pi-agent.js";
+import type { PhusAgent } from "../bridge/pi-agent.js";
 
 export class WhatsAppChannel implements ChannelAdapter {
   readonly name = "whatsapp";

@@ -1,7 +1,52 @@
 import Database from "better-sqlite3";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { Plan, PlanStatus } from "@phus/runtime/core/runtime/plan/types.js";
+import type { SessionId } from "../types/brand.js";
+
+/**
+ * Local structural types for what PlanStore stores. These mirror the
+ * canonical Plan / PlanStatus from `@phus/runtime/core/runtime/plan/types.ts`
+ * but live here to keep core free of runtime imports. PlanPhase uses
+ * the runtime-defined string union (declared inline so core doesn't
+ * depend on runtime).
+ */
+export type PlanStatus = "pending" | "running" | "paused" | "completed" | "failed";
+export type PlanPhase = "inspect" | "edit" | "test" | "repair";
+export type StepStatus =
+	| "pending"
+	| "running"
+	| "blocked"
+	| "completed"
+	| "failed"
+	| "skipped";
+
+export interface PlanStep {
+	id: string;
+	index: number;
+	description: string;
+	expectedOutput?: string;
+	status: StepStatus | string;
+	retryCount: number;
+	tool?: string;
+	result?: unknown;
+	dependsOn?: string[];
+	phase?: PlanPhase;
+	repairContext?: string;
+	subagentSessionId?: SessionId;
+	subagentLabel?: string;
+	error?: string;
+	output?: string;
+}
+
+export interface Plan {
+	id: string;
+	sessionId: SessionId;
+	goal: string;
+	status: PlanStatus;
+	steps: PlanStep[];
+	createdAt: number;
+	updatedAt: number;
+}
 
 export interface ValidationMetrics {
   stepCount: number;

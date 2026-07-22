@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { Learner } from "@/core/runtime/evolution/learner";
-import { SkillRegistry } from "@/infra/skills/registry";
+import { Learner } from "../src/core/runtime/evolution/learner.js";
+import { SkillRegistry } from "../src/infra/skills/registry.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 import type { TapeLike } from "@phus/core/types/hooks.js";
-import type { CorePort } from "@/bridge/core-port";
+import type { CorePort } from "../src/bridge/core-port.js";
 
 function makeTape(entries: unknown[] = []): TapeLike {
   return {

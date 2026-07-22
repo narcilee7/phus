@@ -1,8 +1,8 @@
 import { HookName } from "@phus/core/types/index.js";
 import { EvolutionEngine } from "../evolution/engine";
 import { Plan, PlanRunnerDeps, Step } from "./types";
-import { logger } from "@/infra/logging";
-import { loadConfig } from "@/infra/config/index.js";
+import { logger } from "../../../infra/logging.js";
+import { loadConfig } from "../../../infra/config/index.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import { ReplanNeededError } from "../executor/error.js";
 
@@ -124,8 +124,8 @@ export class PlanRunner {
       step.error = undefined;
 
       const deps = step.dependsOn ?? [];
-      const depFailed = deps.some((id) => failed.has(id));
-      const depMissing = deps.some((id) => !completed.has(id));
+      const depFailed = deps.some((id: string) => failed.has(id));
+      const depMissing = deps.some((id: string) => !completed.has(id));
 
       if (depFailed || depMissing) {
         step.status = "skipped";

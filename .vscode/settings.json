@@ -3,6 +3,13 @@
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
 
+  // Project References diagnostics — TS 7 supports cross-project
+  // diagnostics that surface errors from referenced projects in the
+  // Problems panel. Critical for monorepos where editing a downstream
+  // package should immediately flag upstream breakage.
+  "typescript.tsserver.experimental.enableProjectDiagnostics": true,
+  "typescript.preferences.includePackageJsonAutoImports": "auto",
+
   // Let oxc language server own TS/JS editing features.
   // oxlint is wired via `pnpm lint` (see .oxlintrc.json); oxc-vscode feeds
   // the same config into the editor for real-time squiggles.

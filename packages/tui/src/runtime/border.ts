@@ -6,7 +6,7 @@
 // We render to a string[] of fixed height = content.length + 2 (top +
 // bottom border rows). Width is computed from the longest content line.
 
-import { colorize, padRight, visibleWidth } from "@/runtime/text-utils.js";
+import { colorize, padRight, visibleWidth } from "./text-utils.js";
 
 export type BorderStyle = "single" | "double" | "round" | "heavy";
 

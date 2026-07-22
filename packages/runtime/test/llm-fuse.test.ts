@@ -3,7 +3,7 @@
 // open/close, and both budget windows with injected time.
 
 import { describe, it, expect } from "vitest";
-import { LlmFuse, LlmFuseError, DEFAULT_ROBUSTNESS } from "@/infra/llm-fuse";
+import { LlmFuse, LlmFuseError, DEFAULT_ROBUSTNESS } from "../src/infra/llm-fuse.js";
 
 function makeFuse(overrides: Partial<typeof DEFAULT_ROBUSTNESS> = {}) {
 	let now = 1_000_000;

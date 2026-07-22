@@ -4,8 +4,8 @@
 // trailing context lines to keep tool cards compact.
 
 import { diffLines } from "diff";
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import { colorize, truncateToWidth } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import { colorize, truncateToWidth } from "../../runtime/text-utils.js";
 
 export interface DiffViewOptions {
 	oldText: string;

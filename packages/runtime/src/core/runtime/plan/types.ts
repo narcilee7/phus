@@ -2,68 +2,43 @@
 // Plan data shapes + dep interfaces. CorePort is the injection port
 // that Planner / Verifier / PlanRunner use to reach an LLM without
 // importing @mariozechner/pi-agent-core.
+//
+// Plan / Step / PlanPhase / PlanStatus / StepStatus are owned by
+// `@phus/core/session/plan-store.js` (the canonical home — plan-store
+// stores these). Re-exported here for downstream runtime consumers'
+// convenience so existing `from "@phus/runtime/core/runtime/plan/types.js"`
+// imports continue to work without touching every call site.
 
 import { SkillRegistryLike } from "@phus/core/types/index.js";
 import type { SessionId } from "@phus/core/types/brand.js";
-import type { CorePort } from "@/bridge/core-port.js";
+import type { CorePort } from "../../../bridge/core-port.js";
 import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Planner } from "./planner";
 import { Executor } from "../executor";
 import { PlanStore } from "@phus/core/session/plan-store.js";
 import { EvolutionEngine } from "../evolution/engine";
 
-export type PlanStatus = "pending" | "running" | "paused" | "completed" | "failed";
+// Re-export Plan-related types from core (canonical home).
+// `export type { ... }` syntax doesn't bind type names in some tsc
+// resolutions; use named re-exports so `PlanPhase`, `PlanStep`, etc.
+// are visible to downstream importers.
+import type {
+	PlanStatus as _PlanStatus,
+	PlanPhase as _PlanPhase,
+	StepStatus as _StepStatus,
+	PlanStep as _PlanStep,
+	Plan as _Plan,
+} from "@phus/core/session/plan-store.js";
 
-export type StepStatus =
-	| "pending"
-	| "running"
-	| "blocked"
-	| "completed"
-	| "failed"
-	| "skipped";
+export type PlanStatus = _PlanStatus;
+export type PlanPhase = _PlanPhase;
+export type StepStatus = _StepStatus;
+export type PlanStep = _PlanStep;
+export type Plan = _Plan;
 
-export type VerificationStatus =
-	| "proceed"
-	| "retry"
-	| "replan"
-	| "escalate"
-	| "abort";
-
-export type PlanPhase = "inspect" | "edit" | "test" | "repair";
-
-export interface Step {
-	id: string;
-	index: number;
-	description: string;
-	expectedOutput?: string;
-	status: StepStatus;
-	retryCount: number;
-	tool?: string;
-	result?: unknown;
-	dependsOn?: string[];
-	/** Phase of code work: inspect / edit / test / repair. */
-	phase?: PlanPhase;
-	/** Failure context preserved for repair retries and resume. */
-	repairContext?: string;
-	/** Subagent session id responsible for this step, if delegated. */
-	subagentSessionId?: SessionId;
-	/** Short label for the subagent (e.g. "explore", "verify"). */
-	subagentLabel?: string;
-	/** Latest error message if the step failed. */
-	error?: string;
-	/** Intermediate output captured during execution. */
-	output?: string;
-}
-
-export interface Plan {
-	id: string;
-	sessionId: SessionId;
-	goal: string;
-	status: PlanStatus;
-	steps: Step[];
-	createdAt: number;
-	updatedAt: number;
-}
+// Local `Step` alias — kept for backward-compat with code that already
+// imports `Step` from this path.
+export type Step = PlanStep;
 
 export interface VerificationResult {
 	ok: boolean;
@@ -71,6 +46,13 @@ export interface VerificationResult {
 	reason: string;
 	action: VerificationStatus;
 }
+
+export type VerificationStatus =
+	| "proceed"
+	| "retry"
+	| "replan"
+	| "escalate"
+	| "abort";
 
 // Todo: migrate to subagent dir
 export interface SubAgentOptions {

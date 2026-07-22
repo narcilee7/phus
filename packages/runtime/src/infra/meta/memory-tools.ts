@@ -15,7 +15,7 @@ import {
   MEMORY_AUTHORITIES,
   type MemoryStore,
   type MemoryAction,
-} from "@/infra/memory/index.js";
+} from "../memory/index.js";
 
 const actionSchema = Type.Union([
   Type.Object({

@@ -10,7 +10,7 @@ import {
   MemoryStore,
   MEMORY_PROMPT_BUDGET_BYTES,
   MEMORY_FILE_SOFT_LIMIT_BYTES,
-} from "@/infra/memory/store";
+} from "../src/infra/memory/store.js";
 
 let tmpDir: string;
 let filePath: string;

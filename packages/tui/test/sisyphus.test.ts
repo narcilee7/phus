@@ -8,8 +8,8 @@ import {
 	STONE_FRAMES,
 	PUSH_VERBS,
 	STONE_TICK_MS,
-} from "@/runtime/sisyphus.js";
-import { visibleWidth } from "@/runtime/text-utils.js";
+} from "../src/runtime/sisyphus.js";
+import { visibleWidth } from "../src/runtime/text-utils.js";
 
 afterEach(() => {
 	vi.useRealTimers();

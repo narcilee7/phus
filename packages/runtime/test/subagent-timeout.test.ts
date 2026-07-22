@@ -6,9 +6,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { SubAgent, SubAgentTimeoutError } from "@/core/runtime/subagent/index";
-import type { SubAgentAgentLike } from "@/core/runtime/subagent/types";
-import { resetConfigCache } from "@/infra/config/index";
+import { SubAgent, SubAgentTimeoutError } from "../src/core/runtime/subagent/index.js";
+import type { SubAgentAgentLike } from "../src/core/runtime/subagent/types.js";
+import { resetConfigCache } from "../src/infra/config/index.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 
 describe("SubAgent timeout", () => {

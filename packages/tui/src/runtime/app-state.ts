@@ -12,7 +12,7 @@ import {
 	initialState,
 	type AppAction,
 	type AppState,
-} from "@/state/state.js";
+} from "../state/state.js";
 
 export type AppStore = {
 	readonly getState: () => AppState;

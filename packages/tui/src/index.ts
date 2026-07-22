@@ -4,11 +4,11 @@
 // missing, runs the Bootstrap / Key wizard in a transient pi-tui
 // session first; once the wizard resolves, the main App takes over.
 
-import { TUI } from "@/vendor/pi-tui/tui.js";
-import { App } from "@/App.js";
-import { BootstrapWizard } from "@/components/wizard/BootstrapWizard.js";
-import { KeyWizard } from "@/components/wizard/KeyWizard.js";
-import { createManagedTerminal } from "@/runtime/terminal.js";
+import { TUI } from "./vendor/pi-tui/tui.js";
+import { App } from "./App.js";
+import { BootstrapWizard } from "./components/wizard/BootstrapWizard.js";
+import { KeyWizard } from "./components/wizard/KeyWizard.js";
+import { createManagedTerminal } from "./runtime/terminal.js";
 import { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
 import { logger } from "@phus/runtime/infra/logging.js";
 import { pathToFileURL } from "node:url";
@@ -35,7 +35,7 @@ function profileHasKey(): boolean {
  * terminal between the wizard and the next phase.
  */
 async function runWizard(
-	factory: (onDone: (success: boolean) => void) => import("@/vendor/pi-tui/tui.js").Component,
+	factory: (onDone: (success: boolean) => void) => import("./vendor/pi-tui/tui.js").Component,
 	timeoutMs = 60_000,
 ): Promise<boolean> {
 	const managed = createManagedTerminal();

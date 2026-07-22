@@ -4,9 +4,10 @@
   "recommendations": [
     "oxc.oxc-vscode",
     "vitest.explorer",
-    "editorconfig.editorconfig",
-    "dbaeumer.vscode-eslint"
+    "editorconfig.editorconfig"
   ],
   // Optional but helpful when working in monorepos / scripts.
-  "unwantedRecommendations": []
+  "unwantedRecommendations": [
+    "dbaeumer.vscode-eslint"
+  ]
 }

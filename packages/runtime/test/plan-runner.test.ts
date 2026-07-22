@@ -2,14 +2,14 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { PlanRunner } from "@/core/runtime/plan/plan-runner";
-import { Planner } from "@/core/runtime/plan/planner";
-import { Executor } from "@/core/runtime/executor/index";
-import { ReplanNeededError } from "@/core/runtime/executor/error";
+import { PlanRunner } from "../src/core/runtime/plan/plan-runner.js";
+import { Planner } from "../src/core/runtime/plan/planner.js";
+import { Executor } from "../src/core/runtime/executor/index.js";
+import { ReplanNeededError } from "../src/core/runtime/executor/error.js";
 import { PlanStore } from "@phus/core/session/plan-store.js";
 import { HookRegistry } from "@phus/core/runtime/hook/registry";
-import { resetConfigCache } from "@/infra/config/index";
-import type { Plan, Step } from "@/core/runtime/plan/types";
+import { resetConfigCache } from "../src/infra/config/index.js";
+import type { Plan, Step } from "../src/core/runtime/plan/types.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 
 function makePlan(steps: Step[], status: Plan["status"] = "pending"): Plan {

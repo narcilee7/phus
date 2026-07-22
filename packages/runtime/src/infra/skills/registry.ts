@@ -6,10 +6,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "yaml";
-import { logger } from "@/infra/logging.js";
+import { logger } from "../logging.js";
 import { AuthorDefinition } from "@phus/core/types/enumTypes/index.js";
 import { Skill } from "@phus/core/types/skill.js";
-import type { SkillDraft } from "@/infra/skills/draft.js";
+import type { SkillDraft } from "./draft.js";
 
 const SKILL_FILE = "SKILL.md";
 

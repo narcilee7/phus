@@ -23,18 +23,17 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
-    "build:js": "tsc --outDir dist && tsc-alias -p tsconfig.json && node ../../scripts/fix-extensions.mjs dist",
-    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-    "typecheck": "tsc --noEmit",
-    "lint": "oxlint --quiet src test",
+    "build": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false && node ../../scripts/fix-extensions.mjs dist",
+    "build:js": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false && node ../../scripts/fix-extensions.mjs dist",
+    "build:types": "rm -rf .tsbuildinfo dist && tsc --emitDeclarationOnly --declaration --declarationMap false --sourceMap false",
+    "build:full": "rm -rf .tsbuildinfo dist && tsc && node ../../scripts/fix-extensions.mjs dist",
+    "typecheck": "tsc -b ../../tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
     "@mariozechner/pi-agent-core": "^0.73.1",
     "@mariozechner/pi-ai": "^0.73.1",
     "@mariozechner/pi-coding-agent": "^0.73.1",
-    "@phus/tui": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "@slack/bolt": "^4.2.1",
     "better-sqlite3": "^12.11.1",
@@ -52,15 +51,14 @@
     "telegraf": "^4.16.3",
     "ws": "^8.21.1",
     "yaml": "^2.9.0",
-    "@phus/core": "workspace:*"
+    "@phus/core": "workspace:*",
+    "@phus/shared": "workspace:*"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.1",
-    "@types/ws": "^8.18.1",
-    "ink-testing-library": "^4.0.0",
-    "tsc-alias": "^1.9.1"
+    "@types/ws": "^8.18.1"
   }
 }

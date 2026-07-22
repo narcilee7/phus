@@ -2,8 +2,8 @@
 // Sidebar control for subagent awareness. "show" opens the sessions
 // sidebar; "files" switches back to the file tree.
 
-import type { CommandRegistry } from "@/handler/commands/context.js";
-import { notify } from "@/handler/commands/notice.js";
+import type { CommandRegistry } from "./context.js";
+import { notify } from "./notice.js";
 
 export function registerSubagent(): CommandRegistry {
   return {

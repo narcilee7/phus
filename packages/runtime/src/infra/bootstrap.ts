@@ -5,8 +5,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { logger } from "@/infra/logging.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { logger } from "./logging.js";
+import { loadConfig } from "./config/index.js";
 
 type StartupMode = "custom" | "fallback" | "default";
 

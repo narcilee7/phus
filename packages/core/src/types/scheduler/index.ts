@@ -29,4 +29,7 @@ export interface SchedulerOptions {
   tickIntervalMs?: number;
   /** Optional callback for testing/observability. */
   onFire?: (fired: FiredSchedule) => void;
+  /** Optional structured-log callback. Defaults to no-op; runtime injects
+   *  its pino wrapper so observability stays in the same stream. */
+  onLog?: (event: string, fields?: Record<string, unknown>) => void;
 }

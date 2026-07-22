@@ -6,9 +6,9 @@ import {
   PhusAgent,
   type PhusAgentDeps,
   type PhusAgentFacade,
-} from "@/bridge/pi-agent.js";
+} from "./pi-agent.js";
 import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
-import { logger } from "@/infra/logging.js";
+import { logger } from "../infra/logging.js";
 
 export interface PhusAgentHandle {
   /** The agent facade — pass this to channels, TUI, commands. */
@@ -36,7 +36,7 @@ export async function createPhusAgent(deps: PhusAgentDeps): Promise<PhusAgentHan
   const internals = new PhusAgent(resolvedDeps);
   // Load plugins before the agent accepts the first turn so skills
   // registered by plugins are discoverable immediately.
-  const { loadPlugins } = await import("@/infra/plugins/loader.js");
+  const { loadPlugins } = await import("../infra/plugins/loader.js");
   loadPlugins(internals.hooks, internals.extraChannels, {
     registerRuntime: () => {
       // Runtime skill registration is intentionally not yet supported.

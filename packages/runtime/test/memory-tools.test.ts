@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   defineMemoryMetaTools,
   parseMemoryAction,
-} from "@/infra/meta/memory-tools";
-import { MemoryStore } from "@/infra/memory/store";
+} from "../src/infra/meta/memory-tools.js";
+import { MemoryStore } from "../src/infra/memory/store.js";
 import { asSessionId } from "@phus/core/types/brand.js";
 import type { Tape } from "@phus/core/session/tape.js";
 import type { TapeEntry } from "@phus/core/types/tape.js";

@@ -6,7 +6,6 @@
 
 import type { Tape } from "./tape.js";
 import type { Turn } from "../types/tape/index.js";
-import { logger } from "../infra/logging.js";
 import { asSessionId } from "../types/brand.js";
 import type { SessionId } from "../types/brand.js";
 

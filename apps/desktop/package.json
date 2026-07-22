@@ -1,0 +1,31 @@
+{
+  "name": "@phus/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phus desktop host — Electron / Tauri target. Placeholder. Node floor matches the main workspace (>=20.0.0). Per Proposal §1, when Electron is wired in, this app moves to a separate workspace with engines.node: >=22.12 to match Electron's runtime.",
+  "license": "ISC",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false",
+    "build:js": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false",
+    "build:types": "rm -rf .tsbuildinfo dist && tsc --emitDeclarationOnly --declaration --declarationMap false --sourceMap false",
+    "build:full": "rm -rf .tsbuildinfo dist && tsc",
+    "typecheck": "tsc -b ../../tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "dev": "tsx src/index.ts"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@phus/core": "workspace:*",
+    "@phus/phus-design": "workspace:*",
+    "@phus/runtime": "workspace:*",
+    "@phus/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1"
+  }
+}

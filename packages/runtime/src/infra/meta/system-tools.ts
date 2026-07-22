@@ -6,7 +6,7 @@ import { Type } from "@mariozechner/pi-ai";
 import type { MetaTool } from "@phus/runtime/types/tool.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import { asSessionId } from "@phus/core/types/brand.js";
-import { loadConfig } from "@/infra/config/index.js";
+import { loadConfig } from "../config/index.js";
 import { StartupAdvisor } from "@phus/core/runtime/startup/advisor.js";
 
 export function defineSystemMetaTools(deps: {

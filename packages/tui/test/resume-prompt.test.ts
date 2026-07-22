@@ -3,7 +3,7 @@
 // plans — lock in its rendering and key routing.
 
 import { describe, it, expect } from "vitest";
-import { ResumePrompt } from "@/components/agent/ResumePrompt.js";
+import { ResumePrompt } from "../src/components/agent/ResumePrompt.js";
 import type { Plan } from "@phus/runtime/core/runtime/plan/types.js";
 
 function makePlan(id: string, goal: string, doneSteps = 0, totalSteps = 3): Plan {

@@ -8,7 +8,7 @@
 // Each shortcut is wired to a callback the App supplies at startup;
 // individual components don't depend on this module.
 
-import { matchesKey } from "@/vendor/pi-tui/keys.js";
+import { matchesKey } from "../vendor/pi-tui/keys.js";
 type InputListener = (data: string) => { consume?: boolean; data?: string } | undefined;
 
 export interface GlobalShortcutCallbacks {

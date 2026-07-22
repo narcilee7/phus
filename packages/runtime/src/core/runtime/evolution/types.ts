@@ -2,14 +2,14 @@
 // Reflection + Learner/Engine dep shapes. Uses the injected `CorePort`
 // instead of importing @mariozechner/pi-agent-core.
 
-import { SkillDraft } from "@/infra/skills/draft";
+import { SkillDraft } from "../../../infra/skills/draft.js";
 import { SkillRegistryLike, TapeLike } from "@phus/core/types/index.js";
 import { SessionId } from "@phus/core/types/brand.js";
-import type { CorePort } from "@/bridge/core-port.js";
+import type { CorePort } from "../../../bridge/core-port.js";
 import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
-import { SkillRegistry } from "@/infra/skills/registry";
+import { SkillRegistry } from "../../../infra/skills/registry.js";
 import { PlanStore } from "@phus/core/session/plan-store.js";
-import type { MemoryStore } from "@/infra/memory/index.js";
+import type { MemoryStore } from "../../../infra/memory/index.js";
 import { Learner } from "./learner";
 
 export type ReflectionOutcomeStatus = "success" | "partial" | "failure";

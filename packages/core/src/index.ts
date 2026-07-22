@@ -56,6 +56,6 @@ export type { AuthorDefinition } from "./types/enumTypes/index.js";
 // ── Brand types
 export type { SessionId } from "./types/brand.js";
 
-// ── MetaTool — re-exported from @phus/runtime/types/tool.js (LLM-bound).
-//    Cross-package dependency; runtime must be built first.
-export type { MetaTool } from "@phus/runtime/types/tool.js";
+// ── MetaTool — structural interface owned by core so plugins/extensions
+//    can type-check against it without depending on @phus/runtime.
+export type { MetaTool } from "./types/tool.js";

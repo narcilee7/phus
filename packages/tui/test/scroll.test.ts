@@ -5,10 +5,10 @@
 // and system notices with \n rendered as a single "row".
 
 import { describe, it, expect } from "vitest";
-import { bottomAnchoredSlice } from "@/runtime/scroll.js";
-import { ChatViewport } from "@/components/chat/ChatViewport.js";
-import { ChatItemView } from "@/components/chat/ChatItemView.js";
-import type { ChatItem } from "@/state/state.js";
+import { bottomAnchoredSlice } from "../src/runtime/scroll.js";
+import { ChatViewport } from "../src/components/chat/ChatViewport.js";
+import { ChatItemView } from "../src/components/chat/ChatItemView.js";
+import type { ChatItem } from "../src/state/state.js";
 
 const item = (kind: ChatItem["kind"], text: string): ChatItem =>
 	({ kind, id: Math.random().toString(36), text, ts: Date.now() }) as ChatItem;

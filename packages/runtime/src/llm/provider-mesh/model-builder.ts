@@ -3,7 +3,7 @@
 
 import type { Model } from "@mariozechner/pi-ai";
 import type { EndpointSpec } from "./types.js";
-import { resolveAndCache } from "@/infra/config/index.js";
+import { resolveAndCache } from "../../infra/config/index.js";
 
 /** Build a Pi `Model` from an endpoint spec, applying any wire-format
  *  overrides (baseUrl, modelId). Delegates to `resolveAndCache()` so

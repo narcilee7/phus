@@ -15,7 +15,7 @@
 // only the alt-screen and sync-output toggles happen here, in the
 // wrapper's start/stop.
 
-import { ProcessTerminal, type Terminal } from "@/vendor/pi-tui/terminal.js";
+import { ProcessTerminal, type Terminal } from "../vendor/pi-tui/terminal.js";
 
 export interface ManagedTerminalOptions {
 	/** When false, skip the alt-screen toggle (useful for headless smoke). */

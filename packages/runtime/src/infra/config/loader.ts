@@ -19,7 +19,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "yaml";
 import { DEFAULTS, LOG_LEVELS, type LogLevelLiteral } from "./defaults.js";
-import { DEFAULT_ROBUSTNESS } from "@/infra/llm-fuse.js";
+import { DEFAULT_ROBUSTNESS } from "../llm-fuse.js";
 import { interpolateEnv } from "./interpolate.js";
 import type {
   ChannelConfig,
@@ -32,7 +32,7 @@ import type {
   ResolvedConfig,
 } from "./schema.js";
 import { ENV_OVERRIDE_VARS } from "./schema.js";
-import type { ProviderConfig, ProviderProfile, MeshSpec } from "@/infra/profile.js";
+import type { ProviderConfig, ProviderProfile, MeshSpec } from "../profile.js";
 import type { Schedule } from "@phus/core/types/scheduler/index.js";
 import { asScheduleName } from "@phus/core/types/brand.js";
 import {
@@ -539,7 +539,7 @@ function resolveModelFields(
   return { provider, modelId };
 }
 
-function parseRobustness(tree: unknown): import("@/infra/llm-fuse.js").RobustnessConfig {
+function parseRobustness(tree: unknown): import("../llm-fuse.js").RobustnessConfig {
   const raw = (tree as { robustness?: unknown } | undefined)?.robustness;
   const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const num = (key: keyof typeof DEFAULT_ROBUSTNESS): number => {

@@ -5,9 +5,9 @@
 // `Component` (no React). The rounded-cyan border that ink gave us is
 // reconstructed via runtime/border.ts.
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import { box } from "@/runtime/border.js";
-import { colorize } from "@/runtime/text-utils.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import { box } from "../../runtime/border.js";
+import { colorize } from "../../runtime/text-utils.js";
 
 export interface HeaderStats {
 	entries: number;

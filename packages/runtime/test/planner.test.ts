@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { Planner } from "@/core/runtime/plan/planner";
+import { Planner } from "../src/core/runtime/plan/planner.js";
 import { HookRegistry } from "@phus/core/runtime/hook/registry";
 import type { SkillRegistryLike } from "@phus/core/types/hooks.js";
-import type { CorePort } from "@/bridge/core-port";
+import type { CorePort } from "../src/bridge/core-port.js";
 
 const stubSkills: SkillRegistryLike = {
   discover: () => {},

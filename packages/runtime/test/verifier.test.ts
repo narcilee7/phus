@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { Verifier } from "@/core/runtime/verifier/index";
-import type { Step } from "@/core/runtime/plan/types";
-import type { CoreMessage, CorePort } from "@/bridge/core-port";
+import { Verifier } from "../src/core/runtime/verifier/index.js";
+import type { Step } from "../src/core/runtime/plan/types.js";
+import type { CoreMessage, CorePort } from "../src/bridge/core-port.js";
 
 function makeStep(expectedOutput?: string): Step {
   return {

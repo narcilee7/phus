@@ -4,10 +4,10 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { SkillValidator } from "@phus/core/runtime/skill/validator";
 import { PlanStore } from "@phus/core/session/plan-store.js";
-import { SkillRegistry } from "@/infra/skills/registry";
+import { SkillRegistry } from "../src/infra/skills/registry.js";
 import { asSessionId } from "@phus/core/types/brand.js";
-import type { Plan, Step } from "@/core/runtime/plan/types";
-import type { PlanRunner } from "@/core/runtime/plan/plan-runner";
+import type { Plan, Step } from "../src/core/runtime/plan/types.js";
+import type { PlanRunner } from "../src/core/runtime/plan/plan-runner.js";
 
 function makePlan(status: "completed" | "failed", steps: Step[]): Plan {
   return {

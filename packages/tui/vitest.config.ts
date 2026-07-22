@@ -5,27 +5,15 @@ import { dirname, resolve } from "node:path";
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 const srcRoot = resolve(projectRoot, "src");
-const repoRoot = resolve(projectRoot, "../..");
 
 export default defineConfig({
 	resolve: {
 		extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".json"],
 		alias: [
-			// `@/foo/bar` → srcRoot/foo/bar.ts
-			{
-				find: /^@\/(.*)$/,
-				replacement: `${srcRoot}/$1`,
-			},
-			// Explicit aliases for workspace deps that vitest's strict
-			// pnpm symlink resolution sometimes misses when the importing
-			// file lives in `packages/<x>/src/...`.
-			{ find: /^fuse\.js$/, replacement: `${repoRoot}/node_modules/.pnpm/fuse.js@7.5.0/node_modules/fuse.js/dist/fuse.mjs` },
-			{
-				find: /^ink-testing-library$/,
-				replacement: `${repoRoot}/node_modules/.pnpm/ink-testing-library@4.0.0_@types+react@19.2.17/node_modules/ink-testing-library/build/index.js`,
-			},
 			// Strip trailing `.js` from any relative import so vite can
-			// resolve `.ts` instead.
+			// resolve `.ts` instead. Cross-package imports of the form
+			// `@phus/runtime/...` are handled by vitest's normal module
+			// resolution through the workspace symlink.
 			{
 				find: /^([^@].*)\.js$/,
 				replacement: "$1",
@@ -33,7 +21,9 @@ export default defineConfig({
 		],
 	},
 	optimizeDeps: {
-		exclude: ["fuse.js", "react", "react-dom"],
+		// React/ink-testing-library aren't actually used in this package
+		// (tui is pi-tui, not ink). Excluding them speeds up vitest start.
+		exclude: ["react", "react-dom"],
 	},
 	test: {
 		include: ["test/**/*.test.ts", "test/**/*.test.tsx"],

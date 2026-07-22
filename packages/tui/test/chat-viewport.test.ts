@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { ChatViewport } from "@/components/chat/ChatViewport.js";
-import { TodoPill } from "@/components/todo/TodoPill.js";
-import { SisyphusAnimator, STONE_FRAMES } from "@/runtime/sisyphus.js";
-import type { ChatItem } from "@/state/state.js";
+import { ChatViewport } from "../src/components/chat/ChatViewport.js";
+import { TodoPill } from "../src/components/todo/TodoPill.js";
+import { SisyphusAnimator, STONE_FRAMES } from "../src/runtime/sisyphus.js";
+import type { ChatItem } from "../src/state/state.js";
 
 const deps = (items: ChatItem[]) => ({
   items,

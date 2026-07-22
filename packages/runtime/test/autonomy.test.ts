@@ -3,9 +3,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { AutonomyGate, actionTag, decide } from "@/infra/memory/autonomy";
-import type { MemoryAction } from "@/infra/memory/store";
-import type { MemoryConfig } from "@/infra/config/schema";
+import { AutonomyGate, actionTag, decide } from "../src/infra/memory/autonomy.js";
+import type { MemoryAction } from "../src/infra/memory/store.js";
+import type { MemoryConfig } from "../src/infra/config/schema.js";
 
 const cfg = (over: Partial<MemoryConfig> = {}): MemoryConfig => ({
   mode: "propose",

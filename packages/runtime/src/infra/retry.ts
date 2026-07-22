@@ -11,7 +11,7 @@
 //   - User errors (bad input, missing file).
 
 import { sleep } from "@phus/core/utils/promise.js";
-import { logger } from "@/infra/logging.js";
+import { logger } from "./logging.js";
 
 // ─── Types ───────────────────────────────────────────────────────
 

@@ -18,21 +18,22 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsc --outDir dist && node ../../scripts/fix-extensions.mjs dist && node ../../scripts/rename-cli-bin.mjs dist",
-		"build:js": "tsc --outDir dist && node ../../scripts/fix-extensions.mjs dist && node ../../scripts/rename-cli-bin.mjs dist",
-		"build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+		"build": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false && node ../../scripts/fix-extensions.mjs dist && node ../../scripts/rename-cli-bin.mjs dist",
+		"build:js": "rm -rf .tsbuildinfo dist && tsc --sourceMap false --declarationMap false && node ../../scripts/fix-extensions.mjs dist && node ../../scripts/rename-cli-bin.mjs dist",
+		"build:types": "rm -rf .tsbuildinfo dist && tsc --emitDeclarationOnly --declaration --declarationMap false --sourceMap false",
+		"build:full": "rm -rf .tsbuildinfo dist && tsc && node ../../scripts/fix-extensions.mjs dist && node ../../scripts/rename-cli-bin.mjs dist",
 		"dev": "PHUS_HOME=$PHUS_HOME tsx src/main.ts",
 		"chat": "PHUS_HOME=$PHUS_HOME tsx src/main.ts chat",
 		"run": "PHUS_HOME=$PHUS_HOME tsx src/main.ts run",
 		"gateway": "PHUS_HOME=$PHUS_HOME tsx src/main.ts gateway",
-		"typecheck": "tsc --noEmit",
-		"lint": "oxlint --quiet src test",
+		"typecheck": "tsc -b ../../tsconfig.json --noEmit",
 		"test": "vitest run --passWithNoTests"
 	},
 	"engines": {
 		"node": ">=20.0.0"
 	},
 	"dependencies": {
+		"@phus/core": "workspace:*",
 		"@phus/runtime": "workspace:*",
 		"@phus/tui": "workspace:*",
 		"commander": "^14.0.3"

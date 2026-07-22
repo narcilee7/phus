@@ -1,7 +1,7 @@
 // src/tui/runtime/scroll.ts
 // Helpers for bottom-anchored chat scroll math.
 
-import type { ChatItem } from "@/state/state.js";
+import type { ChatItem } from "../state/state.js";
 
 export interface ScrollPosition {
 	/** Index into the rendered item list that the top row corresponds to. */

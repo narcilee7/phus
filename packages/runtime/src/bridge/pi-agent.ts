@@ -17,52 +17,52 @@ import {
 } from "@mariozechner/pi-agent-core";
 import { streamSimple, type Model } from "@mariozechner/pi-ai";
 import type { Envelope, Outbound } from "@phus/core/types/channel/index.js";
-import { Planner } from '@phus/core/runtime/plan/planner.js';
-import type { Plan, PlanStatus, Step, StepStatus } from "@/core/runtime/plan/types.js";
+import { Planner } from '@phus/runtime/core/runtime/plan/planner.js';
+import type { Plan, PlanStatus, Step, StepStatus } from "../core/runtime/plan/types.js";
 import { PlanStore } from "@phus/core/session/plan-store.js";
-import { createDefaultCorePort } from "@/bridge/core-port-impl.js";
-import type { CorePort } from "@/bridge/core-port.js";
-import { Learner } from "@phus/core/runtime/evolution/learner.js";
+import { createDefaultCorePort } from "./core-port-impl.js";
+import type { CorePort } from "./core-port.js";
+import { Learner } from "@phus/runtime/core/runtime/evolution/learner.js";
 import { SkillValidator } from "@phus/core/runtime/skill/validator.js";
-import { EvolutionEngine } from "@phus/core/runtime/evolution/engine.js";
+import { EvolutionEngine } from "@phus/runtime/core/runtime/evolution/engine.js";
 import type { Turn } from "@phus/core/types/tape/index.js";
 import type { MetaTool } from "@phus/runtime/types/tool.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import { asSessionId, asToolCallId, asTurnId } from "@phus/core/types/brand.js";
 import { Tape } from "@phus/core/session/tape.js";
 import { PiSteeringInbox } from "@phus/core/runtime/steering/index.js";
-import { SkillRegistry } from "@/infra/skills/registry.js";
-import type { SkillDraft } from "@/infra/skills/draft.js";
-import { createMetaTools } from "@/infra/meta/index.js";
-import { createExternalTools } from "@/bridge/tools.js";
-import { defaultPolicy, evaluate, type PolicyRule } from "@/infra/safety.js";
+import { SkillRegistry } from "../infra/skills/registry.js";
+import type { SkillDraft } from "../infra/skills/draft.js";
+import { createMetaTools } from "../infra/meta/index.js";
+import { createExternalTools } from "./tools.js";
+import { defaultPolicy, evaluate, type PolicyRule } from "../infra/safety.js";
 import {
   resolveProfile,
   modelFromProfile,
   apiKeyForProfile,
   getLlmFuse,
   type ProviderProfile,
-} from "@/infra/profile.js";
-import { loadConfig } from "@/infra/config/index.js";
+} from "../infra/profile.js";
+import { loadConfig } from "../infra/config/index.js";
 import type { SteeringInbox } from "@phus/core/types/steering/index.js";
 import { maybeCompact, type AutoCompactConfig, DEFAULT_AUTO_COMPACT } from "@phus/core/session/auto-compact.js";
 import { saveCheckpoint, loadLatestCheckpoint, listCheckpoints, type CheckpointEntry } from "@phus/core/session/checkpoint.js";
-import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "@/llm/provider-mesh/index.js";
-import { logger } from "@/infra/logging.js";
-import type { ChannelAdapter } from "@/channels/base.js";
-import { toAgentTool } from "@/bridge/agent-tool-adapter.js";
-import { extractText } from "@/bridge/text.js";
-import { resolveApiKey } from "@/bridge/model-resolver.js";
-import { registerDefaultHooks } from "@/bridge/default-hooks.js";
-import { buildContextBlock } from "@/bridge/prompt-assembly.js";
+import { MeshLike, ProviderMesh, type EndpointSpec, type MeshPolicy } from "../llm/provider-mesh/index.js";
+import { logger } from "../infra/logging.js";
+import type { ChannelAdapter } from "../channels/base.js";
+import { toAgentTool } from "./agent-tool-adapter.js";
+import { extractText } from "./text.js";
+import { resolveApiKey } from "./model-resolver.js";
+import { registerDefaultHooks } from "./default-hooks.js";
+import { buildContextBlock } from "./prompt-assembly.js";
 import { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
-import { MemoryStore, AutonomyGate } from "@/infra/memory/index.js";
+import { MemoryStore, AutonomyGate } from "../infra/memory/index.js";
 import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
-import { Executor } from "@phus/core/runtime/executor.js";
-import { PlanRunner } from "@phus/core/runtime/plan/plan-runner.js";
+import { Executor } from "@phus/runtime/core/runtime/executor/index.js";
+import { PlanRunner } from "@phus/runtime/core/runtime/plan/plan-runner.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import { HookContext } from "@phus/core/types/index.js";
-import { Verifier } from "@phus/core/runtime/verifier.js";
+import { Verifier } from "@phus/runtime/core/runtime/verifier/index.js";
 
 export interface PhusAgentDeps {
   /** Logger used for all diagnostic and error events. */
@@ -257,7 +257,7 @@ export interface PhusAgentFacade {
   /** Suggest startup.sh content based on recent tape. */
   suggestStartup(): Promise<string>;
   /** Reflect on a session and return a structured reflection. */
-  reflect(sessionId: SessionId, task: string): Promise<import("@phus/core/runtime/evolution/types.js").Reflection>;
+  reflect(sessionId: SessionId, task: string): Promise<import("@phus/runtime/core/runtime/evolution/types.js").Reflection>;
   /** Number of entries currently in tape. */
   getTapeTotalEntries(): number;
   /** Number of sessions currently in tape. */
@@ -1153,7 +1153,7 @@ export class PhusAgent implements PhusAgentFacade {
     pluginStatus: Array<{ name: string; ok: boolean; path: string }>;
   }> {
     this.skills.discover();
-    const { loadPlugins } = await import("@/infra/plugins/loader.js");
+    const { loadPlugins } = await import("../infra/plugins/loader.js");
     const loaded = loadPlugins(this.hooks, channels, { registerRuntime: () => {} });
     return {
       skills: this.skills.getAll().length,
@@ -1346,7 +1346,7 @@ export class PhusAgent implements PhusAgentFacade {
     const p = provider ?? this.profile.provider;
     // Delegates to the unified resolver — cached + validated at config load.
     // Custom OpenAI-compatible gateways (modelIds Pi never registered) work.
-    const { resolveAndCache } = await import("@/infra/config/index.js");
+    const { resolveAndCache } = await import("../infra/config/index.js");
     const { model: m } = resolveAndCache({ provider: p, modelId, overrideId: modelId });
     this.piAgent.state.model = m as any;
     // Refresh API key env var so the new model's transport picks it up.
@@ -1389,7 +1389,7 @@ export class PhusAgent implements PhusAgentFacade {
     return advisor.suggestStartup(this.tape);
   }
 
-  async reflect(sessionId: SessionId, task: string): Promise<import("@phus/core/runtime/evolution/types.js").Reflection> {
+  async reflect(sessionId: SessionId, task: string): Promise<import("@phus/runtime/core/runtime/evolution/types.js").Reflection> {
     return this.learner.reflect(sessionId, task);
   }
 
@@ -1457,12 +1457,12 @@ export class PhusAgent implements PhusAgentFacade {
   /** Async convenience factory: builds default deps and returns
    *  a `PhusAgentHandle` containing the agent plus a `dispose()`
    *  for clean shutdown. Replaces `new PhusAgent()` for all new code. */
-  static async create(opts: import("@/bridge/default-deps.js").DefaultDepsOptions = {}): Promise<import("@/bridge/lifecycle.js").PhusAgentHandle> {
-    const deps = (await import("@/bridge/default-deps.js")).buildDefaultPhusAgentDeps({
+  static async create(opts: import("./default-deps.js").DefaultDepsOptions = {}): Promise<import("./lifecycle.js").PhusAgentHandle> {
+    const deps = (await import("./default-deps.js")).buildDefaultPhusAgentDeps({
       allowMissingKey: true,
       ...opts,
     });
-    return (await import("@/bridge/lifecycle.js")).createPhusAgent(deps);
+    return (await import("./lifecycle.js")).createPhusAgent(deps);
   }
 }
 

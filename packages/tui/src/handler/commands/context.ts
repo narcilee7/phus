@@ -3,7 +3,7 @@
 // dispatcher can pass it through without bespoke wrappers.
 
 import type { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
-import type { AppAction, AppState } from "@/state/state.js";
+import type { AppAction, AppState } from "../../state/state.js";
 
 export type CommandDispatch = (action: AppAction) => void;
 

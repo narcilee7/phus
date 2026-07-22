@@ -1,41 +1,4 @@
-/**
- * channel message's definition
- */
-
-import type { SessionId } from "../brand.js";
-
-export type OutboundType = "text" | "image" | "reaction";
-
-export type EnvelopType = "text" | "image" | "reaction" | "command";
-
-/** A message to send back through a channel. */
-export interface Outbound {
-  to: string;
-  content: string;
-  type: OutboundType;
-  channel: string;
-  replyTo?: string;
-  /** Channel-specific extras (threadTs, subject, etc.). */
-  metadata?: Record<string, unknown>;
-}
-
-/** A message inbound from any channel. */
-export interface Envelope {
-  id: string;
-  /** Sender identifier (channel-native, e.g. telegram user id, ws client id). */
-  from: string;
-  /** Main text content. For images, this is the caption or URL. */
-  content: string;
-  type: EnvelopType;
-  channel: string;
-  /** Channel-specific extras (chatId, userId, isGroup, etc). */
-  metadata: Record<string, unknown>;
-  /** Optional message id this is replying to. */
-  replyTo?: string;
-  /** Optional raw image payload (base64) for image type. */
-  image?: { data: string; mimeType: string };
-  /** Session id (set by resolve_session hook, used downstream).
-   *  Optional because envelopes arrive before session resolution. */
-  sessionId?: SessionId;
-  ts: number;
-}
+// Re-export from @phus/shared. The wire-format protocol shapes live in
+// @phus/shared/protocol/envelope.js so channels / plugins / apps can
+// reference them without pulling in core's runtime business logic.
+export * from "@phus/shared/protocol/envelope.js";

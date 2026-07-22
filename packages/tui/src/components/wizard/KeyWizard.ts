@@ -7,10 +7,10 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import yaml from "yaml";
-import type { Component, Focusable } from "@/vendor/pi-tui/tui.js";
-import { matchesKey, Key } from "@/vendor/pi-tui/keys.js";
-import { box } from "@/runtime/border.js";
-import { colorize, extractPasteContent } from "@/runtime/text-utils.js";
+import type { Component, Focusable } from "../../vendor/pi-tui/tui.js";
+import { matchesKey, Key } from "../../vendor/pi-tui/keys.js";
+import { box } from "../../runtime/border.js";
+import { colorize, extractPasteContent } from "../../runtime/text-utils.js";
 import { configPath, loadConfig, resetConfigCache } from "@phus/runtime/infra/config/index.js";
 
 type Step = "mode" | "value" | "done" | "error";

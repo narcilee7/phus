@@ -5,15 +5,15 @@
 
 import { randomUUID } from "node:crypto";
 import type { PhusAgent } from "@phus/runtime/bridge/pi-agent.js";
-import type { AppAction, AppState } from "@/state/state.js";
+import type { AppAction, AppState } from "../state/state.js";
 import type { ChannelAdapter } from "@phus/runtime/channels/base.js";
 import {
   buildContextBlock,
   extractMentions,
   readFileMention,
   type FileContext,
-} from "@/handler/mentions/mentions.js";
-import { runSlash, type SlashResult } from "@/handler/commands/commands.js";
+} from "./mentions/mentions.js";
+import { runSlash, type SlashResult } from "./commands/commands.js";
 
 export interface SubmitContext {
   agent: PhusAgent;

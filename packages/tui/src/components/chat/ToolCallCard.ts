@@ -8,14 +8,14 @@
 // M2: passive rendering. M3 will add focus + Enter/Space to toggle
 // the result expansion.
 
-import type { Component } from "@/vendor/pi-tui/tui.js";
-import type { ChatItem } from "@/state/state.js";
-import { colorize, padRight, wrapTextWithAnsi } from "@/runtime/text-utils.js";
-import { ToolPill } from "@/components/chat/ToolPill.js";
-import { DiffView } from "@/components/chat/DiffView.js";
-import { renderMarkdown } from "@/components/chat/Markdown.js";
-import { formatToolResult } from "@/components/tool-components/format-result.js";
-import type { FileSnapshot } from "@/components/chat/ToolResultCard.js";
+import type { Component } from "../../vendor/pi-tui/tui.js";
+import type { ChatItem } from "../../state/state.js";
+import { colorize, padRight, wrapTextWithAnsi } from "../../runtime/text-utils.js";
+import { ToolPill } from "./ToolPill.js";
+import { DiffView } from "./DiffView.js";
+import { renderMarkdown } from "./Markdown.js";
+import { formatToolResult } from "../tool-components/format-result.js";
+import type { FileSnapshot } from "./ToolResultCard.js";
 
 export interface ToolCallCardOptions {
 	item: ChatItem;
