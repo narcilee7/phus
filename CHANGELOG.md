@@ -2,9 +2,44 @@
 
 ## [0.1.3] - 2026-07-22
 
-### Added
-- fix(ci): build workspace packages before test (deep imports need dist/)
-- docs(changelog): curate 0.1.1 and 0.1.2 sections (Added/Changed/Fixed)
+CI-green follow-up to 0.1.2. The previous tag ran the release pipeline
+but its commit predates the test-time workspace build step below, so
+`pnpm test` ran in a clean CI environment where the workspace package
+`dist/` directories were never populated and the deep imports like
+`@phus/core/types/logger/index.js` couldn't resolve. 0.1.3 ships the
+same release content with CI green and the publish job unblocked.
+
+### Fixed
+- `ci.yml` `test` job now runs `pnpm -r build` before `pnpm test`. The
+  workspace `test/*.test.ts` files deep-import `@phus/core/dist/...`
+  etc. via the package `exports` field, so every workspace package
+  needs its `dist/` populated before vitest can resolve those paths.
+  A bare `pnpm install --frozen-lockfile` symlinks the workspace
+  packages but does not invoke their build scripts, leaving the
+  vitest process without the `.js` files it expects — every runtime
+  test on Node 20/22 then fails with `ERR_MODULE_NOT_FOUND` for the
+  very first deep import it tries to load
+
+## [0.1.2] - 2026-07-22
+
+CI-green follow-up to 0.1.1. The previous tag ran the release pipeline but
+its commit predates the Node 22+ exports-wildcard fix below, so its CI
+test job was red on `Node 20 is being deprecated. This workflow is
+running with Node 24 by default` runners. 0.1.2 ships the same release
+content with CI green on the actual published commit. No new user-facing
+behavior; install via `npm install -g @phus/cli@0.1.2` (or use the
+matching `phus-latest.tar.gz` GitHub Release asset).
+
+### Fixed
+- `@phus/core`, `@phus/runtime`, `@phus/shared` package `exports`
+  fields now list explicit `*.js` and `**/*.js` patterns alongside the
+  existing `*` wildcards. Node 22+ tightened wildcard matching so the
+  previous `"./types/*": "./dist/types/*"` no longer matched deep
+  imports like `@phus/core/types/logger/index.js` — causing every
+  runtime test on Node 24 to fail with `ERR_PACKAGE_PATH_NOT_EXPORTED`
+- `ci.yml` adds `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true` so the
+  runner honors `.nvmrc`'s Node 20 instead of silently substituting 24
+  (belt-and-suspenders for the exports fix above)
 
 ## [0.1.2] - 2026-07-22
 
