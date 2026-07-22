@@ -1,0 +1,41 @@
+# .dockerignore for Phus
+# Kept narrow on purpose: the builder stage DOES need the workspace
+# source (packages/*/src, apps/cli/src, scripts/, tsconfig.base.json,
+# pnpm-workspace.yaml) — those are NOT excluded here.
+
+# Runtime artifacts
+node_modules/
+**/node_modules/
+**/dist/
+**/.tsbuildinfo
+coverage/
+.turbo/
+.next/
+
+# VCS / CI
+.git/
+.github/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Phus runtime state — NEVER ship the API keys in phus.config.yaml
+# or the tape DB into a public image.
+.phus/
+logs/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+tape.sqlite*
+.tape.sqlite*
+
+# Test scratch
+test-results/
+playwright-report/
+.vitest-cache/
+
+# Docs build output (apps/docs is its own thing, not shipped in the CLI image)
+apps/docs/doc_build/
