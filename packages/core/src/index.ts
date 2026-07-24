@@ -32,6 +32,25 @@ export type {
 	TapeAnchorEntry,
 } from "./types/tape/index.js";
 
+// ── Session types
+export type {
+	Session,
+	SessionAddress,
+	SessionOrigin,
+	SessionKind,
+	SessionStatus,
+	CreateSessionOptions,
+	SessionFilter,
+} from "./types/session/index.js";
+
+// ── Session temporal store
+export { SessionTape } from "./session/session-tape.js";
+export type {
+	SessionTapeOptions,
+	SessionCompactionOptions,
+	SessionAutoCompactArgs,
+} from "./session/session-tape.js";
+
 // ── Scheduler types
 export type { Schedule, FiredSchedule, SchedulerOptions } from "./types/scheduler/index.js";
 

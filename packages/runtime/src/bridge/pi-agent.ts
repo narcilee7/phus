@@ -30,6 +30,9 @@ import type { MetaTool } from "@phus/runtime/types/tool.js";
 import type { SessionId } from "@phus/core/types/brand.js";
 import { asSessionId, asToolCallId, asTurnId } from "@phus/core/types/brand.js";
 import { Tape } from "@phus/core/session/tape.js";
+import { SessionTape } from "@phus/core/session/session-tape.js";
+import type { SessionStore } from "@phus/core/session/session-store.js";
+import type { SessionStorage } from "@phus/core/session/session-storage.js";
 import { PiSteeringInbox } from "@phus/core/runtime/steering/index.js";
 import { SkillRegistry } from "../infra/skills/registry.js";
 import type { SkillDraft } from "../infra/skills/draft.js";
@@ -70,6 +73,10 @@ export interface PhusAgentDeps {
   logger: typeof logger;
   /** The agent's persistent event log. */
   tape: Tape;
+  /** Shared SQLite owner for the Session catalog + Tape (Phase 1). */
+  sessionStorage?: SessionStorage;
+  /** Durable Session catalog. Non-load-bearing until later migration phases. */
+  sessionStore?: SessionStore;
   /** The skill registry the agent reads. */
   skills: SkillRegistry;
   /** The hook bus all Bub-style hooks flow through. */
@@ -370,6 +377,8 @@ export class PhusAgent implements PhusAgentFacade {
    *  should use the facade methods above. */
   readonly piAgent: Agent;
   readonly tape: Tape;
+  readonly sessionStorage?: SessionStorage;
+  readonly sessionStore?: SessionStore;
   readonly skills: SkillRegistry;
   readonly memoryStore: MemoryStore;
   readonly autonomyGate: AutonomyGate;
@@ -494,6 +503,8 @@ export class PhusAgent implements PhusAgentFacade {
 
   constructor(private deps: PhusAgentDeps) {
     this.tape = deps.tape;
+    this.sessionStorage = deps.sessionStorage;
+    this.sessionStore = deps.sessionStore;
     this.skills = deps.skills;
     this.memoryStore = deps.memoryStore;
     this.autonomyGate = deps.autonomyGate;
@@ -731,9 +742,8 @@ export class PhusAgent implements PhusAgentFacade {
     if (this.currentSessionId && this.autoCompactEnabled) {
       const cw = this.piAgent.state.model.contextWindow;
       try {
-        const decision = await maybeCompact({
-          tape: this.tape,
-          sessionId: this.currentSessionId,
+        const sessionTape = this.getSessionTape(this.currentSessionId);
+        const compactArgs = {
           messages: this.piAgent.state.messages,
           contextWindow: cw,
           cfg: this.autoCompactCfg,
@@ -742,7 +752,14 @@ export class PhusAgent implements PhusAgentFacade {
           tools: this.piAgent.state.tools,
           lastReportedInput: this.lastReportedInput,
           logger: this.deps.logger,
-        });
+        };
+        const decision = sessionTape
+          ? await sessionTape.maybeCompact(compactArgs)
+          : await maybeCompact({
+            ...compactArgs,
+            tape: this.tape,
+            sessionId: this.currentSessionId,
+          });
         if (decision.tier === "near_limit") {
           this.deps.logger.info("context.near_limit", {
             sessionId: this.currentSessionId,
@@ -810,6 +827,7 @@ export class PhusAgent implements PhusAgentFacade {
       memory: this.memoryStore,
       getContextWindow: () => this.piAgent.state.model.contextWindow,
       getCurrentSessionId: () => this.currentSessionId,
+      getSessionTape: (id) => this.getSessionTape(id),
       setSystemPrompt: (prompt) => { this.piAgent.state.systemPrompt = prompt; },
       repoIndex: this.repoIndex,
     });
@@ -1115,19 +1133,25 @@ export class PhusAgent implements PhusAgentFacade {
         outbound: finalOutbounds,
         durationMs: Date.now() - startedAt,
       };
-      this.tape.append({ kind: "turn", turn });
+      const sessionTape = this.getSessionTape(sessionId);
+      if (sessionTape) sessionTape.append({ kind: "turn", turn });
+      else this.tape.append({ kind: "turn", turn });
 
       // 10. Per-turn checkpoint — exactly one snapshot per turn, keyed
       // by the turn's own id (not the last toolCallId). Replaces the
       // per-tool-call checkpoint that previously lived in
       // `afterToolCall` and inflated the tape.
       try {
-        saveCheckpoint(
-          this.tape,
-          this.currentSessionId as SessionId,
-          this.piAgent.state.messages,
-          turn.id,
-        );
+        if (sessionTape) {
+          sessionTape.saveCheckpoint(this.piAgent.state.messages, turn.id);
+        } else {
+          saveCheckpoint(
+            this.tape,
+            this.currentSessionId as SessionId,
+            this.piAgent.state.messages,
+            turn.id,
+          );
+        }
       } catch (err: any) {
         logger.warn("checkpoint.save_failed", { error: err.message });
       }
@@ -1217,6 +1241,16 @@ export class PhusAgent implements PhusAgentFacade {
     return lines.join("\n");
   }
 
+  private getSessionTape(sessionId: SessionId | undefined): SessionTape | undefined {
+    if (!sessionId || !this.sessionStorage || !this.sessionStore) return undefined;
+    return new SessionTape({
+      sessionId,
+      storage: this.sessionStorage,
+      tape: this.tape,
+      sessionStore: this.sessionStore,
+    });
+  }
+
   private fallbackSession(envelope: Envelope): string {
     return `${envelope.channel || "cli"}:${(envelope.metadata as any)?.chatId ?? envelope.from ?? "default"}`;
   }
@@ -1263,14 +1297,17 @@ export class PhusAgent implements PhusAgentFacade {
       toolCallId: ctx.toolCall.id,
     });
 
-    this.tape.append({
-      kind: "tool_call",
+    const entry = {
+      kind: "tool_call" as const,
       sessionId: this.currentSessionId,
       toolCallId: asToolCallId(ctx.toolCall.id),
       name: ctx.toolCall.name,
       args: ctx.args,
       ts: Date.now(),
-    });
+    };
+    const sessionTape = this.getSessionTape(this.currentSessionId);
+    if (sessionTape) sessionTape.append(entry);
+    else this.tape.append(entry);
     return undefined;
   }
 
@@ -1279,14 +1316,17 @@ export class PhusAgent implements PhusAgentFacade {
     _signal?: AbortSignal,
   ): Promise<AfterToolCallResult | undefined> {
     if (!this.currentSessionId) return undefined;
-    this.tape.append({
-      kind: "tool_result",
+    const entry = {
+      kind: "tool_result" as const,
       sessionId: this.currentSessionId,
       toolCallId: asToolCallId(ctx.toolCall.id),
       result: ctx.result,
       isError: ctx.isError,
       ts: Date.now(),
-    });
+    };
+    const sessionTape = this.getSessionTape(this.currentSessionId);
+    if (sessionTape) sessionTape.append(entry);
+    else this.tape.append(entry);
     // Checkpoint is saved ONCE per turn (in `turn()`), not on every tool
     // call. Writing on every tool call inflated the tape with full
     // message snapshots per tool — a single tool-using turn of 5 calls
@@ -1489,13 +1529,22 @@ export class PhusAgent implements PhusAgentFacade {
 
   async compactCurrentSession(): Promise<string> {
     if (!this.currentSessionId) throw new Error("no current session to compact");
-    const { compactSession } = await import("@phus/core/session/compaction.js");
-    const result = await compactSession(this.tape, this.currentSessionId, { keepRecent: 10 });
+    const sessionTape = this.getSessionTape(this.currentSessionId);
+    const result = sessionTape
+      ? await sessionTape.compact({ keepRecent: 10 })
+      : await (await import("@phus/core/session/compaction.js")).compactSession(
+        this.tape,
+        this.currentSessionId,
+        { keepRecent: 10 },
+      );
     return `compacted: summarized=${result.summarized}, kept=${result.keptRecent}`;
   }
 
   async restoreCheckpoint(id: SessionId): Promise<void> {
-    const cp = loadLatestCheckpoint(this.tape, id);
+    const sessionTape = this.getSessionTape(id);
+    const cp = sessionTape
+      ? sessionTape.loadLatestCheckpoint()
+      : loadLatestCheckpoint(this.tape, id);
     if (!cp) throw new Error(`no checkpoint for session ${id}`);
     this.piAgent.state.messages = cp.messages as any;
     this.currentSessionId = id;
@@ -1503,11 +1552,13 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   saveCheckpoint(id: SessionId): void {
-    saveCheckpoint(this.tape, id, this.piAgent.state.messages as unknown[]);
+    const sessionTape = this.getSessionTape(id);
+    if (sessionTape) sessionTape.saveCheckpoint(this.piAgent.state.messages as unknown[]);
+    else saveCheckpoint(this.tape, id, this.piAgent.state.messages as unknown[]);
   }
 
   listCheckpoints(id: SessionId): CheckpointEntry[] {
-    return listCheckpoints(this.tape, id);
+    return this.getSessionTape(id)?.listCheckpoints() ?? listCheckpoints(this.tape, id);
   }
 
   getDiagnostics(): AgentDiagnostics {
@@ -1548,6 +1599,10 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   getTapeSummary(sessionId: SessionId | undefined, limit: number): string {
+    if (sessionId) {
+      const sessionTape = this.getSessionTape(sessionId);
+      if (sessionTape) return sessionTape.summary(limit);
+    }
     return this.tape.summary((sessionId as string) ?? "default", limit);
   }
 

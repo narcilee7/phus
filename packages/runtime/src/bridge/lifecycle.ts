@@ -17,7 +17,7 @@ export interface PhusAgentHandle {
   internals: PhusAgent;
   /**
    * Release every resource the agent owns: stop the mesh health
-   * timer, close the tape, unsubscribe Pi events. Safe to call
+   * timer, close Session/Tape storage, unsubscribe Pi events. Safe to call
    * multiple times.
    */
   dispose: () => Promise<void>;
@@ -48,8 +48,14 @@ export async function createPhusAgent(deps: PhusAgentDeps): Promise<PhusAgentHan
     if (disposed) return;
     disposed = true;
     try { internals.mesh.stopHealthChecks(); } catch { /* ignore */ }
-    try { internals.tape.close?.(); } catch (err: any) {
-      logger.warn("lifecycle.tape_close_failed", { error: err.message });
+    try {
+      if (internals.sessionStorage) internals.sessionStorage.close();
+      else internals.tape.close?.();
+    } catch (err: any) {
+      logger.warn("lifecycle.session_storage_close_failed", { error: err.message });
+    }
+    try { internals.sessionStore?.dispose(); } catch (err: any) {
+      logger.warn("lifecycle.session_store_dispose_failed", { error: err.message });
     }
     try { internals.planStore.close(); } catch { /* ignore */ }
     logger.info("phus_agent.disposed");
