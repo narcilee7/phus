@@ -5,6 +5,7 @@ import { SessionStorage } from "./session-storage.js";
 export interface IdentitySubject {
   channel: string;
   subjectId: string;
+  linkedAt: number;
 }
 
 export interface SessionIdentity {
@@ -114,6 +115,86 @@ export class SessionIdentityStore {
     return this.get(identityId)!;
   }
 
+  unlinkSubject(identityId: SessionId, channel: string, subjectId: string): SessionIdentity {
+    this.assertOpen();
+    const before = this.get(identityId);
+    if (!before) {
+      throw new Error(`identity not found: ${identityId}`);
+    }
+    const remaining = before.subjects.filter((s) => !(s.channel === channel && s.subjectId === subjectId));
+    if (remaining.length === before.subjects.length) {
+      return before; // nothing to do
+    }
+    if (remaining.length === 0) {
+      throw new IdentityMergeConflictError(
+        identityId,
+        channel,
+        subjectId,
+      );
+    }
+    this.storage.transaction(() => {
+      this.storage.prepare<[string, string, string]>(`
+        DELETE FROM session_identity_subjects
+        WHERE identity_id = ? AND channel = ? AND subject_id = ?
+      `).run(identityId, channel, subjectId);
+    });
+    return this.get(identityId)!;
+  }
+
+  merge(sourceId: SessionId, targetId: SessionId): SessionIdentity {
+    this.assertOpen();
+    if (sourceId === targetId) {
+      throw new Error("cannot merge an identity into itself");
+    }
+    const source = this.get(sourceId);
+    const target = this.get(targetId);
+    if (!source) throw new Error(`source identity not found: ${sourceId}`);
+    if (!target) throw new Error(`target identity not found: ${targetId}`);
+    if (source.subjects.length === 0) {
+      throw new IdentityMergeConflictError(sourceId, source.primaryChannel, source.primarySubjectId);
+    }
+    const now = Date.now();
+    this.storage.transaction(() => {
+      for (const subject of source.subjects) {
+        this.storage.prepare<[string, string, string, number, string, string, string]>(`
+          INSERT OR IGNORE INTO session_identity_subjects
+            (identity_id, channel, subject_id, linked_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(targetId, subject.channel, subject.subjectId, subject.linkedAt, targetId, subject.channel, subject.subjectId);
+      }
+      this.storage.prepare<[string, string]>(`
+        UPDATE sessions SET identity_id = ? WHERE identity_id = ?
+      `).run(targetId, sourceId);
+      this.storage.prepare<[string]>(`
+        DELETE FROM session_identity_subjects WHERE identity_id = ?
+      `).run(sourceId);
+      this.storage.prepare<[string]>(`
+        DELETE FROM session_identities WHERE id = ?
+      `).run(sourceId);
+      this.touchLastSeen(targetId);
+    });
+    void now;
+    return this.get(targetId)!;
+  }
+
+  rename(id: SessionId, displayName: string): SessionIdentity {
+    this.assertOpen();
+    this.storage.prepare<[string, number, string]>(`
+      UPDATE session_identities
+      SET display_name = ?, updated_at = ?
+      WHERE id = ?
+    `).run(displayName, Date.now(), id);
+    return this.get(id)!;
+  }
+
+  list(): SessionIdentity[] {
+    this.assertOpen();
+    const rows = this.storage.prepare<[], IdentityRow>(
+      "SELECT * FROM session_identities ORDER BY created_at ASC",
+    ).all();
+    return rows.map((row) => rowToIdentity(row, this.subjectsFor(asSessionId(row.id))));
+  }
+
   dispose(): void {
     if (this.ownsStorage && !this.closed) this.storage.close();
     this.closed = true;
@@ -153,7 +234,11 @@ export class SessionIdentityStore {
       WHERE identity_id = ?
       ORDER BY linked_at ASC
     `).all(id);
-    return rows.map((row) => ({ channel: row.channel, subjectId: row.subject_id }));
+    return rows.map((row) => ({
+      channel: row.channel,
+      subjectId: row.subject_id,
+      linkedAt: row.linked_at,
+    }));
   }
 
   private touchDisplayName(id: SessionId, displayName: string): void {
