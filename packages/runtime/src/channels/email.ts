@@ -7,6 +7,7 @@ import * as nodemailer from "nodemailer";
 import type { ChannelAdapter, ChannelStatus } from "./base.js";
 import { makeEnvelopeFromChat } from "./base.js";
 import type { Outbound } from "@phus/core/types/channel/index.js";
+import type { SessionAddress } from "@phus/core/types/session/index.js";
 import type { PhusAgent } from "../bridge/pi-agent.js";
 import { logger } from "../infra/logging.js";
 import { simpleParser } from "mailparser";
@@ -143,6 +144,11 @@ export class EmailChannel implements ChannelAdapter {
             messageId: msg.messageId,
             replyToAddress: msg.from?.address,
           },
+          address: this.buildAddress(
+            msg.from?.address ?? msg.from?.text ?? "unknown",
+            msg.messageId,
+            String(msg.uid),
+          ),
         });
 
         try {
@@ -208,6 +214,15 @@ export class EmailChannel implements ChannelAdapter {
         pollCount: this.pollCount,
         seenUids: this.seenUids.size,
       },
+    };
+  }
+
+  private buildAddress(fromAddress: string, messageId?: string, uid?: string): SessionAddress {
+    return {
+      channel: "email",
+      scope: `mailbox:${this.config.mailbox ?? "INBOX"}`,
+      conversationKey: `from:${fromAddress}`,
+      threadKey: messageId ? `msg:${messageId}` : (uid ? `uid:${uid}` : undefined),
     };
   }
 }

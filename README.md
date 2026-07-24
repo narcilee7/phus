@@ -8,7 +8,7 @@
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" align="middle"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20" align="middle">
   <img src="https://img.shields.io/badge/pnpm-10%2B-orange" alt="pnpm 10+" align="middle">
-  <a href="README-CN.md" align="middle">中文文档</a>
+  <a href="README-CN.md" align="middle" display="block">中文文档</a>
 </p>
 
 ---
@@ -35,34 +35,34 @@ Plans survive restarts (SQLite-backed), support replan on failure, and expose `p
 
 The agent doesn't just use skills — it **writes them**. 14 meta tools let it modify itself at runtime:
 
-| Category | Tools |
-|---|---|
-| **Skills** | `skill_write` — create new capabilities from experience (Markdown prompt guides, not code) |
-| | `skill_read` / `skill_delete` — inspect or remove skills |
-| | `skill_validate` — A/B test a skill draft vs baseline, auto-promote if better |
-| **System** | `startup_write` — write boot scripts (runs on next gateway start) |
-| | `startup_suggest` — analyze tape + plans, suggest startup additions |
-| | `self_reflect` — read past turns across sessions |
-| | `compact_session` — summarize old turns to free context window |
-| **Memory** | `memory_read` / `memory_write` — maintain `phus.md` cross-session project memory |
-| **Evolution** | `reflect` — analyze a session, extract what worked/failed, suggest reusable procedures |
-| | `plan_create` / `plan_run` / `plan_status` / `plan_list` — create and execute multi-step plans |
-| **Introspection** | `tape_stats` — per-session aggregate counts |
+| Category          | Tools                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| **Skills**        | `skill_write` — create new capabilities from experience (Markdown prompt guides, not code)     |
+|                   | `skill_read` / `skill_delete` — inspect or remove skills                                       |
+|                   | `skill_validate` — A/B test a skill draft vs baseline, auto-promote if better                  |
+| **System**        | `startup_write` — write boot scripts (runs on next gateway start)                              |
+|                   | `startup_suggest` — analyze tape + plans, suggest startup additions                            |
+|                   | `self_reflect` — read past turns across sessions                                               |
+|                   | `compact_session` — summarize old turns to free context window                                 |
+| **Memory**        | `memory_read` / `memory_write` — maintain `phus.md` cross-session project memory               |
+| **Evolution**     | `reflect` — analyze a session, extract what worked/failed, suggest reusable procedures         |
+|                   | `plan_create` / `plan_run` / `plan_status` / `plan_list` — create and execute multi-step plans |
+| **Introspection** | `tape_stats` — per-session aggregate counts                                                    |
 
-The Evolution Engine runs after every completed plan: it reflects on the outcome, writes skill drafts from reusable procedures, and validates them against baselines — closing the loop from *experience → skill → verified improvement*.
+The Evolution Engine runs after every completed plan: it reflects on the outcome, writes skill drafts from reusable procedures, and validates them against baselines — closing the loop from _experience → skill → verified improvement_.
 
 ### External tools
 
 The agent interacts with the real world through 6 non-negotiable tools:
 
-| Tool | Purpose |
-|---|---|
-| `bash` | Shell commands via `child_process`, with timeout + abort signal + retry |
-| `file_read` | Read files with line numbers, paging, byte cap |
-| `file_write` | Write/overwrite files, auto-create parent directories |
-| `edit` | String-replace file edits (first-match or replace-all, with uniqueness check) |
-| `grep` | ripgrep search with regex, glob filtering, context lines, sensitive-file filtering |
-| `glob` | File discovery with brace expansion, sorted by mtime |
+| Tool         | Purpose                                                                            |
+| ------------ | ---------------------------------------------------------------------------------- |
+| `bash`       | Shell commands via `child_process`, with timeout + abort signal + retry            |
+| `file_read`  | Read files with line numbers, paging, byte cap                                     |
+| `file_write` | Write/overwrite files, auto-create parent directories                              |
+| `edit`       | String-replace file edits (first-match or replace-all, with uniqueness check)      |
+| `grep`       | ripgrep search with regex, glob filtering, context lines, sensitive-file filtering |
+| `glob`       | File discovery with brace expansion, sorted by mtime                               |
 
 ### Safety by design
 
@@ -135,12 +135,12 @@ apps/cli → packages/tui → packages/runtime → packages/core → packages/sh
 
 Configuration lives in `phus.config.yaml` (generated by `phus setup`). Key environment variables:
 
-| Env | Purpose |
-|---|---|
-| `PHUS_HOME` | Home directory (skills, tape, startup.sh). Default `./.phus` |
-| `PHUS_LOG_FILE` | Structured JSONL log path. Default `./logs/phus.jsonl` |
-| `PHUS_LOG_LEVEL` | `fatal` / `error` / `warn` / `info` / `debug` / `trace` |
-| `PHUS_PROFILE` | Active provider profile |
+| Env              | Purpose                                                      |
+| ---------------- | ------------------------------------------------------------ |
+| `PHUS_HOME`      | Home directory (skills, tape, startup.sh). Default `./.phus` |
+| `PHUS_LOG_FILE`  | Structured JSONL log path. Default `./logs/phus.jsonl`       |
+| `PHUS_LOG_LEVEL` | `fatal` / `error` / `warn` / `info` / `debug` / `trace`      |
+| `PHUS_PROFILE`   | Active provider profile                                      |
 
 Provider keys are read automatically by Pi. See [`phus.config.example.yaml`](phus.config.example.yaml) for the full schema (provider mesh with circuit breakers, schedules, channels, plugins).
 
@@ -155,10 +155,14 @@ import type { Plugin } from "@phus/runtime";
 export default {
   name: "greet-everyone",
   register(ctx) {
-    ctx.hooks.register("resolve_session", async (c) => `greet:${c.envelope?.from ?? "anon"}`, {
-      mode: "first_result",
-      priority: 100,
-    });
+    ctx.hooks.register(
+      "resolve_session",
+      async (c) => `greet:${c.envelope?.from ?? "anon"}`,
+      {
+        mode: "first_result",
+        priority: 100,
+      },
+    );
   },
 } satisfies Plugin;
 ```

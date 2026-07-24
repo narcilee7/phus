@@ -19,6 +19,7 @@ export function registerResumeCommand(program: Command): void {
         }
         if (err instanceof Error) {
           console.error(`[phus] ${err.message}`);
+          process.exit(1);
         }
         throw err;
       }

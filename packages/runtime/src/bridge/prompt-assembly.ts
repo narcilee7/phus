@@ -8,6 +8,7 @@ import type { SessionId } from "@phus/core/types/brand.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import type { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import type { RepoFileIndex } from "@phus/core/session/repo-file-index.js";
+import type { SessionTape } from "@phus/core/session/session-tape.js";
 import { selectRelevantFiles } from "@phus/core/session/context-select.js";
 
 export const SYSTEM_PROMPT_HEADER = `You are Phus (⛰️ 西西弗斯), a self-evolving agent.
@@ -41,6 +42,10 @@ export interface PromptAssemblyDeps {
   getContextWindow: () => number | undefined;
   /** Function returning the current session id (may be undefined pre-session). */
   getCurrentSessionId: () => SessionId | undefined;
+  /** Optional Session-bound temporal lookup. Legacy callers fall back to Tape. */
+  getSessionTape?: (
+    id: SessionId,
+  ) => Pick<SessionTape, "selectRelevantTurns"> | undefined;
   /** Function writing the final composed prompt into the live agent state. */
   setSystemPrompt: (prompt: string) => void;
   /** Optional repo file index — when present, the context block lists the
@@ -98,15 +103,21 @@ export async function buildContextBlock(messages: AgentMessage[], deps: PromptAs
     let tapeSummary: string;
     const sid = deps.getCurrentSessionId();
     if (sid) {
-      const { selectRelevantTurns } = await import("@phus/core/session/context-select.js");
-      // `selectRelevantTurns` requires the concrete `Tape` class.
-      // `TapeLike` already declares `.replay()` so the cast is sound
-      // — the import keeps the interface narrow in the type layer.
-      const relevant = selectRelevantTurns(
-        deps.tape as unknown as import("@phus/core/session/tape.js").Tape,
-        sid,
-        queryText,
-      );
+      const sessionTape = deps.getSessionTape?.(sid);
+      let relevant: ReturnType<SessionTape["selectRelevantTurns"]>;
+      if (sessionTape) {
+        relevant = sessionTape.selectRelevantTurns(queryText);
+      } else {
+        const { selectRelevantTurns } = await import("@phus/core/session/context-select.js");
+        // `selectRelevantTurns` requires the concrete `Tape` class.
+        // `TapeLike` already declares `.replay()` so the cast is sound
+        // — the import keeps the interface narrow in the type layer.
+        relevant = selectRelevantTurns(
+          deps.tape as unknown as import("@phus/core/session/tape.js").Tape,
+          sid,
+          queryText,
+        );
+      }
       // User-side only. Echoing the prior `modelOutput` text back into
       // the system prompt was the root cause of cross-session content
       // bleed (e.g. "Hi! 好久不见" from a prior session appearing

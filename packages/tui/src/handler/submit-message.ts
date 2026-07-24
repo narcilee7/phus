@@ -61,6 +61,7 @@ export async function submitMessage(text: string, ctx: SubmitContext): Promise<S
         content,
         type: "text",
         channel: "tui",
+        sessionId: ctx.agent.getCurrentSessionId() as any,
         metadata: { chatId: "tui" },
         ts: Date.now(),
       },

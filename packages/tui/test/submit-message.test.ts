@@ -17,6 +17,7 @@ function makeAgent(turnImpl?: (channel: ChannelAdapter) => Promise<void>): PhusA
     turn: vi.fn(async (_envelope, channel) => {
       if (turnImpl) await turnImpl(channel);
     }),
+    getCurrentSessionId: vi.fn(() => "tui:test"),
   } as unknown as PhusAgent;
 }
 
@@ -114,7 +115,7 @@ describe("submitMessage — channel wiring", () => {
 
   it("trims busy guard before talking to the agent", async () => {
     const turn = vi.fn(async () => {});
-    const agent = { turn } as unknown as PhusAgent;
+    const agent = { turn, getCurrentSessionId: () => "tui:test" } as unknown as PhusAgent;
     const { dispatch } = captureDispatch();
     const setInput = vi.fn();
 
@@ -133,7 +134,7 @@ describe("submitMessage — channel wiring", () => {
 
   it("short-circuits slash commands without sending a turn", async () => {
     const turn = vi.fn(async () => {});
-    const agent = { turn } as unknown as PhusAgent;
+    const agent = { turn, getCurrentSessionId: () => "tui:test" } as unknown as PhusAgent;
     const { dispatch } = captureDispatch();
     const setInput = vi.fn();
 

@@ -3,6 +3,7 @@
 // implements this so PhusAgent can talk to them uniformly.
 
 import type { Envelope, Outbound } from "@phus/core/types/channel/index.js";
+import type { SessionAddress } from "@phus/core/types/session/index.js";
 import type { PhusAgent } from "../bridge/pi-agent.js";
 
 /** Snapshot returned by {@link ChannelAdapter.status} for diagnostics. */
@@ -37,6 +38,7 @@ export function makeTextEnvelope(opts: {
   metadata?: Record<string, unknown>;
   replyTo?: string;
   id?: string;
+  address?: SessionAddress;
 }): Envelope {
   return {
     id: opts.id ?? crypto.randomUUID(),
@@ -46,6 +48,7 @@ export function makeTextEnvelope(opts: {
     channel: opts.channel,
     metadata: opts.metadata ?? {},
     replyTo: opts.replyTo,
+    address: opts.address,
     ts: Date.now(),
   };
 }
@@ -58,12 +61,14 @@ export function makeEnvelopeFromChat(opts: {
   from?: string;
   replyTo?: string;
   metadata?: Record<string, unknown>;
+  address?: SessionAddress;
 }): Envelope {
   return makeTextEnvelope({
     channel: opts.channel,
     from: opts.from ?? opts.chatId,
     content: opts.content,
     replyTo: opts.replyTo,
+    address: opts.address,
     metadata: {
       chatId: opts.chatId,
       ...opts.metadata,

@@ -5,6 +5,8 @@
 
 import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Tape } from "@phus/core/session/tape.js";
+import { SessionStorage } from "@phus/core/session/session-storage.js";
+import { SessionStore } from "@phus/core/session/session-store.js";
 import { SkillRegistry } from "../infra/skills/registry.js";
 import { defaultPolicy } from "../infra/safety.js";
 import { resolveProfile, type ProviderProfile } from "../infra/profile.js";
@@ -41,7 +43,10 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
   const config = opts.config ?? loadConfig();
   const profileName = opts.profileName ?? config.profileName;
   const profile: ProviderProfile = resolveProfile(profileName, config.providers);
-  const tape = new Tape(config.paths.tapeDb);
+  const sessionStorage = new SessionStorage(config.paths.tapeDb);
+  const tape = new Tape(sessionStorage);
+  const sessionStore = new SessionStore(sessionStorage);
+  sessionStore.bootstrapFromTape();
   const skills = new SkillRegistry(config.paths.skillsDir);
   const memoryStore = new MemoryStore(config.paths.memoryFile);
   const autonomyGate = AutonomyGate.fromConfig(config.memory);
@@ -101,6 +106,8 @@ export function buildDefaultPhusAgentDeps(opts: DefaultDepsOptions = {}): PhusAg
   return {
     logger,
     tape,
+    sessionStorage,
+    sessionStore,
     skills,
     memoryStore,
     autonomyGate,

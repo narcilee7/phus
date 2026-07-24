@@ -2,25 +2,37 @@
 // SQLite-backed append-only event log.
 // Schema: one row per entry, indexed by session_id + ts.
 
-import Database from "better-sqlite3";
-import * as path from "node:path";
-import * as fs from "node:fs";
+import type BetterSqlite3 from "better-sqlite3";
 import type { TapeEntry, Turn, TapeAnchorRef } from "../types/tape/index.js";
+import { SessionStorage } from "./session-storage.js";
 
 export class Tape {
-  private db: Database.Database;
+  private readonly storage: SessionStorage;
+  private readonly ownsStorage: boolean;
+  private readonly insertStmt: BetterSqlite3.Statement<[
+    number,
+    string,
+    string,
+    string,
+    string,
+  ]>;
 
   /** `dbPath` is required — callers get the path from `loadConfig().paths.tapeDb`. */
-  constructor(dbPath: string) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("synchronous = NORMAL");
+  constructor(input: string | SessionStorage) {
+    this.ownsStorage = typeof input === "string";
+    this.storage = typeof input === "string" ? new SessionStorage(input) : input;
     this.init();
+    this.insertStmt = this.storage.prepare<[
+      number,
+      string,
+      string,
+      string,
+      string,
+    ]>("INSERT INTO tape (ts, session_id, kind, payload, meta) VALUES (?, ?, ?, ?, ?)");
   }
 
   private init(): void {
-    this.db.exec(`
+    this.storage.exec(`
       CREATE TABLE IF NOT EXISTS tape (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         ts          INTEGER NOT NULL,
@@ -34,26 +46,14 @@ export class Tape {
     `);
   }
 
-  private insertStmt = (() => {
-    try {
-      return this.db.prepare(
-        "INSERT INTO tape (ts, session_id, kind, payload, meta) VALUES (?, ?, ?, ?, ?)",
-      );
-    } catch {
-      // db not open yet in subclass scenarios
-      return null as any;
-    }
-  })();
-
   /** Append one entry to the tape. */
   append(entry: TapeEntry, meta: Record<string, unknown> = {}): void {
     const ts = "ts" in entry ? entry.ts : Date.now();
     const sessionId = this.sessionIdOf(entry);
     const payload = JSON.stringify(entry);
-    const stmt = this.insertStmt ?? this.db.prepare(
-      "INSERT INTO tape (ts, session_id, kind, payload, meta) VALUES (?, ?, ?, ?, ?)",
-    );
-    stmt.run(ts, sessionId, entry.kind, payload, JSON.stringify(meta));
+    this.insertStmt.run(ts, sessionId, entry.kind, payload, JSON.stringify(meta));
+    // Phase 1 keeps Tape writes behavior-compatible. A later Session-bound
+    // event API will update sessions.last_turn_at in the same transaction.
   }
 
   private sessionIdOf(entry: TapeEntry): string {
@@ -65,8 +65,8 @@ export class Tape {
   /** Stream all entries for a session, oldest first. */
   *replay(sessionId?: string): Generator<TapeEntry> {
     const rows = sessionId
-      ? this.db.prepare("SELECT payload FROM tape WHERE session_id = ? ORDER BY ts ASC, id ASC").all(sessionId)
-      : this.db.prepare("SELECT payload FROM tape ORDER BY ts ASC, id ASC").all();
+      ? this.storage.prepare("SELECT payload FROM tape WHERE session_id = ? ORDER BY ts ASC, id ASC").all(sessionId)
+      : this.storage.prepare("SELECT payload FROM tape ORDER BY ts ASC, id ASC").all();
 
     for (const row of rows as Array<{ payload: string }>) {
       try {
@@ -79,7 +79,7 @@ export class Tape {
 
   /** Recent turn summary as plain text, for system prompt injection. */
   summary(sessionId: string, limit = 10): string {
-    const rows = this.db.prepare(
+    const rows = this.storage.prepare(
       `SELECT payload FROM tape WHERE session_id = ? AND kind = 'turn' ORDER BY ts DESC, id DESC LIMIT ?`,
     ).all(sessionId, limit) as Array<{ payload: string }>;
 
@@ -97,8 +97,8 @@ export class Tape {
 
   /** Aggregate stats: total entries + per-session counts. */
   stats(): { totalEntries: number; sessions: Record<string, number> } {
-    const total = (this.db.prepare("SELECT COUNT(*) AS c FROM tape").get() as { c: number }).c;
-    const rows = this.db.prepare(
+    const total = (this.storage.prepare("SELECT COUNT(*) AS c FROM tape").get() as { c: number }).c;
+    const rows = this.storage.prepare(
       "SELECT session_id, COUNT(*) AS c FROM tape GROUP BY session_id",
     ).all() as Array<{ session_id: string; c: number }>;
     const sessions: Record<string, number> = {};
@@ -108,7 +108,7 @@ export class Tape {
 
   /** Load the latest anchor state for a session, if any. */
   loadAnchor(sessionId: string): TapeAnchorRef | undefined {
-    const row = this.db.prepare(
+    const row = this.storage.prepare(
       `SELECT payload FROM tape WHERE session_id = ? AND kind = 'anchor' ORDER BY ts DESC, id DESC LIMIT 1`,
     ).get(sessionId) as { payload: string } | undefined;
     if (!row) return undefined;
@@ -117,9 +117,9 @@ export class Tape {
     return { name: entry.name, state: entry.state, ts: entry.ts };
   }
 
-  /** Close the underlying database (mostly for tests / clean shutdown). */
+  /** Close storage created by this Tape. Shared storage is closed by its owner. */
   close(): void {
-    this.db.close();
+    if (this.ownsStorage) this.storage.close();
   }
 
   /**
@@ -130,22 +130,21 @@ export class Tape {
    * database connection — `better-sqlite3` is single-process per file.
    */
   pruneCheckpoints(sessionId: string, keep = 5): number {
-    const rows = this.db.prepare(
+    const rows = this.storage.prepare(
       `SELECT ts FROM tape WHERE session_id = ? AND kind = 'checkpoint' ORDER BY ts DESC, id DESC`,
     ).all(sessionId) as Array<{ ts: number }>;
     if (rows.length <= keep) return 0;
     const toDelete = rows.slice(keep).map((r) => r.ts);
-    const del = this.db.prepare(
+    const del = this.storage.prepare(
       "DELETE FROM tape WHERE session_id = ? AND kind = 'checkpoint' AND ts = ?",
     );
     let deleted = 0;
-    const tx = this.db.transaction((tsList: number[]) => {
-      for (const ts of tsList) {
+    this.storage.transaction(() => {
+      for (const ts of toDelete) {
         const r = del.run(sessionId, ts);
         deleted += r.changes;
       }
     });
-    tx(toDelete);
     return deleted;
   }
 }

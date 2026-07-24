@@ -49,6 +49,41 @@ function makeAgent(over: Partial<PhusAgent> = {}): PhusAgent {
     getSkillCount: () => 1,
     getPlanRunner: () => undefined,
     getPlanStore: () => undefined,
+    listSessions: () => [
+      {
+        id: "cli:default",
+        kind: "conversation",
+        status: "open",
+        origin: { channel: "cli", scope: "legacy", conversationKey: "default" },
+        tags: [],
+        metadata: {},
+        createdAt: 0,
+        updatedAt: 0,
+        lastTurnAt: 0,
+      } as any,
+      {
+        id: "cli:other",
+        kind: "conversation",
+        status: "open",
+        origin: { channel: "cli", scope: "legacy", conversationKey: "other" },
+        tags: [],
+        metadata: {},
+        createdAt: 0,
+        updatedAt: 0,
+        lastTurnAt: 0,
+      } as any,
+    ],
+    getSession: (id: string) => ({
+      id,
+      kind: "conversation",
+      status: "open",
+      origin: { channel: "cli", scope: "legacy", conversationKey: "default" },
+      tags: [],
+      metadata: {},
+      createdAt: 0,
+      updatedAt: 0,
+      lastTurnAt: 0,
+    } as any),
   };
   return { ...defaults, ...over } as any;
 }
@@ -208,12 +243,13 @@ describe("runSlash — /tape / /sessions / /trace", () => {
     expect(getSystemText(dispatched)).toContain("totalEntries");
   });
 
-  it("/sessions lists sessions with counts", async () => {
+  it("/sessions lists sessions from the catalog", async () => {
     const agent = makeAgent();
     const { dispatched, dispatch } = captureDispatch();
     await runSlash("/sessions", agent, initialState, dispatch);
-    expect(getSystemText(dispatched)).toContain("cli:default");
-    expect(getSystemText(dispatched)).toContain("30 entries");
+    expect(getSystemText(dispatched)).toContain("cli:defa");
+    expect(getSystemText(dispatched)).toContain("cli:legacy:default");
+    expect(getSystemText(dispatched)).toContain("open");
   });
 
   it("/trace with N replays up to N turns", async () => {
@@ -249,9 +285,9 @@ describe("runSlash — /use / /compact", () => {
     const setNextSessionId = vi.fn();
     const agent = makeAgent({ setNextSessionId } as any);
     const { dispatched, dispatch } = captureDispatch();
-    await runSlash("/use cli:foo", agent, initialState, dispatch);
+    await runSlash("/use cli:default", agent, initialState, dispatch);
     expect(setNextSessionId).toHaveBeenCalledTimes(1);
-    expect(getSystemText(dispatched)).toContain("✓ next turn will use session: cli:foo");
+    expect(getSystemText(dispatched)).toContain("active session");
   });
 
   it("/use without arg warns usage", async () => {

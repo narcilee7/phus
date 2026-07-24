@@ -8,6 +8,32 @@ import { TURN_TRACE_CHARS, TURN_TRACE_PREVIEW } from "../../constants.js";
 import { truncate } from "../../state/state.js";
 import type { CommandRegistry } from "./context.js";
 import { errorMessage, notify } from "./notice.js";
+import type { Session, SessionFilter } from "@phus/core/types/session/index.js";
+
+const STATUS_MARK: Record<Session["status"], string> = {
+	open: "●",
+	closed: "○",
+	archived: "×",
+};
+
+function pickSession(
+	agent: { listSessions(filter?: SessionFilter): Session[]; getSession(id: string): Session | undefined },
+	ref: string,
+	filter: SessionFilter = {},
+): Session | undefined {
+	const all = agent.listSessions({ includeArchived: true, ...filter });
+	const direct = all.find((s) => s.id === ref);
+	if (direct) return direct;
+	const prefixed = all.find((s) => s.id.startsWith(ref));
+	if (prefixed) return prefixed;
+	const refAddr = ref.includes(":") ? ref : null;
+	if (refAddr) {
+		const [channel, ...rest] = refAddr.split(":");
+		return all.find((s) =>
+			s.origin.channel === channel && s.origin.conversationKey === rest.join(":"));
+	}
+	return undefined;
+}
 
 export function registerSession(): CommandRegistry {
   return {
@@ -22,21 +48,135 @@ export function registerSession(): CommandRegistry {
     },
 
     sessions(_arg, { agent, dispatch }) {
-      const s = agent.getTapeStats();
-      const list = Object.entries(s.sessions)
-        .sort((a, b) => b[1] - a[1])
-        .map(([sid, n]) => `  ${sid}  (${n} entries)`)
+      const all = agent.listSessions({ includeArchived: true });
+      const list = all
+        .slice()
+        .sort((a, b) => (b.lastTurnAt ?? b.updatedAt) - (a.lastTurnAt ?? a.updatedAt))
+        .map((s) => {
+          const mark = STATUS_MARK[s.status] ?? "?";
+          const addr = `${s.origin.channel}:${s.origin.scope}:${s.origin.conversationKey}`;
+          const thread = s.origin.threadKey ? `:${s.origin.threadKey}` : "";
+          const last = s.lastTurnAt
+            ? new Date(s.lastTurnAt).toISOString().slice(0, 19)
+            : "—";
+          return `  ${mark} ${s.id.slice(0, 8)}  ${addr}${thread}  ${s.status}  last=${last}`;
+        })
         .join("\n");
       notify(dispatch, `sessions:\n${list || "(none)"}`);
     },
 
     use(arg, { agent, dispatch }) {
       if (!arg) {
-        notify(dispatch, "usage: /use <sessionId>", "warn");
+        notify(dispatch, "usage: /use <sessionId|prefix|channel:conversationKey>", "warn");
         return;
       }
-      agent.setNextSessionId(asSessionId(arg));
-      notify(dispatch, `✓ next turn will use session: ${arg}`);
+      const target = pickSession(agent, arg);
+      if (!target) {
+        notify(dispatch, `no session matches "${arg}"`, "warn");
+        return;
+      }
+      if (target.status !== "open") {
+        notify(dispatch, `session is ${target.status}; reopen it first`, "warn");
+        return;
+      }
+      try {
+        agent.setNextSessionId(target.id);
+        notify(dispatch, `✓ active session: ${target.id.slice(0, 8)}  ${target.origin.channel}:${target.origin.conversationKey}`);
+      } catch (err) {
+        notify(dispatch, errorMessage(err), "error");
+      }
+    },
+
+    close(arg, { agent, dispatch }) {
+      if (!arg) {
+        notify(dispatch, "usage: /close <sessionId|prefix>", "warn");
+        return;
+      }
+      const target = pickSession(agent, arg);
+      if (!target) {
+        notify(dispatch, `no session matches "${arg}"`, "warn");
+        return;
+      }
+      if (target.status === "closed") {
+        notify(dispatch, `already closed`, "info");
+        return;
+      }
+      if (target.status === "archived") {
+        notify(dispatch, `archived; reopen it first`, "warn");
+        return;
+      }
+      try {
+        agent.closeSession(target.id);
+        notify(dispatch, `✓ closed ${target.id.slice(0, 8)}`);
+      } catch (err) {
+        notify(dispatch, errorMessage(err), "error");
+      }
+    },
+
+    reopen(arg, { agent, dispatch }) {
+      if (!arg) {
+        notify(dispatch, "usage: /reopen <sessionId|prefix>", "warn");
+        return;
+      }
+      const target = pickSession(agent, arg, { includeArchived: true });
+      if (!target) {
+        notify(dispatch, `no session matches "${arg}"`, "warn");
+        return;
+      }
+      if (target.status === "open") {
+        notify(dispatch, `already open`, "info");
+        return;
+      }
+      try {
+        agent.reopenSession(target.id);
+        notify(dispatch, `✓ reopened ${target.id.slice(0, 8)}`);
+      } catch (err) {
+        notify(dispatch, errorMessage(err), "error");
+      }
+    },
+
+    archive(arg, { agent, dispatch }) {
+      if (!arg) {
+        notify(dispatch, "usage: /archive <sessionId|prefix>", "warn");
+        return;
+      }
+      const target = pickSession(agent, arg, { includeArchived: true });
+      if (!target) {
+        notify(dispatch, `no session matches "${arg}"`, "warn");
+        return;
+      }
+      if (target.status === "archived") {
+        notify(dispatch, `already archived`, "info");
+        return;
+      }
+      try {
+        agent.archiveSession(target.id);
+        notify(dispatch, `✓ archived ${target.id.slice(0, 8)}`);
+      } catch (err) {
+        notify(dispatch, errorMessage(err), "error");
+      }
+    },
+
+    end(_arg, { agent, dispatch }) {
+      const id = agent.getCurrentSessionId();
+      if (!id) {
+        notify(dispatch, `no active session`, "warn");
+        return;
+      }
+      const target = agent.getSession(id);
+      if (!target) {
+        notify(dispatch, `current session missing from catalog`, "warn");
+        return;
+      }
+      try {
+        agent.closeSession(target.id);
+        void agent.clearConversation();
+        dispatch({ type: "clear_items" });
+        dispatch({ type: "clear_session_allowed_tools" });
+        notify(dispatch, `✓ ended ${target.id.slice(0, 8)} (use /reopen to resume)`);
+      } catch (err) {
+        notify(dispatch, errorMessage(err), "error");
+      }
     },
 
     context(_arg, { agent, dispatch }) {

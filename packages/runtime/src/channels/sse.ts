@@ -6,6 +6,7 @@ import { URL } from "node:url";
 import type { ChannelAdapter, ChannelStatus } from "./base.js";
 import { makeEnvelopeFromChat } from "./base.js";
 import type { Outbound } from "@phus/core/types/channel/index.js";
+import type { SessionAddress } from "@phus/core/types/session/index.js";
 import type { PhusAgent } from "../bridge/pi-agent.js";
 import { logger } from "../infra/logging.js";
 
@@ -116,6 +117,7 @@ export class SSEChannel implements ChannelAdapter {
       chatId: clientId,
       from: clientId,
       content,
+      address: this.buildAddress(clientId, url.searchParams.get("thread") ?? undefined),
     });
 
     res.writeHead(202, { "Content-Type": "application/json" });
@@ -179,6 +181,15 @@ export class SSEChannel implements ChannelAdapter {
         host: this.config.host,
         path: this.config.path,
       },
+    };
+  }
+
+  private buildAddress(clientId: string, thread?: string): SessionAddress {
+    return {
+      channel: "sse",
+      scope: `host:${this.config.host ?? "0.0.0.0"}:${this.config.port}`,
+      conversationKey: `client:${clientId}`,
+      threadKey: thread ? `thread:${thread}` : undefined,
     };
   }
 }

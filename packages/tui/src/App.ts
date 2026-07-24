@@ -429,9 +429,9 @@ export class App extends Container {
 	private openSidebar(): void {
 		if (this.sidebarOpen) return;
 		this.sidebarOpen = true;
-		const stats = this.agent.getTapeStats();
+		const sessions = this.agent.listSessions({ includeArchived: true });
 		const panel = new SessionsPanel(
-			stats.sessions,
+			sessions,
 			this.agent.getCurrentSessionId(),
 			(sid) => {
 				this.closeSidebar();
@@ -440,6 +440,14 @@ export class App extends Container {
 				});
 			},
 			() => this.closeSidebar(),
+			(sid) => {
+				void this.agent.archiveSession(sid);
+				this.openSidebar();
+			},
+			(sid) => {
+				void this.agent.reopenSession(sid);
+				this.openSidebar();
+			},
 		);
 		this.sidebarChild = panel;
 		this.insertBefore(this.inputBox, panel);

@@ -9,6 +9,7 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { buildContextBlock } from "../src/bridge/prompt-assembly.js";
 import { MemoryStore } from "../src/infra/memory/store.js";
 import type { TapeLike, SkillRegistryLike } from "@phus/core/types/hooks.js";
+import { asSessionId, asTurnId } from "@phus/core/types/brand.js";
 
 function makeTape(): TapeLike {
   return {
@@ -79,5 +80,54 @@ describe("buildContextBlock", () => {
     expect(systemPrompt).toContain("## Deploy");
     expect(systemPrompt).not.toContain("## Style");
     expect(systemPrompt).not.toContain("## Notes");
+  });
+
+  it("uses the Session-bound temporal selector when available", async () => {
+    const sessionId = asSessionId("cli:prompt");
+    let selectedQuery = "";
+    let systemPrompt = "";
+    const messages = [{
+      role: "user",
+      content: [{ type: "text", text: "temporal storage" }],
+      timestamp: 100,
+    }] as unknown as AgentMessage[];
+
+    await buildContextBlock(messages, {
+      hooks: { execute: async () => undefined },
+      tape: makeTape(),
+      skills,
+      getContextWindow: () => undefined,
+      getCurrentSessionId: () => sessionId,
+      getSessionTape: () => ({
+        selectRelevantTurns: (query) => {
+          selectedQuery = query;
+          return [{
+            id: asTurnId("turn-bound"),
+            ts: 50,
+            sessionId,
+            inbound: {
+              id: "message-bound",
+              from: "user",
+              content: "bound SessionTape history",
+              type: "text",
+              channel: "cli",
+              metadata: {},
+              ts: 50,
+            },
+            prompt: "bound SessionTape history",
+            modelOutput: "ignored",
+            toolCalls: [],
+            outbound: [],
+            durationMs: 1,
+          }];
+        },
+      }),
+      setSystemPrompt: (prompt) => {
+        systemPrompt = prompt;
+      },
+    });
+
+    expect(selectedQuery).toBe("temporal storage");
+    expect(systemPrompt).toContain("bound SessionTape history");
   });
 });

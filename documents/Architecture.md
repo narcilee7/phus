@@ -1,6 +1,17 @@
 # Architecture
 
 > Phus's design vision, layered architecture, and the three projects that shaped it.
+>
+> **Implementation status:** the Session-first migration is in progress. Phases 1–4
+> have landed: the durable Session catalog, the per-Session `SessionTape` temporal
+> view, the `SessionRuntimeRegistry` for per-Session isolated Pi Agent/messages/abort/
+> plan state, and structured `SessionAddress` resolution for every active channel
+> (CLI, Telegram, Slack, WebSocket, SSE, Email). The TUI Session panel and slash
+> commands now operate on `SessionStore` entities; CLI gains `--session` plus
+> Session-aware `resume`/`tasks`. Cross-channel human identity, email thread
+> collapse, and the internal hook migration remain Phase 5. The full target
+> remains documented in [`Proposal-Session-Aggregate.md`](./Proposal-Session-Aggregate.md).
+> Sections below label current behavior and target design separately.
 
 ---
 
@@ -11,10 +22,11 @@
 Phus is named after Sisyphus. Every turn of the agent is one push of the stone:
 
 - The **inbound message** is the bottom of the hill.
+- The **Session** is the continuing climb — the durable boundary that connects one push to the next.
 - The **hook chain** is the slope.
 - The **outbound reply** is the top.
-- The **Tape entry** is the impression the stone leaves in the dirt.
-- The **next turn** starts from where the last one stopped.
+- Each **Tape entry** is a footprint: an append-only audit event owned by that Session.
+- The **next turn** resumes the same climb unless the operator or channel selects another Session.
 
 The system is built around a single principle: **repetition with growth**. Every push looks the same from the outside, but the agent accumulates skills, memories, and self-modifications along the way. The stone never gets lighter — but the hill does.
 
@@ -23,7 +35,7 @@ The system is built around a single principle: **repetition with growth**. Every
 Phus is for **long-running personal agents that share your environment**. Not demos, not benchmarks — actual agents that:
 
 1. Sit in your group chat, your CLI, your Telegram, your IDE.
-2. Accumulate state across sessions (Tape) and across capabilities (Skills).
+2. Accumulate continuity within durable Sessions; Tape records each Session's audit history, while Skills and project memory capture reusable growth.
 3. Modify themselves when they need a new capability (skill_write, startup_write).
 4. Respect the same boundaries you do (operator equivalence: same hooks, same allowlists, same audit trail).
 
@@ -37,7 +49,9 @@ Phus is for **long-running personal agents that share your environment**. Not de
 
 ## 2. Architecture design
 
-### Three layers
+### Three layers (current implementation)
+
+The code shipped today has three runtime layers:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -51,19 +65,50 @@ Phus is for **long-running personal agents that share your environment**. Not de
 
 **Channels** are dumb adapters. They convert inbound bytes into `Envelope` and outbound `Outbound[]` into transport-specific sends. They never see the LLM, the Tape, or the Skill registry directly.
 
-**Bridge** wraps [pi-agent-core](https://www.npmjs.com/package/@mariozechner/pi-agent-core). `PhusAgent` owns one Pi `Agent` and two callbacks:
-- `transformContext` — injects skills + tape summary + system prompt into every LLM call
+**Bridge** wraps [pi-agent-core](https://www.npmjs.com/package/@mariozechner/pi-agent-core). `PhusAgent` currently owns one Pi `Agent` and three callbacks:
+- `transformContext` — injects skills + tape-derived context + system prompt into every LLM call
 - `beforeToolCall` / `afterToolCall` — runs the policy check and writes audit entries
 
-**Core** is where Phus's identity lives:
+**Core** currently provides the main orchestration primitives:
 - **HookRegistry** — Bub-style hook chain (first_result / chain / broadcast)
-- **Tape** — SQLite-backed append-only log, one row per kind (turn / tool_call / tool_result / anchor / error)
+- **Tape** — SQLite-backed append-only log, one row per event kind
 - **SkillRegistry** — Agent Skills standard `SKILL.md` discovery
 - **Policy** — operator-equivalence allowlist (file_write roots, bash blocklist)
 - **Plugin loader** — file-based discovery via `jiti`
 - **Meta tools** — the agent's self-modification API
 
-### The turn pipeline
+The Phase 1 implementation catalogs durable Session entities. Phase 2 routes the default runtime's turn/tool/checkpoint/compaction/context operations through `SessionTape`, a temporal view fenced to one Session ID. Phase 3 introduces `SessionRuntime` and `SessionRuntimeRegistry`, giving each Session its own Pi `Agent`/messages/abort/plan state. Raw Tape and the free `(tape, sessionId)` helpers remain compatibility surfaces for hooks, plugins, standalone tools, and custom dependency injection.
+
+Channel address normalization and the TUI Session entity redesign remain the next architectural boundaries.
+
+### Session-first target (proposed)
+
+The approved target inserts an explicit continuity boundary without making channels stateful:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Channels         Envelope + normalized SessionAddress        │
+├──────────────────────────────────────────────────────────────┤
+│ Session layer    SessionStore · lifecycle · runtime registry │
+├──────────────────────────────────────────────────────────────┤
+│ Bridge           one isolated Pi runtime per active Session  │
+├──────────────────────────────────────────────────────────────┤
+│ Core resources   Tape/event log · checkpoint · plan · skill  │
+│                  memory · policy · hooks · plugins            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+The target rules are:
+
+- **Session is the aggregate root** for conversation/task continuity.
+- **SessionRuntime is ephemeral and isolated**: Pi messages, abort state, steering, and in-flight work do not leak between Sessions.
+- **Tape remains append-only** but becomes a Session-owned event log rather than the source from which Session existence and lifecycle are inferred.
+- **SessionAddress is channel-derived**, while `SessionId`, transport routing, and human identity remain separate concepts.
+- Project memory, Skills, provider mesh, policy, and plugins remain runtime/global resources.
+
+See [`Proposal-Session-Aggregate.md`](./Proposal-Session-Aggregate.md) for the model, channel addressing matrix, persistence compatibility, and phased migration.
+
+### The turn pipeline (current implementation)
 
 Every inbound message walks the same path (Bub's `process_inbound`):
 
@@ -99,7 +144,39 @@ Channel → Envelope
   append turn         → Tape
 ```
 
-The same shape handles one message in CLI mode, a stream of messages in gateway mode, and a multi-session TUI.
+The same shape handles one message in CLI mode, a stream of messages in gateway mode, and a multi-session TUI. However, `PhusAgent` currently owns one mutable Pi conversation, so a Session-first implementation must also make state hydration and isolation explicit.
+
+### The turn pipeline (Session-first target)
+
+```text
+Channel → Envelope
+       │
+       ▼
+normalize SessionAddress
+       │
+       ▼
+resolve/load Session aggregate
+       │
+       ▼
+acquire isolated SessionRuntime
+       │
+       ▼
+admit_message → load_state → build_prompt
+       │
+       ▼
+Pi Agent loop for this Session only
+       │
+       ├─ tool audit → Session-owned Tape/event log
+       └─ checkpoint/context/plan operations → Session-bound APIs
+       │
+       ▼
+render + dispatch outbound
+       │
+       ▼
+persist state + append turn + update Session metadata
+```
+
+A transport disconnect only releases routing/runtime resources; it does not close the durable Session. Turns in one Session serialize, while distinct Session runtimes may execute independently within configured limits.
 
 ### Self-evolution loop
 
@@ -123,7 +200,7 @@ The `before_tool_call` hook runs the policy before every tool execution — incl
 - Write outside `./skills/`, `./.phus/`, `./tmp/`, `./out/`
 - Run `rm -rf /`, fork bombs, `curl|sh`, `dd if=`, `chmod -R 777 /`, `mkfs`
 
-These rules live in `src/core/policy.ts` and apply uniformly to every channel, every session, every tool. Operators and agents share the same boundary.
+These rules live in `packages/runtime/src/infra/safety.ts` and apply uniformly to every channel, every session, every tool. Operators and agents share the same boundary.
 
 ### Extensibility
 
@@ -148,7 +225,7 @@ Phus is not a fresh invention. It composes three open-source projects, each cont
 **What we copied:**
 - The **hook chain** (`resolve_session → load_state → build_prompt → run_model → save_state → render_outbound → dispatch_outbound`) — adopted verbatim in `PhusAgent.turn()`.
 - The **three hook modes**: `first_result` (first non-null wins), `call_many` / `broadcast` (all implementations run, results collected), and Phus's extension `chain` (output becomes next input).
-- The **Tape context** philosophy — context is rebuilt from append-only records, not carried as mutable session state. Easier to inspect, replay, hand off.
+- The **append-only context** philosophy — context is rebuilt from inspectable records rather than trusted as opaque mutable state. In the Session-first target, those records belong to a Session, while mutable Pi state is isolated in its SessionRuntime.
 - The **operator-equivalence stance** — humans and agents share the same runtime boundaries, audit trail, and handoff model. No framework-only shortcuts.
 - The **Agent Skills standard** skill format — one skill = one directory + `SKILL.md` + YAML frontmatter.
 - The **built-ins-are-replaceable** stance — default hooks register first, plugins can override by registering at higher priority.
@@ -159,8 +236,6 @@ Phus is not a fresh invention. It composes three open-source projects, each cont
 - Tape physical layer: SQLite (not JSONL) — better indexing for `replay(sessionId)` and `summary()`.
 - Plugin discovery: file-based via `jiti` (Bub uses `pluggy` + Python entry points).
 - Channel discovery: hard-coded in `gateway` command (Bub uses `provide_channels` hook; we keep that as a future migration).
-
-See `documents/Plan-correction.md` for the full Bub-vs-Phus comparison.
 
 ### From Pi — agent runtime
 
@@ -176,9 +251,9 @@ See `documents/Plan-correction.md` for the full Bub-vs-Phus comparison.
 - `@mariozechner/pi-coding-agent` — its built-in TUI is more complex than we need; we built ours with `ink` for full control.
 - `@mariozechner/pi-tui` — same reason.
 - Pi's extension system (`ExtensionAPI`, `loadExtensions`) — we replace it with our simpler plugin loader.
-- Pi's session manager and compaction — we have our own (Tape + `compact_session` meta tool).
+- Pi's session manager and compaction — the shipped runtime currently uses Tape + `compact_session`; the proposed Session aggregate keeps Phus responsible for this boundary.
 
-The split is clean: **Pi handles LLM + tool loop + provider abstraction; Phus handles hooks + Tape + Skills + Policy + Plugins + Channel adapters.**
+The split is clean: **Pi handles LLM + tool loop + provider abstraction; Phus handles Sessions + hooks + Tape/event history + Skills + Policy + Plugins + Channel adapters.** Session is the proposed ownership boundary; the shipped bridge still coordinates these pieces through a session ID.
 
 ### From OpenClaw — gateway & channels
 
@@ -192,7 +267,7 @@ The split is clean: **Pi handles LLM + tool loop + provider abstraction; Phus ha
 - **Heartbeat / Cron pattern** — `startup.sh` is Phus's version of OpenClaw's Heartbeat: a script that runs at boot to set up scheduled work, warm caches, fetch external state.
 
 **What we deliberately diverge on:**
-- **Tape, not Markdown memory** — OpenClaw stores long-term memory as flat Markdown files. Phus uses SQLite because (a) replay per session is O(session) instead of O(all files), (b) we can index and aggregate, (c) the JSONL-per-session equivalent is harder to inspect programmatically.
+- **Session event history plus curated project memory** — Phus keeps per-session audit/replay data in SQLite Tape and cross-session curated knowledge in `phus.md`. The Session-first target preserves both roles instead of treating Tape as the Session itself.
 - **Self-evolution via meta tools** — OpenClaw's skills are static (written by humans). Phus's `skill_write` meta tool lets the **agent** author new skills. This is the Sisyphus "muscle memory" metaphor made literal.
 - **Hook-first, not config-first** — OpenClaw's customization is mostly YAML config. Phus uses code (TypeScript plugins loaded via jiti) so extension authors can express arbitrary logic, not just config trees.
 - **Operator equivalence** — OpenClaw's safety model is platform-level (sandboxing, OS-level isolation). Phus enforces it at the tool-call layer via the `before_tool_call` hook, so the same rules apply to every channel and every session.
@@ -206,17 +281,21 @@ See [openclaw/openclaw](https://github.com/openclaw/openclaw) and [clawd.bot](ht
 
 If you want to understand Phus, read in this order:
 
-1. **`src/core/types.ts`** — the data model (Envelope, Outbound, Turn, TapeEntry, Skill)
-2. **`src/core/hook.ts`** — the registry and three modes
-3. **`src/core/tape.ts`** — SQLite schema and queries
-4. **`src/core/skill.ts`** — Agent Skills discovery
-5. **`src/bridge/pi-agent.ts`** — the turn pipeline (the heart of Phus)
-6. **`src/channels/cli.ts`** + **`src/tui/App.tsx`** — two channel implementations
-7. **`src/core/plugin.ts`** — how plugins hook in
+1. **[`documents/Proposal-Session-Aggregate.md`](./Proposal-Session-Aggregate.md)** — the approved Session-first target and migration boundaries
+2. **`packages/shared/src/protocol/envelope.ts`** + **`packages/core/src/types/`** — wire shapes and domain types
+3. **`packages/core/src/types/session/index.ts`** + **`packages/core/src/session/{session-storage,session-store,session-tape}.ts`** — the landed Session catalog, storage ownership, and per-Session temporal view
+4. **`packages/core/src/runtime/hook/registry.ts`** + **`packages/core/src/types/hooks/index.ts`** — the registry, hook modes, and context contract
+5. **`packages/core/src/session/tape.ts`** — the SQLite event log and legacy session-ID queries
+6. **`packages/core/src/session/{checkpoint,compaction,context-select,plan-store}.ts`** — the current session-scoped services
+7. **`packages/runtime/src/bridge/pi-agent.ts`** — the current turn pipeline and Pi integration
+8. **`packages/runtime/src/channels/`** + **`packages/tui/src/`** — transport adapters and interactive UI
+9. **`packages/runtime/src/infra/plugins/loader.ts`** — plugin discovery
 
-If you want to extend Phus, start with **`documents/Plugins.md`**.
+Until the later migration phases land, source code remains authoritative for current behavior and the proposal remains authoritative for the target design.
 
-If you want to deploy Phus, read **`documents/Deployment.md`**.
+If you want to extend Phus, start with **[`Plugins.md`](./Plugins.md)**.
+
+If you want to deploy Phus, read **[`Deployment.md`](./Deployment.md)**.
 
 Sources:
 - [openclaw/openclaw on GitHub](https://github.com/openclaw/openclaw)
