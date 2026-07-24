@@ -54,6 +54,7 @@ export class CLIChannel implements ChannelAdapter {
         content: text,
         channel: "cli",
         metadata: { chatId: "default" },
+        address: { channel: "cli", scope: "local", conversationKey: "default" },
       });
       try {
         await agent.turn(envelope, this);
@@ -83,18 +84,27 @@ export class CLIChannel implements ChannelAdapter {
 }
 
 /** Run a single prompt through the agent and exit. Optional
- *  `profileName` overrides the active profile for this run. */
-export async function runOnce(prompt: string, profileName?: string): Promise<void> {
+ *  `profileName` overrides the active profile for this run. `sessionId`
+ *  rebinds the initial Session so the turn targets a specific
+ *  catalog row (used by `phus run --session <id>`). */
+export async function runOnce(
+  prompt: string,
+  options: { profileName?: string; sessionId?: string } = {},
+): Promise<void> {
   // Lazy import so `chat` mode doesn't pull in unused code paths.
   const { PhusAgent } = await import("../bridge/pi-agent.js");
-  const handle = await PhusAgent.create(profileName ? { profileName } : {});
+  const handle = await PhusAgent.create(options.profileName ? { profileName: options.profileName } : {});
   const agent = handle.agent;
+  if (options.sessionId) {
+    agent.setNextSessionId(options.sessionId as any);
+  }
   const channel = new CLIChannel();
   const envelope = makeTextEnvelope({
     from: "user",
     content: prompt,
     channel: "cli",
     metadata: { chatId: "default" },
+    address: { channel: "cli", scope: "local", conversationKey: "default" },
   });
   const turn = await agent.turn(envelope, channel);
 

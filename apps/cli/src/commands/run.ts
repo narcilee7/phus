@@ -22,7 +22,8 @@ export function registerRunCommand(program: Command): void {
     .command("run <prompt>")
     .description("Run a single prompt and print the response")
     .option("-p, --profile <name>", "Use a specific provider profile (overrides PHUS_PROFILE)")
-    .action(async (prompt: string, opts: { profile?: string }) => {
+    .option("-s, --session <id>", "Resume the named Session for this prompt")
+    .action(async (prompt: string, opts: { profile?: string; session?: string }) => {
       if (opts.profile) {
         // Override PHUS_PROFILE for this run only and force a config
         // reload so the agent picks up the new profile.
@@ -40,7 +41,7 @@ export function registerRunCommand(program: Command): void {
 
       try {
         const { runOnce } = await import("@phus/runtime/channels/cli.js");
-        await runOnce(prompt, profileName);
+        await runOnce(prompt, { profileName, sessionId: opts.session });
       } catch (err: any) {
         // eslint-disable-next-line no-console
         console.error(err?.message ?? String(err));

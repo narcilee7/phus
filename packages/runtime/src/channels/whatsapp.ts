@@ -1,9 +1,16 @@
 // src/channels/whatsapp.ts
-// WhatsApp channel placeholder for Phase 3.
+// WhatsApp channel placeholder for Phase 4.
 //
 // A full implementation typically requires `whatsapp-web.js` or
 // `baileys`, both of which pull in heavy native dependencies
 // (puppeteer / chromium) and are intentionally skipped in this phase.
+// Reserved SessionAddress shape for Phase 5:
+//   {
+//     channel: "whatsapp",
+//     scope: "phone:<e164>",
+//     conversationKey: "chat:<jid>",
+//     threadKey: undefined,
+//   }
 // TODO: implement a lightweight webhook-based adapter when a stable
 //       WhatsApp Business API client is available without puppeteer.
 

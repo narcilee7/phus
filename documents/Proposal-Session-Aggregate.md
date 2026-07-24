@@ -1,6 +1,6 @@
 # Proposal: Session as the Aggregate Root
 
-> **Status:** Accepted — implementation in progress; Phases 1–3 landed by 2026-07-24  
+> **Status:** Accepted — implementation in progress; Phases 1–4 landed by 2026-07-24  
 > **Decision:** Make `Session` the durable continuity boundary. Keep Tape as a session-owned append-only event log.  
 > **Scope:** This document distinguishes shipped phases from target APIs that remain proposed.
 
@@ -670,9 +670,9 @@ Compatibility adapters preserve the old call signatures.
 
 A feature flag may temporarily select the globally serialized hydrate/run/save bridge, while keeping Session persistence unchanged.
 
-### Phase 4 — Channel normalization and UI
+### Phase 4 — Channel normalization and UI (implemented 2026-07-24)
 
-Make every adapter provide normalized SessionAddress metadata. Update CLI/TUI session commands and diagnostics.
+`Envelope.address` is now the canonical input to routing. Every active channel populates a structured address; `PhusAgent.turn` resolves the address via `SessionStore.resolveOrCreate` before falling back to the `resolve_session` hook or the legacy `${channel}:${chatId}` convention. TUI `/sessions`, `/use`, `/close`, `/reopen`, `/archive`, `/end` operate on `SessionStore` records; the sidebar renders status, address, and last-turn time. CLI gains `phus run --session` and Session-aware `phus resume` and `phus tasks`. Cross-channel human identity, email thread collapse, and the runtime-internal hook migration remain Phase 5.
 
 **Acceptance criteria**
 

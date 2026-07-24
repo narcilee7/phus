@@ -66,6 +66,12 @@ import { Executor } from "@phus/runtime/core/runtime/executor/index.js";
 import { PlanRunner } from "@phus/runtime/core/runtime/plan/plan-runner.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
 import type { HookContext, HookName } from "@phus/core/types/index.js";
+import type {
+  CreateSessionOptions,
+  Session,
+  SessionAddress,
+  SessionFilter,
+} from "@phus/core/types/session/index.js";
 import { SessionRuntimeRegistry } from "./session-runtime-registry.js";
 import { Verifier } from "@phus/runtime/core/runtime/verifier/index.js";
 
@@ -371,6 +377,20 @@ export interface PhusAgentFacade {
     plugins: number;
     pluginStatus: Array<{ name: string; ok: boolean; path: string }>;
   }>;
+
+  // ─── Session catalog (Phase 4) ─────────────────────────────────
+  /** List durable Sessions. Hidden by default excludes archived. */
+  listSessions(filter?: SessionFilter): Session[];
+  /** Look up a Session by id (string or branded). */
+  getSession(id: SessionId | string): Session | undefined;
+  /** Create a new Session from a structured address. */
+  createSession(address: SessionAddress, options?: Partial<CreateSessionOptions>): Session;
+  /** Close a Session: rejects new turns, retains tape and checkpoints. */
+  closeSession(id: SessionId | string): Session;
+  /** Reopen a closed/archived Session so new turns can resume. */
+  reopenSession(id: SessionId | string): Session;
+  /** Archive a Session: read-only, omitted from default lists. */
+  archiveSession(id: SessionId | string): Session;
 }
 
 /**
@@ -1903,6 +1923,28 @@ export class SessionRuntime implements PhusAgentFacade {
     return this.tape.stats().totalEntries;
   }
 
+  // ─── Session catalog (Phase 4) ─────────────────────────────────
+  /** Fallback Session catalog access on a per-runtime basis. The
+   *  outer `PhusAgent` facade is the load-bearing source; per-runtime
+   *  stubs keep this class satisfying `PhusAgentFacade`. */
+  listSessions(): Session[] { return this.sessionStore?.list({}) ?? []; }
+  getSession(id: SessionId | string): Session | undefined {
+    return this.sessionStore?.get(asSessionId(id));
+  }
+  createSession(): never { throw new Error("createSession not supported on SessionRuntime"); }
+  closeSession(id: SessionId | string): Session {
+    if (!this.sessionStore) throw new Error("SessionStore unavailable");
+    return this.sessionStore.close(asSessionId(id));
+  }
+  reopenSession(id: SessionId | string): Session {
+    if (!this.sessionStore) throw new Error("SessionStore unavailable");
+    return this.sessionStore.reopen(asSessionId(id));
+  }
+  archiveSession(id: SessionId | string): Session {
+    if (!this.sessionStore) throw new Error("SessionStore unavailable");
+    return this.sessionStore.archive(asSessionId(id));
+  }
+
   // ─── Memory facade methods ───────────────────────────────────
   getAutonomyGate(): AutonomyGate {
     return this.autonomyGate;
@@ -2061,6 +2103,17 @@ export class PhusAgent implements PhusAgentFacade {
 
   async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
     let sessionId = envelope.sessionId;
+    if (!sessionId && envelope.address && this.sessionStore) {
+      const found = this.sessionStore.resolveOrCreate(envelope.address);
+      if (found.status === "closed" || found.status === "archived") {
+        throw new Error(
+          `session ${found.id} (${envelope.address.channel}:${envelope.address.scope}:` +
+          `${envelope.address.conversationKey}) is ${found.status}; ` +
+          `reopen it before sending a new turn`,
+        );
+      }
+      sessionId = found.id;
+    }
     if (!sessionId && this.explicitSelection && (envelope.channel === "tui" || envelope.channel === "cli")) {
       sessionId = this.runtimeRegistry.getSelectedSessionId();
     }
@@ -2070,8 +2123,9 @@ export class PhusAgent implements PhusAgentFacade {
         makeCtx({ envelope, state: {}, tape: this.tape, skills: this.skills }),
         "first_result",
       );
-      sessionId = asSessionId(resolvedRaw ?? this.fallbackSession(envelope));
+      if (resolvedRaw) sessionId = asSessionId(resolvedRaw);
     }
+    if (!sessionId) sessionId = asSessionId(this.fallbackSession(envelope));
     this.sessionStore?.ensure(sessionId);
     if (!this.routedSelection && !this.explicitSelection) {
       this.runtimeRegistry.setSelected(sessionId);
@@ -2089,6 +2143,12 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   setNextSessionId(id: SessionId): void {
+    const existing = this.sessionStore?.get(id);
+    if (existing && (existing.status === "closed" || existing.status === "archived")) {
+      throw new Error(
+        `session ${id} is ${existing.status}; reopen it before switching`,
+      );
+    }
     this.sessionStore?.ensure(id);
     this.runtimeRegistry.setSelected(id);
     this.explicitSelection = true;
@@ -2202,6 +2262,34 @@ export class PhusAgent implements PhusAgentFacade {
   emitPlanEvent(event: PlanEvent): void {
     const runtime = this.runtimeRegistry.get(asSessionId(event.sessionId));
     runtime?.emitPlanEvent(event);
+  }
+
+  listSessions(filter: SessionFilter = {}): Session[] {
+    return this.sessionStore?.list(filter) ?? [];
+  }
+
+  getSession(id: SessionId | string): Session | undefined {
+    return this.sessionStore?.get(asSessionId(id));
+  }
+
+  createSession(address: SessionAddress, options: Partial<CreateSessionOptions> = {}): Session {
+    if (!this.sessionStore) throw new Error("SessionStore unavailable");
+    return this.sessionStore.create({ address, ...options });
+  }
+
+  closeSession(id: SessionId | string): Session {
+    if (!this.sessionStore) throw new Error("SessionStore unavailable");
+    return this.sessionStore.close(asSessionId(id));
+  }
+
+  reopenSession(id: SessionId | string): Session {
+    if (!this.sessionStore) throw new Error("SessionStore unavailable");
+    return this.sessionStore.reopen(asSessionId(id));
+  }
+
+  archiveSession(id: SessionId | string): Session {
+    if (!this.sessionStore) throw new Error("SessionStore unavailable");
+    return this.sessionStore.archive(asSessionId(id));
   }
 
   disposeSessionRuntimes(): void {

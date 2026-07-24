@@ -11,6 +11,13 @@
 
 import type { SessionId } from "../types/brand.js";
 
+export interface SessionAddress {
+  channel: string;
+  scope: string;
+  conversationKey: string;
+  threadKey?: string;
+}
+
 export type OutboundType = "text" | "image" | "reaction";
 
 export type EnvelopType = "text" | "image" | "reaction" | "command";
@@ -44,5 +51,11 @@ export interface Envelope {
 	/** Session id (set by resolve_session hook, used downstream).
 	 *  Optional because envelopes arrive before session resolution. */
 	sessionId?: SessionId;
+	/** Optional target SessionAddress. PhusAgent.turn uses this to look
+	 *  up or create a durable Session via SessionStore.resolveOrCreate.
+	 *  Routing precedence:
+	 *    envelope.sessionId > envelope.address > resolve_session hook
+	 *    > legacy `${channel}:${chatId}` fallback. */
+	address?: import("./envelope.js").SessionAddress;
 	ts: number;
 }

@@ -2,15 +2,16 @@
 
 > Phus's design vision, layered architecture, and the three projects that shaped it.
 >
-> **Implementation status:** the Session-first migration is in progress. Phases 1–3
+> **Implementation status:** the Session-first migration is in progress. Phases 1–4
 > have landed: the durable Session catalog, the per-Session `SessionTape` temporal
-> view, and the `SessionRuntimeRegistry` that gives each Session an isolated Pi
-> Agent/messages/abort/plan state with same-session serialization and bounded
-> cross-session concurrency. The TUI still uses the Tape-count Session panel and the
-> channels still synthesize flat session IDs; channel address normalization and rich
-> TUI Session entities remain Phase 4. The full target remains documented in
-> [`Proposal-Session-Aggregate.md`](./Proposal-Session-Aggregate.md). Sections below
-> label current behavior and target design separately.
+> view, the `SessionRuntimeRegistry` for per-Session isolated Pi Agent/messages/abort/
+> plan state, and structured `SessionAddress` resolution for every active channel
+> (CLI, Telegram, Slack, WebSocket, SSE, Email). The TUI Session panel and slash
+> commands now operate on `SessionStore` entities; CLI gains `--session` plus
+> Session-aware `resume`/`tasks`. Cross-channel human identity, email thread
+> collapse, and the internal hook migration remain Phase 5. The full target
+> remains documented in [`Proposal-Session-Aggregate.md`](./Proposal-Session-Aggregate.md).
+> Sections below label current behavior and target design separately.
 
 ---
 

@@ -5,6 +5,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { ChannelAdapter, ChannelStatus } from "./base.js";
 import { makeEnvelopeFromChat } from "./base.js";
 import type { Outbound } from "@phus/core/types/channel/index.js";
+import type { SessionAddress } from "@phus/core/types/session/index.js";
 import type { PhusAgent } from "../bridge/pi-agent.js";
 import { logger } from "../infra/logging.js";
 
@@ -84,6 +85,7 @@ export class WebSocketChannel implements ChannelAdapter {
       chatId: clientId,
       from: clientId,
       content: text,
+      address: this.buildAddress(clientId, this.readThread(socket)),
     });
 
     try {
@@ -114,6 +116,25 @@ export class WebSocketChannel implements ChannelAdapter {
     if (socket.readyState === 1 /* OPEN */) {
       socket.send(JSON.stringify(payload));
     }
+  }
+
+  private readThread(socket: WebSocket): string | undefined {
+    const protocol = (socket as { protocol?: string }).protocol;
+    if (typeof protocol !== "string" || !protocol.includes("thread=")) return undefined;
+    for (const part of protocol.split(";")) {
+      const trimmed = part.trim();
+      if (trimmed.startsWith("thread=")) return trimmed.slice("thread=".length);
+    }
+    return undefined;
+  }
+
+  private buildAddress(clientId: string, thread?: string): SessionAddress {
+    return {
+      channel: "websocket",
+      scope: `host:${this.config.host ?? "0.0.0.0"}:${this.config.port}`,
+      conversationKey: `client:${clientId}`,
+      threadKey: thread ? `thread:${thread}` : undefined,
+    };
   }
 
   async close(): Promise<void> {
