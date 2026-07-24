@@ -65,7 +65,8 @@ import { HookRegistry } from "@phus/core/runtime/hook/registry.js";
 import { Executor } from "@phus/runtime/core/runtime/executor/index.js";
 import { PlanRunner } from "@phus/runtime/core/runtime/plan/plan-runner.js";
 import { makeCtx } from "@phus/core/runtime/hook/ctx-builder.js";
-import { HookContext } from "@phus/core/types/index.js";
+import type { HookContext, HookName } from "@phus/core/types/index.js";
+import { SessionRuntimeRegistry } from "./session-runtime-registry.js";
 import { Verifier } from "@phus/runtime/core/runtime/verifier/index.js";
 
 export interface PhusAgentDeps {
@@ -83,6 +84,12 @@ export interface PhusAgentDeps {
   hooks: HookRegistry;
   /** The provider mesh used to pick an initial endpoint. */
   mesh: MeshLike;
+  /** Initial operator-facing Session. Defaults to `tui:user`. */
+  initialSessionId?: SessionId;
+  /** Maximum idle resident Session runtimes before LRU eviction. */
+  maxSessionRuntimes?: number;
+  /** Creates an isolated steering inbox for each additional Session runtime. */
+  steeringInboxFactory?: () => SteeringInbox;
   /** The steering inbox drained before each turn. */
   steeringInbox: SteeringInbox;
   /** The active provider profile (already resolved). */
@@ -372,7 +379,16 @@ export interface PhusAgentFacade {
  * `createPhusAgent` from `./lifecycle.ts` to also await plugin load
  * and get a paired `dispose()` for clean shutdown.
  */
-export class PhusAgent implements PhusAgentFacade {
+interface SessionRuntimeOptions {
+  sessionId: SessionId;
+  registerSharedHooks?: boolean;
+  reconcilePlans?: boolean;
+  steeringInbox?: SteeringInbox;
+}
+
+/** One fixed Session's isolated Pi/model/plan execution state. */
+export class SessionRuntime implements PhusAgentFacade {
+  readonly sessionId: SessionId;
   /** Underlying Pi Agent. Internal wiring only — public consumers
    *  should use the facade methods above. */
   readonly piAgent: Agent;
@@ -405,6 +421,8 @@ export class PhusAgent implements PhusAgentFacade {
   private toolPermissionHandler?: (req: ToolPermissionRequest) => Promise<boolean>;
   private planEventHandlers = new Set<PlanEventHandler>();
   private compactEventHandlers = new Set<CompactEventHandler>();
+  private piEventUnsubscribe?: () => void;
+  private disposed = false;
   /** CorePort — injection port for planner / verifier / learner and any
    *  other LLM-bound core consumer. Wraps the live Pi Agent loop. */
   private corePort!: CorePort;
@@ -501,7 +519,13 @@ export class PhusAgent implements PhusAgentFacade {
     };
   }
 
-  constructor(private deps: PhusAgentDeps) {
+  constructor(
+    protected readonly deps: PhusAgentDeps,
+    private readonly runtimeOptions: SessionRuntimeOptions,
+  ) {
+    this.sessionId = runtimeOptions.sessionId;
+    this.currentSessionId = runtimeOptions.sessionId;
+    this.sessionOverride = runtimeOptions.sessionId;
     this.tape = deps.tape;
     this.sessionStorage = deps.sessionStorage;
     this.sessionStore = deps.sessionStore;
@@ -513,7 +537,7 @@ export class PhusAgent implements PhusAgentFacade {
     this.profile = deps.profile;
     this.mesh = deps.mesh;
     this.hooks = deps.hooks;
-    this.steeringInbox = deps.steeringInbox;
+    this.steeringInbox = runtimeOptions.steeringInbox ?? deps.steeringInbox;
     this.extraChannels = deps.channels ?? [];
     this.autoCompactCfg = deps.autoCompact ?? DEFAULT_AUTO_COMPACT;
     this.autoCompactEnabled = deps.profile.autoCompact !== false;
@@ -538,8 +562,10 @@ export class PhusAgent implements PhusAgentFacade {
       model: initialModel,
     }));
 
-    this.piAgent.subscribe((event) => this.handleEvent(event));
-    registerDefaultHooks(this.hooks, { tape: this.tape });
+    this.piEventUnsubscribe = this.piAgent.subscribe((event) => this.handleEvent(event));
+    if (runtimeOptions.registerSharedHooks !== false) {
+      registerDefaultHooks(this.hooks, { tape: this.tape });
+    }
 
     // Build the CorePort before any Planner/Verifier/Learner (they
     // each take it via deps.port). Default impl wraps the just-created
@@ -591,7 +617,8 @@ export class PhusAgent implements PhusAgentFacade {
     });
     this.planRunner.setEvolutionEngine(this.evolutionEngine);
 
-    // Forward plan runner hook events to TUI observers.
+    if (runtimeOptions.registerSharedHooks !== false) {
+      // Forward plan runner hook events to TUI observers.
     this.hooks.register(
       "plan_step_started",
       async (ctx) => {
@@ -668,6 +695,7 @@ export class PhusAgent implements PhusAgentFacade {
       },
       { mode: "broadcast", priority: -100 },
     );
+    }
 
     this.piAgent.state.tools = [
       ...createMetaTools(this.skills, this.tape, {
@@ -684,7 +712,11 @@ export class PhusAgent implements PhusAgentFacade {
       ...createExternalTools(),
     ];
 
-    this.reconcileInterruptedPlans();
+    if (runtimeOptions.reconcilePlans !== false) this.reconcileInterruptedPlans();
+
+    const checkpoint = this.getSessionTape(this.currentSessionId)?.loadLatestCheckpoint()
+      ?? loadLatestCheckpoint(this.tape, this.currentSessionId);
+    if (checkpoint) this.piAgent.state.messages = checkpoint.messages as AgentMessage[];
   }
 
   /**
@@ -908,31 +940,24 @@ export class PhusAgent implements PhusAgentFacade {
     const effectiveSignal = signal
       ? AbortSignal.any([signal, this.abortController.signal])
       : this.abortController.signal;
-    const previousSessionId = this.currentSessionId;
-    this.currentSessionId = sessionId;
-    try {
-      const completion = await this.corePort.complete(
-        [{ role: "user", content: taskText }],
-        effectiveSignal,
-      );
-      const ts = Date.now();
-      return [
-        {
-          role: "user",
-          content: [{ type: "text", text: taskText }],
-          timestamp: ts,
-        } as AgentMessage,
-        {
-          role: "assistant",
-          content: [{ type: "text", text: completion.text }],
-          timestamp: ts + 1,
-        } as AgentMessage,
-      ];
-    } finally {
-      // Always restore — even on throw. The caller relies on the
-      // parent's session being unchanged when this returns.
-      this.currentSessionId = previousSessionId;
-    }
+    void sessionId;
+    const completion = await this.corePort.complete(
+      [{ role: "user", content: taskText }],
+      effectiveSignal,
+    );
+    const ts = Date.now();
+    return [
+      {
+        role: "user",
+        content: [{ type: "text", text: taskText }],
+        timestamp: ts,
+      } as AgentMessage,
+      {
+        role: "assistant",
+        content: [{ type: "text", text: completion.text }],
+        timestamp: ts + 1,
+      } as AgentMessage,
+    ];
   }
 
   /** Run one inbound envelope through the Bub hook chain. */
@@ -944,7 +969,15 @@ export class PhusAgent implements PhusAgentFacade {
     // completion, in which case the controller is still fresh).
     this.rearmAbortController();
     const startedAt = Date.now();
-    let sessionId: SessionId | undefined;
+    const sessionId = this.currentSessionId;
+    if (!sessionId) throw new Error("SessionRuntime requires a fixed session id");
+    if (envelope.sessionId && envelope.sessionId !== sessionId) {
+      throw new Error(
+        `SessionRuntime ${sessionId} cannot process envelope for ${envelope.sessionId}`,
+      );
+    }
+    envelope.sessionId = sessionId;
+    this.piAgent.sessionId = sessionId;
 
     // Runaway guards: reset the per-turn LLM call counter, fail fast
     // when the billing fuse is open (zero requests sent), and arm the
@@ -965,15 +998,7 @@ export class PhusAgent implements PhusAgentFacade {
     }
 
     try {
-      // 1. resolve_session
-      const resolvedRaw = await this.hooks.execute<string>(
-        "resolve_session",
-        makeCtx({ envelope, state: {}, tape: this.tape, skills: this.skills }),
-        "first_result",
-      );
-      sessionId = asSessionId(resolvedRaw ?? this.fallbackSession(envelope));
-      this.currentSessionId = sessionId;
-      this.piAgent.sessionId = sessionId;
+      // 1. Session identity was resolved by the outer PhusAgent router.
 
       // 1a. Drain steering inbox
       const pending = await this.steeringInbox.drainMessages();
@@ -1251,7 +1276,7 @@ export class PhusAgent implements PhusAgentFacade {
     });
   }
 
-  private fallbackSession(envelope: Envelope): string {
+  protected fallbackSession(envelope: Envelope): string {
     return `${envelope.channel || "cli"}:${(envelope.metadata as any)?.chatId ?? envelope.from ?? "default"}`;
   }
 
@@ -1514,9 +1539,11 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   setNextSessionId(id: SessionId): void {
-    this.sessionOverride = id;
-    this.currentSessionId = id;
-    this.piAgent.sessionId = id;
+    if (id !== this.currentSessionId) {
+      throw new Error(
+        `SessionRuntime ${this.currentSessionId} cannot switch to ${id}`,
+      );
+    }
   }
 
   async reloadSkills(): Promise<void> {
@@ -1541,17 +1568,18 @@ export class PhusAgent implements PhusAgentFacade {
   }
 
   async restoreCheckpoint(id: SessionId): Promise<void> {
+    if (id !== this.currentSessionId) {
+      throw new Error(`SessionRuntime ${this.currentSessionId} cannot restore ${id}`);
+    }
     const sessionTape = this.getSessionTape(id);
     const cp = sessionTape
       ? sessionTape.loadLatestCheckpoint()
       : loadLatestCheckpoint(this.tape, id);
     if (!cp) throw new Error(`no checkpoint for session ${id}`);
     this.piAgent.state.messages = cp.messages as any;
-    this.currentSessionId = id;
-    this.piAgent.sessionId = id;
   }
 
-  saveCheckpoint(id: SessionId): void {
+  saveCheckpoint(id: SessionId = this.currentSessionId as SessionId): void {
     const sessionTape = this.getSessionTape(id);
     if (sessionTape) sessionTape.saveCheckpoint(this.piAgent.state.messages as unknown[]);
     else saveCheckpoint(this.tape, id, this.piAgent.state.messages as unknown[]);
@@ -1784,7 +1812,7 @@ export class PhusAgent implements PhusAgentFacade {
     void status;
   }
 
-  private emitPlanEvent(event: PlanEvent): void {
+  emitPlanEvent(event: PlanEvent): void {
     for (const h of this.planEventHandlers) {
       try {
         h(event);
@@ -1892,6 +1920,21 @@ export class PhusAgent implements PhusAgentFacade {
     return Object.keys(this.tape.stats().sessions).length;
   }
 
+  hasMessages(): boolean {
+    return this.piAgent.state.messages.length > 0;
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.piEventUnsubscribe?.();
+    this.piEventUnsubscribe = undefined;
+    if (!this.abortController.signal.aborted) this.abortController.abort();
+    this.planRunner.abort();
+    this.planEventHandlers.clear();
+    this.compactEventHandlers.clear();
+  }
+
   getMessageCount(): number {
     return this.piAgent.state.messages.length;
   }
@@ -1927,14 +1970,284 @@ export class PhusAgent implements PhusAgentFacade {
     return this.reloadSkillsAndPlugins(channels);
   }
 
-  // ─── Internal-wiring fields (formerly via `_internal` getter) ───
-  // These are `public readonly` so composition-root code (gateway
-  // bootstrap, scheduler init, plugin loader, makeCtx callers) can
-  // reach them without going through a deprecated getter.
+}
 
-  /** Async convenience factory: builds default deps and returns
-   *  a `PhusAgentHandle` containing the agent plus a `dispose()`
-   *  for clean shutdown. Replaces `new PhusAgent()` for all new code. */
+/** Multi-session facade: resolves envelopes and delegates to isolated runtimes. */
+export class PhusAgent implements PhusAgentFacade {
+  readonly tape: Tape;
+  readonly sessionStorage?: SessionStorage;
+  readonly sessionStore?: SessionStore;
+  readonly skills: SkillRegistry;
+  readonly memoryStore: MemoryStore;
+  readonly autonomyGate: AutonomyGate;
+  readonly repoIndex?: RepoFileIndex;
+  readonly policy: readonly PolicyRule[];
+  readonly profile: ProviderProfile;
+  readonly mesh: MeshLike;
+  readonly hooks: HookRegistry;
+  readonly planStore: PlanStore;
+  readonly extraChannels: ChannelAdapter[];
+  readonly runtimeRegistry: SessionRuntimeRegistry<
+    AgentEvent,
+    PlanEvent,
+    CompactEvent,
+    ToolPermissionRequest,
+    SessionRuntime
+  >;
+
+  private readonly initialSessionId: SessionId;
+  private explicitSelection = false;
+  private routedSelection = false;
+
+  constructor(private readonly deps: PhusAgentDeps) {
+    this.tape = deps.tape;
+    this.sessionStorage = deps.sessionStorage;
+    this.sessionStore = deps.sessionStore;
+    this.skills = deps.skills;
+    this.memoryStore = deps.memoryStore;
+    this.autonomyGate = deps.autonomyGate;
+    this.repoIndex = deps.repoIndex;
+    this.policy = deps.policy;
+    this.profile = deps.profile;
+    this.mesh = deps.mesh;
+    this.hooks = deps.hooks;
+    this.planStore = deps.planStore ?? new PlanStore(":memory:");
+    this.extraChannels = deps.channels ?? [];
+    this.initialSessionId = deps.initialSessionId ?? asSessionId("tui:user");
+
+    registerDefaultHooks(this.hooks, { tape: this.tape });
+    this.runtimeRegistry = new SessionRuntimeRegistry(
+      (sessionId) => this.createRuntime(sessionId),
+      { maxRuntimes: deps.maxSessionRuntimes },
+    );
+    this.registerPlanHooks();
+    this.reconcileInterruptedPlans();
+    this.runtimeRegistry.setSelected(this.initialSessionId);
+  }
+
+  private createRuntime(sessionId: SessionId): SessionRuntime {
+    if (
+      sessionId !== this.initialSessionId
+      && (this.deps.corePort || this.deps.planner || this.deps.executor || this.deps.planRunner)
+    ) {
+      throw new Error(
+        "multi-session runtimes require factory-safe dependencies; legacy singleton overrides only support the initial session",
+      );
+    }
+    this.sessionStore?.ensure(sessionId);
+    const steeringInbox = sessionId === this.initialSessionId
+      ? this.deps.steeringInbox
+      : this.deps.steeringInboxFactory?.() ?? new PiSteeringInbox();
+    return new SessionRuntime({
+      ...this.deps,
+      planStore: this.planStore,
+      steeringInbox,
+      corePort: sessionId === this.initialSessionId ? this.deps.corePort : undefined,
+      planner: sessionId === this.initialSessionId ? this.deps.planner : undefined,
+      executor: sessionId === this.initialSessionId ? this.deps.executor : undefined,
+      planRunner: sessionId === this.initialSessionId ? this.deps.planRunner : undefined,
+    }, {
+      sessionId,
+      steeringInbox,
+      registerSharedHooks: false,
+      reconcilePlans: false,
+    });
+  }
+
+  private active(): SessionRuntime {
+    return this.runtimeRegistry.getSelected()
+      ?? this.runtimeRegistry.setSelected(this.initialSessionId);
+  }
+
+  async turn(envelope: Envelope, channel: ChannelAdapter): Promise<Turn> {
+    let sessionId = envelope.sessionId;
+    if (!sessionId && this.explicitSelection && (envelope.channel === "tui" || envelope.channel === "cli")) {
+      sessionId = this.runtimeRegistry.getSelectedSessionId();
+    }
+    if (!sessionId) {
+      const resolvedRaw = await this.hooks.execute<string>(
+        "resolve_session",
+        makeCtx({ envelope, state: {}, tape: this.tape, skills: this.skills }),
+        "first_result",
+      );
+      sessionId = asSessionId(resolvedRaw ?? this.fallbackSession(envelope));
+    }
+    this.sessionStore?.ensure(sessionId);
+    if (!this.routedSelection && !this.explicitSelection) {
+      this.runtimeRegistry.setSelected(sessionId);
+      this.routedSelection = true;
+    }
+    const routedEnvelope: Envelope = { ...envelope, sessionId };
+    return this.runtimeRegistry.runExclusive(
+      sessionId,
+      (runtime) => runtime.turn(routedEnvelope, channel),
+    );
+  }
+
+  getCurrentSessionId(): SessionId | undefined {
+    return this.runtimeRegistry.getSelectedSessionId();
+  }
+
+  setNextSessionId(id: SessionId): void {
+    this.sessionStore?.ensure(id);
+    this.runtimeRegistry.setSelected(id);
+    this.explicitSelection = true;
+  }
+
+  abort(): void { this.active().abort(); }
+  interrupt(): void { this.active().interrupt(); }
+  waitForIdle(): Promise<void> { return this.active().waitForIdle(); }
+  steer(message: AgentMessage): void { this.active().steer(message); }
+  followUp(message: AgentMessage): void { this.active().followUp(message); }
+  setToolPermissionHandler(handler: (req: ToolPermissionRequest) => Promise<boolean>): void {
+    this.runtimeRegistry.setToolPermissionHandler(handler);
+  }
+  reloadSkills(): Promise<void> { return this.active().reloadSkills(); }
+  clearConversation(): Promise<void> { return this.active().clearConversation(); }
+  compactCurrentSession(): Promise<string> { return this.active().compactCurrentSession(); }
+  restoreCheckpoint(id: SessionId): Promise<void> {
+    this.runtimeRegistry.setSelected(id);
+    return this.active().restoreCheckpoint(id);
+  }
+  saveCheckpoint(id: SessionId): void { this.runtimeRegistry.getOrCreate(id).saveCheckpoint(id); }
+  listCheckpoints(id: SessionId): CheckpointEntry[] {
+    return this.runtimeRegistry.getOrCreate(id).listCheckpoints(id);
+  }
+  getDiagnostics(): AgentDiagnostics { return this.active().getDiagnostics(); }
+  getHookReport() { return this.hooks.report(); }
+  getAllSkills() { return this.skills.getAll(); }
+  getSkill(name: string) { return this.skills.get(name); }
+  getPolicy(): readonly PolicyRule[] { return this.policy; }
+  getTapeStats() { return this.tape.stats(); }
+  *replayTape(sessionId?: string): Generator<import("@phus/core/types/tape/index.js").TapeEntry> {
+    yield* this.tape.replay(sessionId);
+  }
+  getTapeSummary(sessionId: SessionId | undefined, limit: number): string {
+    return this.tape.summary((sessionId as string) ?? "default", limit);
+  }
+  getAutonomyGate(): AutonomyGate { return this.autonomyGate; }
+  getMemoryStore(): MemoryStore { return this.memoryStore; }
+  getMemoryBytes(): number { return this.memoryStore.size(); }
+  reloadSkillsAndPlugins(channels: ChannelAdapter[]) { return this.active().reloadSkillsAndPlugins(channels); }
+  subscribeToAgentEvents(handler: (event: AgentEvent) => void): () => void {
+    return this.runtimeRegistry.subscribeToAgentEvents(handler);
+  }
+  subscribeToPlanEvents(handler: PlanEventHandler): () => void {
+    return this.runtimeRegistry.subscribeToPlanEvents(handler);
+  }
+  subscribeToCompactEvents(handler: CompactEventHandler): () => void {
+    return this.runtimeRegistry.subscribeToCompactEvents(handler);
+  }
+  getModelLabel(): string { return this.active().getModelLabel(); }
+  getCurrentModel(): { provider: string; id: string } { return this.active().getCurrentModel(); }
+  setModel(modelId: string, provider?: string): Promise<void> {
+    return this.active().setModel(modelId, provider);
+  }
+  getThinkingLevel(): string { return this.active().getThinkingLevel(); }
+  setThinkingLevel(level: string): void { this.active().setThinkingLevel(level); }
+  getSkillCount(): number { return this.skills.getAll().length; }
+  getSkillsPrompt(): string { return this.skills.toPromptContext(); }
+  getSkillDrafts(): readonly SkillDraft[] { return this.active().getSkillDrafts(); }
+  promoteSkillDraft(name: string): boolean { return this.active().promoteSkillDraft(name); }
+  archiveSkillDraft(name: string): boolean { return this.active().archiveSkillDraft(name); }
+  suggestStartup(): Promise<string> { return this.active().suggestStartup(); }
+  reflect(sessionId: SessionId, task: string) {
+    return this.runtimeRegistry.getOrCreate(sessionId).reflect(sessionId, task);
+  }
+  getTapeTotalEntries(): number { return this.tape.stats().totalEntries; }
+  getSessionCount(): number {
+    return this.sessionStore?.list({ includeArchived: true }).length
+      ?? Object.keys(this.tape.stats().sessions).length;
+  }
+  getMessageCount(): number { return this.active().getMessageCount(); }
+  getTurnCount(): number { return this.active().getTurnCount(); }
+  getMesh(): MeshLike { return this.mesh; }
+  getPlanRunner(): PlanRunner | undefined { return this.active().getPlanRunner(); }
+  getPlanStore(): PlanStore | undefined { return this.planStore; }
+  getInterruptedPlans(): Plan[] { return this.planStore.loadPaused(); }
+  pauseActivePlan(): string | undefined { return this.active().pauseActivePlan(); }
+  resumeActivePlan(): Promise<string | undefined> { return this.active().resumeActivePlan(); }
+  cancelActivePlan(): string | undefined { return this.active().cancelActivePlan(); }
+  retryStep(planId: string, stepId: string): boolean {
+    const plan = this.planStore.load(planId);
+    return plan
+      ? this.runtimeRegistry.getOrCreate(plan.sessionId).retryStep(planId, stepId)
+      : false;
+  }
+  notifySubagentStarted(planId: string, info: { sessionId: string; label: string; goal: string }): void {
+    const plan = this.planStore.load(planId);
+    (plan ? this.runtimeRegistry.getOrCreate(plan.sessionId) : this.active())
+      .notifySubagentStarted(planId, info);
+  }
+  notifySubagentCompleted(planId: string, sessionId: string, status: "completed" | "failed"): void {
+    const plan = this.planStore.load(planId);
+    (plan ? this.runtimeRegistry.getOrCreate(plan.sessionId) : this.active())
+      .notifySubagentCompleted(planId, sessionId, status);
+  }
+  loadPluginsForReload(channels: ChannelAdapter[]) { return this.active().loadPluginsForReload(channels); }
+
+  runTurn(sessionId: SessionId, taskText: string, signal?: AbortSignal) {
+    return this.runtimeRegistry.getOrCreate(sessionId).runTurn(sessionId, taskText, signal);
+  }
+  getAbortSignal(): AbortSignal { return this.active().getAbortSignal(); }
+  getTools(): AgentTool[] { return this.active().getTools(); }
+  getModel(): unknown { return this.active().getModel(); }
+  getApiKey(provider: string): string | undefined { return this.active().getApiKey(provider); }
+  getSystemPrompt(): string { return this.active().getSystemPrompt(); }
+  getApiKeyEnv(): string | undefined { return this.active().getApiKeyEnv(); }
+  spawnSubAgent(opts: { systemPrompt: string; tools: AgentTool[]; sessionId: SessionId }): Agent {
+    return this.active().spawnSubAgent(opts);
+  }
+
+  emitPlanEvent(event: PlanEvent): void {
+    const runtime = this.runtimeRegistry.get(asSessionId(event.sessionId));
+    runtime?.emitPlanEvent(event);
+  }
+
+  disposeSessionRuntimes(): void {
+    this.runtimeRegistry.disposeAll();
+  }
+
+  private fallbackSession(envelope: Envelope): string {
+    return `${envelope.channel || "cli"}:${(envelope.metadata as any)?.chatId ?? envelope.from ?? "default"}`;
+  }
+
+  private registerPlanHooks(): void {
+    const specs: Array<{ name: HookName; type: PlanEvent["type"] }> = [
+      { name: "plan_step_started", type: "plan_step_started" },
+      { name: "plan_step_completed", type: "plan_step_completed" },
+      { name: "plan_step_failed", type: "plan_step_failed" },
+      { name: "plan_completed", type: "plan_completed" },
+    ];
+    for (const spec of specs) {
+      this.hooks.register(spec.name, async (ctx) => {
+        const plan = ctx.extras?.plan as Plan | undefined;
+        const step = ctx.extras?.step as Step | undefined;
+        if (plan) {
+          this.emitPlanEvent({
+            type: spec.type,
+            planId: plan.id,
+            sessionId: plan.sessionId,
+            goal: plan.goal,
+            planStatus: plan.status,
+            step,
+            error: typeof ctx.extras?.error === "string" ? ctx.extras.error : undefined,
+          });
+        }
+        return ctx;
+      }, { mode: "broadcast", priority: -100 });
+    }
+  }
+
+  private reconcileInterruptedPlans(): void {
+    const startedAt = Date.now();
+    for (const plan of this.planStore.loadInterrupted(startedAt)) {
+      plan.status = "paused";
+      plan.updatedAt = startedAt;
+      this.planStore.save(plan);
+    }
+  }
+
   static async create(opts: import("./default-deps.js").DefaultDepsOptions = {}): Promise<import("./lifecycle.js").PhusAgentHandle> {
     const deps = (await import("./default-deps.js")).buildDefaultPhusAgentDeps({
       allowMissingKey: true,

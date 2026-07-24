@@ -97,6 +97,7 @@ export async function startTui(): Promise<void> {
 	const handle = await PhusAgent.create({ config });
 	const agent = handle.internals;
 	const sessionId = "tui:user";
+	agent.setNextSessionId(sessionId as any);
 	const model = agent.getCurrentModel();
 	const modelLabel = `${model.provider}/${model.id}`;
 

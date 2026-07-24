@@ -1,6 +1,6 @@
 # Proposal: Session as the Aggregate Root
 
-> **Status:** Accepted — implementation in progress; Phases 1–2 landed by 2026-07-24  
+> **Status:** Accepted — implementation in progress; Phases 1–3 landed by 2026-07-24  
 > **Decision:** Make `Session` the durable continuity boundary. Keep Tape as a session-owned append-only event log.  
 > **Scope:** This document distinguishes shipped phases from target APIs that remain proposed.
 
@@ -654,9 +654,9 @@ PlanStore remains physically and conceptually outside SessionTape. Hooks, channe
 
 Compatibility adapters preserve the old call signatures.
 
-### Phase 3 — Runtime isolation
+### Phase 3 — Runtime isolation (implemented 2026-07-24)
 
-Introduce `SessionRuntimeRegistry`; make turn execution acquire the resolved SessionRuntime; make switching save/hydrate atomically.
+`SessionRuntime` and `SessionRuntimeRegistry` give each Session its own Pi `Agent`/messages/abort/plan state, serialize per-Session turns, allow different Sessions to run concurrently within the configured cap, and route TUI/CLI/channel traffic through the active runtime. The public `PhusAgent` facade continues to own shared services, the hook registry, and the plan hook fan-out. Channel address normalization, TUI Session entity migration, and PlanStore consolidation remain proposed.
 
 **Acceptance criteria**
 

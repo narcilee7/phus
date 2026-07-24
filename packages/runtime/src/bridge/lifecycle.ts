@@ -47,6 +47,9 @@ export async function createPhusAgent(deps: PhusAgentDeps): Promise<PhusAgentHan
   const dispose = async (): Promise<void> => {
     if (disposed) return;
     disposed = true;
+    try { internals.disposeSessionRuntimes(); } catch (err: any) {
+      logger.warn("lifecycle.session_runtimes_dispose_failed", { error: err.message });
+    }
     try { internals.mesh.stopHealthChecks(); } catch { /* ignore */ }
     try {
       if (internals.sessionStorage) internals.sessionStorage.close();

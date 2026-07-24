@@ -11,7 +11,7 @@
 | Session aggregate design | ✓ proposal accepted | [`Proposal-Session-Aggregate.md`](./Proposal-Session-Aggregate.md) defines Session as the aggregate root, Tape as its append-only event log, runtime isolation, lifecycle, and compatibility boundaries. |
 | Session catalog / `SessionStore` | ✓ Phase 1 | `packages/core/src/types/session/index.ts` defines the domain model; `session-storage.ts` shares one SQLite owner with Tape; `session-store.ts` adds the catalog, lifecycle transitions, and idempotent legacy bootstrap. Default runtime construction wires and populates it. |
 | Session temporal view / `SessionTape` | ✓ Phase 2 | `packages/core/src/session/session-tape.ts` fences one Session's timeline, delegates existing checkpoint/compaction/context helpers, rejects cross-session writes, and atomically advances `last_turn_at` with successful turn appends. `PhusAgent` uses it with raw Tape fallback. |
-| Per-session Pi runtime isolation | ✗ not started | `PhusAgent` still owns one mutable Pi `Agent` state and tracks only `currentSessionId` / `sessionOverride`. |
+| Per-session Pi runtime isolation | ✓ Phase 3 | `SessionRuntime` + `SessionRuntimeRegistry` give each Session its own Pi `Agent`/messages/abort/plan state; same-session turns serialize while different Sessions run concurrently. `PhusAgent` routes through the registry and keeps the public facade. |
 | Unified channel SessionAddress resolution | ✗ not started | Channels still derive continuity from their existing `chatId` conventions; Slack threads, email threads, and reconnectable WebSocket/SSE conversations are not normalized yet. |
 | Session-oriented CLI/TUI/plugin APIs | ✗ not started | Session listing and switching still use Tape stats and raw Session IDs. |
 

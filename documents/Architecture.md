@@ -2,12 +2,13 @@
 
 > Phus's design vision, layered architecture, and the three projects that shaped it.
 >
-> **Implementation status:** the Session-first migration is in progress. Phase 1 landed
-> the Session catalog and shared SQLite owner; Phase 2 added `SessionTape`, a
-> per-Session temporal view with cross-session write fencing and transactional
-> `last_turn_at` updates. The shipped runtime still has one mutable Pi Agent and does
-> not yet normalize channel addresses or provide safe TUI Session switching. The full
-> target remains documented in
+> **Implementation status:** the Session-first migration is in progress. Phases 1–3
+> have landed: the durable Session catalog, the per-Session `SessionTape` temporal
+> view, and the `SessionRuntimeRegistry` that gives each Session an isolated Pi
+> Agent/messages/abort/plan state with same-session serialization and bounded
+> cross-session concurrency. The TUI still uses the Tape-count Session panel and the
+> channels still synthesize flat session IDs; channel address normalization and rich
+> TUI Session entities remain Phase 4. The full target remains documented in
 > [`Proposal-Session-Aggregate.md`](./Proposal-Session-Aggregate.md). Sections below
 > label current behavior and target design separately.
 
@@ -75,9 +76,9 @@ The code shipped today has three runtime layers:
 - **Plugin loader** — file-based discovery via `jiti`
 - **Meta tools** — the agent's self-modification API
 
-The Phase 1 implementation catalogs durable Session entities. Phase 2 now routes the default runtime's turn/tool/checkpoint/compaction/context operations through `SessionTape`, a temporal view fenced to one Session ID. Raw Tape and the free `(tape, sessionId)` helpers remain compatibility surfaces for hooks, plugins, standalone tools, and custom dependency injection.
+The Phase 1 implementation catalogs durable Session entities. Phase 2 routes the default runtime's turn/tool/checkpoint/compaction/context operations through `SessionTape`, a temporal view fenced to one Session ID. Phase 3 introduces `SessionRuntime` and `SessionRuntimeRegistry`, giving each Session its own Pi `Agent`/messages/abort/plan state. Raw Tape and the free `(tape, sessionId)` helpers remain compatibility surfaces for hooks, plugins, standalone tools, and custom dependency injection.
 
-This is not runtime isolation yet: `resolve_session` still produces a branded string, and one mutable Pi Agent still carries the live conversation. SessionRuntime isolation and normalized channel addressing remain the next architectural boundaries.
+Channel address normalization and the TUI Session entity redesign remain the next architectural boundaries.
 
 ### Session-first target (proposed)
 
