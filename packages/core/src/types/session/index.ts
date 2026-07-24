@@ -27,6 +27,7 @@ export interface Session {
   title?: string;
   tags: string[];
   metadata: Record<string, unknown>;
+  identityId?: SessionId;
   createdAt: number;
   updatedAt: number;
   lastTurnAt?: number;

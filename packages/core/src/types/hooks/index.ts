@@ -66,6 +66,19 @@ export interface TapeLike {
 }
 
 /**
+ * Narrow structural view of the resolved Session for the current
+ * turn. Hooks that ran before any Session exists (scheduler, system
+ * setup) will receive `ctx.session === undefined`; the existing
+ * `ctx.sessionId` string remains the cheapest reference. The concrete
+ * `Session` in `@phus/core/types/session` satisfies this shape
+ * directly. */
+export interface SessionContextLike {
+  id: SessionId;
+  identityId?: SessionId;
+  status?: string;
+}
+
+/**
  * Minimal SkillRegistry surface used by hook implementations. The
  * concrete `SkillRegistry` class in `core/skills/skill.ts` implements
  * this structurally.
@@ -82,6 +95,9 @@ export interface HookContext {
   /** Optional because hooks fired outside a turn (e.g. by the
    *  scheduler) may not have a session in scope. */
   sessionId?: SessionId;
+  /** Optional: narrow resolved Session. Phase 5; omitted for hooks
+   *  that ran before a Session was established. */
+  session?: SessionContextLike;
   state: Record<string, unknown>;
   /** Optional: not all hook chains have a tape in scope (e.g. scheduler fires). */
   tape?: TapeLike;

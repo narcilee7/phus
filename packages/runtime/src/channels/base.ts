@@ -39,6 +39,8 @@ export function makeTextEnvelope(opts: {
   replyTo?: string;
   id?: string;
   address?: SessionAddress;
+  subjectId?: string;
+  displayName?: string;
 }): Envelope {
   return {
     id: opts.id ?? crypto.randomUUID(),
@@ -49,6 +51,8 @@ export function makeTextEnvelope(opts: {
     metadata: opts.metadata ?? {},
     replyTo: opts.replyTo,
     address: opts.address,
+    subjectId: opts.subjectId,
+    displayName: opts.displayName,
     ts: Date.now(),
   };
 }
@@ -62,6 +66,8 @@ export function makeEnvelopeFromChat(opts: {
   replyTo?: string;
   metadata?: Record<string, unknown>;
   address?: SessionAddress;
+  subjectId?: string;
+  displayName?: string;
 }): Envelope {
   return makeTextEnvelope({
     channel: opts.channel,
@@ -69,6 +75,8 @@ export function makeEnvelopeFromChat(opts: {
     content: opts.content,
     replyTo: opts.replyTo,
     address: opts.address,
+    subjectId: opts.subjectId,
+    displayName: opts.displayName,
     metadata: {
       chatId: opts.chatId,
       ...opts.metadata,

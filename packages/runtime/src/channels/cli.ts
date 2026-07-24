@@ -55,6 +55,8 @@ export class CLIChannel implements ChannelAdapter {
         channel: "cli",
         metadata: { chatId: "default" },
         address: { channel: "cli", scope: "local", conversationKey: "default" },
+        subjectId: "local",
+        displayName: "local user",
       });
       try {
         await agent.turn(envelope, this);
@@ -105,6 +107,8 @@ export async function runOnce(
     channel: "cli",
     metadata: { chatId: "default" },
     address: { channel: "cli", scope: "local", conversationKey: "default" },
+    subjectId: "local",
+    displayName: "local user",
   });
   const turn = await agent.turn(envelope, channel);
 

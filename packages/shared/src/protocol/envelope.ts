@@ -57,5 +57,13 @@ export interface Envelope {
 	 *    envelope.sessionId > envelope.address > resolve_session hook
 	 *    > legacy `${channel}:${chatId}` fallback. */
 	address?: import("./envelope.js").SessionAddress;
+	/** Optional channel-native subject id used to resolve a
+	 *  cross-channel SessionIdentity. Channels that expose a stable
+	 *  user/peer id (telegram, slack, cli, email) populate this. */
+	subjectId?: string;
+	/** Optional human-readable label for the resolved identity. */
+	displayName?: string;
+	/** Optional resolved SessionIdentity id, stamped by PhusAgent.turn. */
+	identityId?: import("../types/brand.js").SessionId;
 	ts: number;
 }

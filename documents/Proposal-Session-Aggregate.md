@@ -1,6 +1,6 @@
 # Proposal: Session as the Aggregate Root
 
-> **Status:** Accepted — implementation in progress; Phases 1–4 landed by 2026-07-24  
+> **Status:** Accepted — implementation in progress; Phases 1–5 landed by 2026-07-24  
 > **Decision:** Make `Session` the durable continuity boundary. Keep Tape as a session-owned append-only event log.  
 > **Scope:** This document distinguishes shipped phases from target APIs that remain proposed.
 

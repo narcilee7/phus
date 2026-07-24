@@ -12,6 +12,7 @@ export const ExitCode = {
   NOT_FOUND: 6,         // session/skill/file not found
   ALREADY_EXISTS: 7,    // duplicate registration
   PERMISSION_DENIED: 8, // session is closed/archived and must be reopened
+  IDENTITY_MERGE_CONFLICT: 9, // subject already bound to a different identity
 } as const;
 
 export type ExitCodeValue = (typeof ExitCode)[keyof typeof ExitCode];

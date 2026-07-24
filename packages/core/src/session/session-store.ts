@@ -41,6 +41,7 @@ interface SessionRow {
   title: string | null;
   tags: string;
   metadata: string;
+  identity_id: string | null;
   created_at: number;
   updated_at: number;
   last_turn_at: number | null;
@@ -260,6 +261,18 @@ export class SessionStore {
     return this.updateStatus(id, "closed");
   }
 
+  stampIdentity(id: SessionId, identityId: SessionId | null): Session {
+    const now = Date.now();
+    this.storage.prepare<[string, number, string]>(`
+      UPDATE sessions SET identity_id = ?, updated_at = ? WHERE id = ?
+    `).run(identityId as string, now, id);
+    return this.get(id)!;
+  }
+
+  findByIdentity(identityId: SessionId): Session[] {
+    return this.list({}).filter((s) => s.identityId === identityId);
+  }
+
   reopen(id: SessionId): Session {
     return this.updateStatus(id, "open");
   }
@@ -357,13 +370,26 @@ export class SessionStore {
         updated_at        INTEGER NOT NULL,
         last_turn_at      INTEGER
       );
+    `);
+    this.ensureIdentityColumn();
+    this.storage.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_address
         ON sessions(origin_channel, origin_scope, conversation_key, thread_key);
       CREATE INDEX IF NOT EXISTS idx_sessions_status_updated
         ON sessions(status, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_sessions_parent
         ON sessions(parent_session_id);
+      CREATE INDEX IF NOT EXISTS idx_sessions_identity
+        ON sessions(identity_id);
     `);
+  }
+
+  private ensureIdentityColumn(): void {
+    const cols = this.storage.prepare<[], { name: string }>(
+      "PRAGMA table_info(sessions)",
+    ).all();
+    if (cols.some((c) => c.name === "identity_id")) return;
+    this.storage.exec("ALTER TABLE sessions ADD COLUMN identity_id TEXT");
   }
 
   private updateStatus(id: SessionId, status: SessionStatus): Session {
@@ -398,6 +424,7 @@ function rowToSession(row: SessionRow): Session {
     title: row.title ?? undefined,
     tags: parseTags(row.tags),
     metadata: parseMetadata(row.metadata),
+    identityId: row.identity_id ? asSessionId(row.identity_id) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastTurnAt: row.last_turn_at ?? undefined,
