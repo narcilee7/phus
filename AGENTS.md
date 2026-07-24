@@ -24,6 +24,11 @@ pnpm tui                    # tsx packages/tui/src/index.ts
 pnpm chat                   # tsx packages/runtime/src/phus.ts chat
 pnpm run "..."              # one-shot prompt
 pnpm gateway                # tsx packages/runtime/src/phus.ts gateway (multi-channel)
+pnpm web:dev                # Next.js 15 dev server (http://localhost:3000)
+pnpm web:build              # static export → apps/web/dist/
+pnpm desktop:dev            # Electron dev (requires `pnpm desktop:build` first)
+pnpm desktop:build          # compile main/preload → apps/desktop/dist/
+pnpm desktop:dist           # package Electron installer
 
 # Build
 pnpm build                  # tsdown bundle + tsc declarations → dist/
@@ -57,12 +62,14 @@ phus logs --session tui:user --limit 50
 Three layers, mapped to source directories:
 
 ```
-Channels  (channels/, tui/, commands/)   ← I/O surface, dumb adapters
-Bridge    (bridge/)                     ← PhusAgent wraps Pi Agent
-Core      (core/)                       ← Hook / Tape / Skill / Policy / Mesh
+Channels  (channels/, tui/, commands/, apps/web/, apps/desktop/) ← I/O surface, dumb adapters
+Bridge    (bridge/)                                             ← PhusAgent wraps Pi Agent
+Core      (core/)                                               ← Hook / Tape / Skill / Policy / Mesh
 ```
 
-**Channels** convert inbound bytes to `Envelope` and outbound `Outbound[]` to transport sends. They never see the LLM, Tape, or Skill registry directly. Built-in: `cli.ts`, `telegram.ts`, `websocket.ts`, `sse.ts`, plus the pi-tui–based TUI in `packages/tui/`.
+**Channels** convert inbound bytes to `Envelope` and outbound `Outbound[]` to transport sends. They never see the LLM, Tape, or Skill registry directly. Built-in: `cli.ts`, `telegram.ts`, `websocket.ts`, `sse.ts`, the pi-tui–based TUI in `packages/tui/`, plus the new web/desktop workbench in `apps/web/` and `apps/desktop/`.
+
+**Web & Desktop** — `apps/web/` is a Next.js 15 App Router app that serves as both the web deployment host and the Electron renderer. `apps/desktop/` is an Electron app whose main process embeds `PhusAgent` directly and exposes a small preload bridge; the renderer loads the static export from `@phus/web` and talks to the agent over IPC. The shared transport abstraction lives in `apps/web/src/lib/transport.ts` (`PhusTransport`) with two implementations: `WebSocketPhusTransport` for the web host and `IpcPhusTransport` for Electron.
 
 **Bridge** — `src/bridge/pi-agent.ts` — owns one Pi `Agent`, the `HookRegistry`, and runs the Bub-style turn pipeline.
 
@@ -128,6 +135,8 @@ The public surface is `PhusAgentFacade` (interface) — channels, TUI, and CLI c
 - **Plan abort**: `PlanRunner.abort()` is cooperative — it stops the run at the next step boundary (in-flight steps can't be killed) and leaves the plan `paused` + resumable. `PhusAgent.abort()` calls both `piAgent.abort()` and `planRunner.abort()`; anything else that runs work outside the Pi loop must wire into the same path or Ctrl+C looks like a hang.
 - **Durable plans**: plans are first-class persistent citizens (`plans.sqlite`), addressable across sessions by id. Two rules keep that sane: (1) NO implicit resume/create in `runPlanFlowIfRequested` — only `/plan` commands and the `plan_create`/`plan_run` meta tools drive plans, never bare messages or regex heuristics; (2) at construction, `PhusAgent.reconcileInterruptedPlans()` flips orphaned `running` rows (older than process start) to `paused`, and the TUI's startup `ResumePrompt` (Enter resume / x abandon / d dismiss) offers them explicitly. Single-writer assumption: two live processes on one PHUS_HOME will flap each other's plans.
 - **No module-level state for `PhusAgent`**: lifecycle is explicit. The only module-level state is the internal-command default registry (`core/runtime/internal-commands/index.ts`) — use `_resetInternalCommands()` between tests.
+- **Web host TypeScript**: `apps/web/` pins TypeScript 5.x because Next.js 15 is not yet compatible with TypeScript 7. The rest of the monorepo stays on TS 7; `pnpm typecheck` uses `tsc -b` and respects each package's `tsconfig.json`.
+- **Electron native modules**: if you add a dependency with native bindings to `apps/desktop/`, run `pnpm --filter @phus/desktop rebuild` (or `pnpm desktop:build` does not suffice on its own). The `rebuild` script wraps `electron-rebuild` and targets Electron's Node ABI.
 
 ## Where to look
 
@@ -139,6 +148,8 @@ The public surface is `PhusAgentFacade` (interface) — channels, TUI, and CLI c
 | Add a built-in `,cmd` | `src/core/runtime/internal-commands/builtins/<cluster>.ts` |
 | Add a channel | implement `ChannelAdapter` in `src/channels/base.ts`; register in `src/commands/channels.ts` |
 | Add a new provider endpoint | `phus.config.yaml` profile `mesh:` entries; nothing in code needed |
+| Work on the web workbench | `apps/web/` — Next.js pages in `src/app/`, transport in `src/lib/transport.ts`, shared UI in `src/components/` |
+| Work on the desktop app | `apps/desktop/` — main process `src/main/`, preload `src/preload/`, renderer reuses `@phus/web` static export |
 | Write a plugin | `documents/Plugins.md`; place under `$PHUS_HOME/plugins/` |
 | Understand a subsystem | `documents/Architecture.md` is the canonical map; `documents/Phase-A.md` / `Phase-B.md` capture the build order |
 | Deploy | `documents/Deployment.md` (Docker Compose, LiteLLM proxy, systemd, `phus health`) |
