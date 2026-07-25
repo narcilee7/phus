@@ -54,7 +54,7 @@ services:
       EMAIL_USER: ${EMAIL_USER:-}
       EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
     healthcheck:
-      test: ["CMD", "node", "dist/phus.mjs", "health"]
+      test: ["CMD", "node", "apps/cli/dist/phus.mjs", "health"]
       interval: 30s
       timeout: 5s
       retries: 3

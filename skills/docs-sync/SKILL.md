@@ -17,5 +17,5 @@ When given a code change (diff, PR description, or file list), identify document
 
 Rules:
 - Base suggestions only on the files and behavior described.
-- Reference concrete doc paths when possible (`README.md`, `documents/Deployment.md`, `apps/docs/docs/guide/...`).
+- Reference concrete doc paths when possible (`README.md`, `documents/Architecture.md`, `documents/Deployment.md`).
 - If no docs need updates, say so plainly.
