@@ -81,7 +81,7 @@ Agent 通过 6 个工具与真实世界交互：
 ### Homebrew（macOS / Linux）
 
 ```bash
-brew tap narcilee7/phus https://github.com/narcilee7/phus.git
+brew tap narcilee7/phus
 brew install phus
 phus --version
 ```

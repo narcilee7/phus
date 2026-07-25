@@ -81,7 +81,7 @@ Choose one of the following.
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap narcilee7/phus https://github.com/narcilee7/phus.git
+brew tap narcilee7/phus
 brew install phus
 phus --version
 ```
