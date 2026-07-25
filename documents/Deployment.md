@@ -148,7 +148,7 @@ phus
 > ,mesh
 
 # Check from outside
-phus mesh   # (TODO: add CLI command — currently via TUI only)
+phus mesh
 ```
 
 ---

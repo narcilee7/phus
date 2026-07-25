@@ -14,9 +14,9 @@
 import { readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 
-const ROOT = process.argv[2];
-if (!ROOT) {
-	console.error("usage: fix-extensions.mjs <dist-dir>");
+const ROOTS = process.argv.slice(2);
+if (ROOTS.length === 0) {
+	console.error("usage: fix-extensions.mjs <dist-dir> [<dist-dir> ...]");
 	process.exit(1);
 }
 
@@ -89,7 +89,8 @@ async function rewrite(content, file, pattern, replacer) {
 	return result;
 }
 
-const files = await walk(ROOT);
+async function fixRoot(root) {
+const files = await walk(root);
 let changed = 0;
 
 // Pass 1: add `.js` to relative imports that lack an extension. This
@@ -201,4 +202,12 @@ for (const file of files) {
 	}
 }
 
-console.log(`fix-extensions: rewrote ${changed} import${changed === 1 ? "" : "s"} under ${ROOT}`);
+console.log(`fix-extensions: rewrote ${changed} import${changed === 1 ? "" : "s"} under ${root}`);
+return changed;
+}
+
+let totalChanged = 0;
+for (const root of ROOTS) {
+  totalChanged += await fixRoot(root);
+}
+console.log(`fix-extensions: rewrote ${totalChanged} import${totalChanged === 1 ? "" : "s"} total`);

@@ -2,7 +2,7 @@
   "name": "@phus/cli",
   "version": "0.1.4",
   "description": "The Phus CLI bin — `phus` (no args) wakes the TUI; every subcommand runs here. See documents/Proposal-Monorepo-Split.md §4.",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -37,5 +37,3 @@ test-results/
 playwright-report/
 .vitest-cache/
 
-# Docs build output (apps/docs is its own thing, not shipped in the CLI image)
-apps/docs/doc_build/

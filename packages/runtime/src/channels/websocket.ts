@@ -80,19 +80,179 @@ export class WebSocketChannel implements ChannelAdapter {
 
     if (!text.trim()) return;
 
+    // Try to parse control messages first.
+    const control = this.parseControlMessage(text);
+    if (control) {
+      await this.handleControlMessage(socket, clientId, control);
+      return;
+    }
+
+    const address = this.buildAddress(clientId, this.readThread(socket));
     const envelope = makeEnvelopeFromChat({
       channel: this.name,
       chatId: clientId,
       from: clientId,
       content: text,
-      address: this.buildAddress(clientId, this.readThread(socket)),
+      address,
     });
+    const override = this.sessionOverrides.get(clientId);
+    if (override) {
+      (envelope as any).sessionId = override;
+    }
 
     try {
       await this.agent?.turn(envelope, this);
     } catch (err: any) {
       logger.error("channel.websocket.turn_failed", { clientId, error: err?.message ?? err });
       this.sendToSocket(socket, { type: "error", message: err?.message ?? String(err) });
+    }
+  }
+
+  private parseControlMessage(
+    text: string,
+  ):
+    | { action: string; sessionId?: string; clientId?: string; title?: string; limit?: number }
+    | undefined {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      if (parsed.type === "control" && typeof parsed.action === "string") {
+        return {
+          action: parsed.action,
+          sessionId: typeof parsed.sessionId === "string" ? parsed.sessionId : undefined,
+          clientId: typeof parsed.clientId === "string" ? parsed.clientId : undefined,
+          title: typeof parsed.title === "string" ? parsed.title : undefined,
+          limit: typeof parsed.limit === "number" ? parsed.limit : undefined,
+        };
+      }
+    } catch {
+      // Not JSON — treat as plain text chat.
+    }
+    return undefined;
+  }
+
+  private sessionOverrides = new Map<string, import("@phus/core/types/brand.js").SessionId>();
+
+  private async handleControlMessage(
+    socket: WebSocket,
+    clientId: string,
+    control: { action: string; sessionId?: string; clientId?: string; title?: string; limit?: number },
+  ): Promise<void> {
+    const agent = this.agent;
+    if (!agent) {
+      this.sendToSocket(socket, { type: "control_response", action: control.action, error: "agent unavailable" });
+      return;
+    }
+
+    try {
+      switch (control.action) {
+        case "list_sessions": {
+          const sessions = agent.listSessions().slice(0, 20).map((s) => ({
+            id: s.id,
+            title: s.title ?? s.id,
+            status: s.status,
+            lastTurnAt: s.lastTurnAt,
+            origin: s.origin,
+          }));
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: sessions });
+          break;
+        }
+        case "list_skills": {
+          const skills = agent.getAllSkills().map((s) => ({
+            name: s.name,
+            description: s.description,
+            source: s.source,
+          }));
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: skills });
+          break;
+        }
+        case "list_plans": {
+          const plans = agent.listPlans(control.sessionId as import("@phus/core/types/brand.js").SessionId | undefined).map((p) => ({
+            id: p.id,
+            sessionId: p.sessionId,
+            goal: p.goal,
+            status: p.status,
+            stepCount: p.steps.length,
+            updatedAt: p.updatedAt,
+          }));
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: plans });
+          break;
+        }
+        case "get_current_session": {
+          const id = this.sessionOverrides.get(clientId) ?? agent.getCurrentSessionId();
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: { id } });
+          break;
+        }
+        case "get_model_label": {
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: agent.getModelLabel() });
+          break;
+        }
+        case "load_history": {
+          const sessionId = control.sessionId ?? this.sessionOverrides.get(clientId) ?? agent.getCurrentSessionId();
+          const limit = control.limit ?? 50;
+          const history: Array<{
+            id: string;
+            role: "user" | "assistant";
+            content: string;
+            toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+          }> = [];
+          if (sessionId) {
+            let count = 0;
+            for (const entry of agent.replayTape(sessionId)) {
+              if (entry.kind !== "turn") continue;
+              const turn = entry.turn;
+              const inboundContent = typeof turn.inbound.content === "string" ? turn.inbound.content : "";
+              history.push({
+                id: `${turn.id}-user`,
+                role: "user",
+                content: inboundContent,
+              });
+              history.push({
+                id: `${turn.id}-assistant`,
+                role: "assistant",
+                content: turn.modelOutput,
+                toolCalls: turn.toolCalls.map((tc, i) => ({
+                  id: `${turn.id}-tc-${i}`,
+                  name: tc.name,
+                  arguments: (typeof tc.args === "object" && tc.args !== null ? tc.args : {}) as Record<string, unknown>,
+                })),
+              });
+              count += 2;
+              if (count >= limit) break;
+            }
+          }
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: history });
+          break;
+        }
+        case "use_session": {
+          if (!control.sessionId) {
+            this.sendToSocket(socket, { type: "control_response", action: control.action, error: "sessionId required" });
+            break;
+          }
+          const session = agent.getSession(control.sessionId);
+          if (!session) {
+            this.sendToSocket(socket, { type: "control_response", action: control.action, error: "session not found" });
+            break;
+          }
+          if (session.status === "closed" || session.status === "archived") {
+            agent.reopenSession(session.id);
+          }
+          this.sessionOverrides.set(clientId, session.id);
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: { id: session.id, title: session.title ?? session.id } });
+          break;
+        }
+        case "new_session": {
+          const address = this.buildAddress(clientId, this.readThread(socket));
+          const session = agent.createSession(address, { title: control.title });
+          this.sessionOverrides.set(clientId, session.id);
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: { id: session.id, title: session.title ?? session.id } });
+          break;
+        }
+        default:
+          this.sendToSocket(socket, { type: "control_response", action: control.action, error: "unknown action" });
+      }
+    } catch (err: any) {
+      logger.error("channel.websocket.control_failed", { clientId, action: control.action, error: err?.message ?? err });
+      this.sendToSocket(socket, { type: "control_response", action: control.action, error: err?.message ?? String(err) });
     }
   }
 
