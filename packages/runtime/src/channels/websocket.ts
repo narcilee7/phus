@@ -111,7 +111,7 @@ export class WebSocketChannel implements ChannelAdapter {
   private parseControlMessage(
     text: string,
   ):
-    | { action: string; sessionId?: string; clientId?: string; title?: string }
+    | { action: string; sessionId?: string; clientId?: string; title?: string; limit?: number }
     | undefined {
     try {
       const parsed = JSON.parse(text) as Record<string, unknown>;
@@ -121,6 +121,7 @@ export class WebSocketChannel implements ChannelAdapter {
           sessionId: typeof parsed.sessionId === "string" ? parsed.sessionId : undefined,
           clientId: typeof parsed.clientId === "string" ? parsed.clientId : undefined,
           title: typeof parsed.title === "string" ? parsed.title : undefined,
+          limit: typeof parsed.limit === "number" ? parsed.limit : undefined,
         };
       }
     } catch {
@@ -134,7 +135,7 @@ export class WebSocketChannel implements ChannelAdapter {
   private async handleControlMessage(
     socket: WebSocket,
     clientId: string,
-    control: { action: string; sessionId?: string; clientId?: string; title?: string },
+    control: { action: string; sessionId?: string; clientId?: string; title?: string; limit?: number },
   ): Promise<void> {
     const agent = this.agent;
     if (!agent) {
@@ -183,6 +184,43 @@ export class WebSocketChannel implements ChannelAdapter {
         }
         case "get_model_label": {
           this.sendToSocket(socket, { type: "control_response", action: control.action, data: agent.getModelLabel() });
+          break;
+        }
+        case "load_history": {
+          const sessionId = control.sessionId ?? this.sessionOverrides.get(clientId) ?? agent.getCurrentSessionId();
+          const limit = control.limit ?? 50;
+          const history: Array<{
+            id: string;
+            role: "user" | "assistant";
+            content: string;
+            toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+          }> = [];
+          if (sessionId) {
+            let count = 0;
+            for (const entry of agent.replayTape(sessionId)) {
+              if (entry.kind !== "turn") continue;
+              const turn = entry.turn;
+              const inboundContent = typeof turn.inbound.content === "string" ? turn.inbound.content : "";
+              history.push({
+                id: `${turn.id}-user`,
+                role: "user",
+                content: inboundContent,
+              });
+              history.push({
+                id: `${turn.id}-assistant`,
+                role: "assistant",
+                content: turn.modelOutput,
+                toolCalls: turn.toolCalls.map((tc, i) => ({
+                  id: `${turn.id}-tc-${i}`,
+                  name: tc.name,
+                  arguments: (typeof tc.args === "object" && tc.args !== null ? tc.args : {}) as Record<string, unknown>,
+                })),
+              });
+              count += 2;
+              if (count >= limit) break;
+            }
+          }
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: history });
           break;
         }
         case "use_session": {
