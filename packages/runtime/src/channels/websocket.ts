@@ -80,6 +80,13 @@ export class WebSocketChannel implements ChannelAdapter {
 
     if (!text.trim()) return;
 
+    // Try to parse control messages first.
+    const control = this.parseControlMessage(text);
+    if (control) {
+      await this.handleControlMessage(socket, clientId, control);
+      return;
+    }
+
     const envelope = makeEnvelopeFromChat({
       channel: this.name,
       chatId: clientId,
@@ -93,6 +100,75 @@ export class WebSocketChannel implements ChannelAdapter {
     } catch (err: any) {
       logger.error("channel.websocket.turn_failed", { clientId, error: err?.message ?? err });
       this.sendToSocket(socket, { type: "error", message: err?.message ?? String(err) });
+    }
+  }
+
+  private parseControlMessage(text: string): { action: string; sessionId?: string } | undefined {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      if (parsed.type === "control" && typeof parsed.action === "string") {
+        return {
+          action: parsed.action,
+          sessionId: typeof parsed.sessionId === "string" ? parsed.sessionId : undefined,
+        };
+      }
+    } catch {
+      // Not JSON — treat as plain text chat.
+    }
+    return undefined;
+  }
+
+  private async handleControlMessage(
+    socket: WebSocket,
+    clientId: string,
+    control: { action: string; sessionId?: string },
+  ): Promise<void> {
+    const agent = this.agent;
+    if (!agent) {
+      this.sendToSocket(socket, { type: "control_response", action: control.action, error: "agent unavailable" });
+      return;
+    }
+
+    try {
+      switch (control.action) {
+        case "list_sessions": {
+          const sessions = agent.listSessions().slice(0, 20).map((s) => ({
+            id: s.id,
+            title: s.title ?? s.id,
+            status: s.status,
+            lastTurnAt: s.lastTurnAt,
+            origin: s.origin,
+          }));
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: sessions });
+          break;
+        }
+        case "list_skills": {
+          const skills = agent.getAllSkills().map((s) => ({
+            name: s.name,
+            description: s.description,
+            source: s.source,
+          }));
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: skills });
+          break;
+        }
+        case "list_plans": {
+          const plans = agent.listPlans(control.sessionId as import("@phus/core/types/brand.js").SessionId | undefined).map((p) => ({
+            id: p.id,
+            sessionId: p.sessionId,
+            goal: p.goal,
+            status: p.status,
+            stepCount: p.steps.length,
+            updatedAt: p.updatedAt,
+          }));
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: plans });
+          break;
+        }
+        default:
+          this.sendToSocket(socket, { type: "control_response", action: control.action, error: "unknown action" });
+      }
+    } catch (err: any) {
+      logger.error("channel.websocket.control_failed", { clientId, action: control.action, error: err?.message ?? err });
+      this.sendToSocket(socket, { type: "control_response", action: control.action, error: err?.message ?? String(err) });
     }
   }
 

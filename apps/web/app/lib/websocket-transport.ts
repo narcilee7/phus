@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentMessageChunk, PhusTransport } from "./phus-transport";
+import type { AgentMessageChunk, ControlResponse, PhusTransport } from "./phus-transport";
 
 export interface WebSocketTransportConfig {
   url: string;
@@ -16,9 +16,11 @@ export class WebSocketTransport implements PhusTransport {
   private socket: WebSocket | null = null;
   private readonly messageHandlers = new Set<(chunk: AgentMessageChunk) => void>();
   private readonly statusHandlers = new Set<(status: AgentMessageChunk["status"]) => void>();
+  private readonly controlHandlers = new Set<(response: ControlResponse<unknown>) => void>();
   private readonly clientId: string;
   private pending: string[] = [];
   private closed = false;
+  private controlPending = new Map<string, (response: ControlResponse<unknown>) => void>();
 
   constructor(private readonly config: WebSocketTransportConfig) {
     this.clientId = config.clientId ?? crypto.randomUUID();
@@ -45,6 +47,21 @@ export class WebSocketTransport implements PhusTransport {
         chunk = JSON.parse(String(event.data)) as AgentMessageChunk;
       } catch {
         chunk = { type: "text", content: String(event.data) };
+      }
+      if (chunk.type === "control_response") {
+        const response: ControlResponse<unknown> = {
+          action: chunk.action ?? "unknown",
+          data: chunk.data,
+          error: chunk.error,
+        };
+        for (const handler of this.controlHandlers) {
+          handler(response);
+        }
+        const pending = this.controlPending.get(response.action);
+        if (pending) {
+          this.controlPending.delete(response.action);
+          pending(response);
+        }
       }
       for (const handler of this.messageHandlers) {
         handler(chunk);
@@ -73,6 +90,26 @@ export class WebSocketTransport implements PhusTransport {
     }
   }
 
+  async sendControl<T = unknown>(action: string, sessionId?: string): Promise<ControlResponse<T>> {
+    return new Promise((resolve) => {
+      const payload = JSON.stringify({ type: "control", action, sessionId });
+      // Resolve on the first matching response; timeout after 5s.
+      const timer = window.setTimeout(() => {
+        this.controlPending.delete(action);
+        resolve({ action, error: "timeout" } as ControlResponse<T>);
+      }, 5000);
+      this.controlPending.set(action, (response) => {
+        window.clearTimeout(timer);
+        resolve(response as ControlResponse<T>);
+      });
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.socket.send(payload);
+      } else {
+        this.pending.push(payload);
+      }
+    });
+  }
+
   private sendRaw(content: string): void {
     this.socket?.send(JSON.stringify({ type: "text", content, clientId: this.clientId }));
   }
@@ -92,6 +129,13 @@ export class WebSocketTransport implements PhusTransport {
     this.statusHandlers.add(handler);
     return () => {
       this.statusHandlers.delete(handler);
+    };
+  }
+
+  onControlResponse(handler: (response: ControlResponse<unknown>) => void): () => void {
+    this.controlHandlers.add(handler);
+    return () => {
+      this.controlHandlers.delete(handler);
     };
   }
 

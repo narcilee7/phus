@@ -3,9 +3,30 @@
 import { usePhus } from "@/hooks/use-phus";
 import { InputBox } from "./input-box";
 import { MessageList } from "./message-list";
+import { SessionPanel } from "./session-panel";
+import { SkillPanel } from "./skill-panel";
+import { PlanPanel } from "./plan-panel";
 
 export function ChatShell() {
-  const { messages, isBusy, status, modelLabel, send, abort, clear } = usePhus();
+  const {
+    messages,
+    isBusy,
+    status,
+    modelLabel,
+    sessions,
+    skills,
+    plans,
+    send,
+    abort,
+    clear,
+    refreshSessions,
+    refreshSkills,
+    refreshPlans,
+  } = usePhus();
+
+  const handleSkillActivate = (name: string) => {
+    void send(`Use skill: ${name}`);
+  };
 
   return (
     <div className="flex h-full w-full flex-col bg-background">
@@ -31,14 +52,33 @@ export function ChatShell() {
         </div>
       </header>
 
-      <MessageList messages={messages} />
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MessageList messages={messages} />
+          <InputBox
+            onSend={send}
+            onAbort={abort}
+            isBusy={isBusy}
+            placeholder="Ask Phus anything…"
+          />
+        </div>
 
-      <InputBox
-        onSend={send}
-        onAbort={abort}
-        isBusy={isBusy}
-        placeholder="Ask Phus anything…"
-      />
+        <div className="hidden w-64 shrink-0 flex-col border-l md:flex">
+          <div className="flex h-1/3 flex-col border-b">
+            <SessionPanel sessions={sessions} onRefresh={refreshSessions} />
+          </div>
+          <div className="flex h-1/3 flex-col border-b">
+            <SkillPanel
+              skills={skills}
+              onRefresh={refreshSkills}
+              onActivate={handleSkillActivate}
+            />
+          </div>
+          <div className="flex h-1/3 flex-col">
+            <PlanPanel plans={plans} onRefresh={refreshPlans} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

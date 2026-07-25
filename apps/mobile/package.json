@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Phus mobile host — React Native / Expo target. Placeholder for the iOS / Android app; shares @phus/phus-design + @phus/runtime with web.",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -339,6 +339,8 @@ export interface PhusAgentFacade {
   getPlanRunner(): PlanRunner | undefined;
   /** Get the plan store, if one is configured. */
   getPlanStore(): PlanStore | undefined;
+  /** List plans for a session (defaults to current session). */
+  listPlans(sessionId?: SessionId): Plan[];
   /** Paused (resumable) plans across all sessions, newest first. Plans
    *  are durable citizens — interrupted ones are reconciled to `paused`
    *  at startup and surfaced here for the TUI's resume prompt. */
@@ -2004,6 +2006,10 @@ export class SessionRuntime implements PhusAgentFacade {
     return this.planStore;
   }
 
+  listPlans(sessionId?: SessionId): Plan[] {
+    return this.planStore.loadBySession(sessionId ?? this.sessionId);
+  }
+
   async loadPluginsForReload(channels: ChannelAdapter[]): Promise<{
     skills: number;
     plugins: number;
@@ -2224,6 +2230,9 @@ export class PhusAgent implements PhusAgentFacade {
   getMesh(): MeshLike { return this.mesh; }
   getPlanRunner(): PlanRunner | undefined { return this.active().getPlanRunner(); }
   getPlanStore(): PlanStore | undefined { return this.planStore; }
+  listPlans(sessionId?: SessionId): Plan[] {
+    return this.planStore.loadBySession(sessionId ?? this.getCurrentSessionId() ?? this.active().sessionId);
+  }
   getInterruptedPlans(): Plan[] { return this.planStore.loadPaused(); }
   pauseActivePlan(): string | undefined { return this.active().pauseActivePlan(); }
   resumeActivePlan(): Promise<string | undefined> { return this.active().resumeActivePlan(); }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createTransport } from "@/lib/transport-factory";
-import type { AgentMessageChunk, PhusTransport } from "@/lib/phus-transport";
+import type { AgentMessageChunk, ControlResponse, PhusTransport } from "@/lib/phus-transport";
 
 export interface ChatMessage {
   id: string;
@@ -12,14 +12,42 @@ export interface ChatMessage {
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 }
 
+export interface SessionItem {
+  id: string;
+  title: string;
+  status: string;
+  lastTurnAt?: number;
+}
+
+export interface SkillItem {
+  name: string;
+  description: string;
+  source?: string;
+}
+
+export interface PlanItem {
+  id: string;
+  sessionId: string;
+  goal: string;
+  status: string;
+  stepCount: number;
+  updatedAt: number;
+}
+
 export interface UsePhusResult {
   messages: ChatMessage[];
   status: AgentMessageChunk["status"];
   modelLabel: string;
   isBusy: boolean;
+  sessions: SessionItem[];
+  skills: SkillItem[];
+  plans: PlanItem[];
   send: (content: string) => Promise<void>;
   abort: () => void;
   clear: () => void;
+  refreshSessions: () => Promise<void>;
+  refreshSkills: () => Promise<void>;
+  refreshPlans: (sessionId?: string) => Promise<void>;
 }
 
 export function usePhus(): UsePhusResult {
@@ -34,6 +62,9 @@ export function usePhus(): UsePhusResult {
   ]);
   const [status, setStatus] = useState<AgentMessageChunk["status"]>("disconnected");
   const [modelLabel, setModelLabel] = useState<string>("unknown");
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [skills, setSkills] = useState<SkillItem[]>([]);
+  const [plans, setPlans] = useState<PlanItem[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -129,6 +160,14 @@ export function usePhus(): UsePhusResult {
     };
   }, [transport]);
 
+  // Fetch catalog data once after connecting.
+  useEffect(() => {
+    if (status !== "connected") return;
+    void refreshSessions();
+    void refreshSkills();
+    void refreshPlans();
+  }, [status]);
+
   const send = useCallback(
     async (content: string) => {
       setMessages((prev) => [
@@ -153,10 +192,56 @@ export function usePhus(): UsePhusResult {
     setMessages([]);
   }, []);
 
+  const refreshSessions = useCallback(async () => {
+    const response = await transport.sendControl<SessionItem[]>("list_sessions");
+    if (response.data) setSessions(response.data);
+  }, [transport]);
+
+  const refreshSkills = useCallback(async () => {
+    const response = await transport.sendControl<SkillItem[]>("list_skills");
+    if (response.data) setSkills(response.data);
+  }, [transport]);
+
+  const refreshPlans = useCallback(
+    async (sessionId?: string) => {
+      const response = await transport.sendControl<PlanItem[]>("list_plans", sessionId);
+      if (response.data) setPlans(response.data);
+    },
+    [transport],
+  );
+
   const isBusy = status === "busy";
 
   return useMemo(
-    () => ({ messages, status, modelLabel, isBusy, send, abort, clear }),
-    [messages, status, modelLabel, isBusy, send, abort, clear],
+    () => ({
+      messages,
+      status,
+      modelLabel,
+      isBusy,
+      sessions,
+      skills,
+      plans,
+      send,
+      abort,
+      clear,
+      refreshSessions,
+      refreshSkills,
+      refreshPlans,
+    }),
+    [
+      messages,
+      status,
+      modelLabel,
+      isBusy,
+      sessions,
+      skills,
+      plans,
+      send,
+      abort,
+      clear,
+      refreshSessions,
+      refreshSkills,
+      refreshPlans,
+    ],
   );
 }

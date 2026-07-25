@@ -19,7 +19,7 @@
     "desktop:dev": "pnpm --filter @phus/desktop dev",
     "desktop:build": "pnpm --filter @phus/desktop build",
     "desktop:dist": "pnpm --filter @phus/desktop dist",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && node scripts/fix-extensions.mjs packages/core/dist packages/runtime/dist packages/tui/dist packages/shared/dist apps/cli/dist",
     "lint": "oxlint --quiet packages apps test",
     "lint:fix": "oxlint --fix packages apps test",
     "test": "pnpm -r test",

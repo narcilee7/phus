@@ -12,7 +12,7 @@
 | **Release Workflow** | 打 tag 时自动发布 npm + GitHub Release + Docker | `.github/workflows/release.yml` |
 | **Version Bump Script** | 本地一键升级版本号、生成 changelog、打 tag | `scripts/release.sh` |
 | **Docker 构建** | 多阶段构建，推送到 GHCR | `Dockerfile` + workflow |
-| **npm 发布** | 发布 `phus` 包到 npm registry | workflow 中 `npm publish` |
+| **npm 发布** | 按依赖顺序发布 `@phus/shared` → `@phus/core` → `@phus/runtime` → `@phus/tui` → `@phus/cli` | workflow 中 `pnpm publish` |
 | **GitHub Releases** | 自动生成 release notes + 上传构建产物 | workflow 中 `gh release create` |
 | **安装脚本** | 从 GitHub Releases 下载预构建产物 | `scripts/install.sh` / `install.ps1` |
 
@@ -75,7 +75,7 @@
 ### 4.3 GitHub Release
 - 使用 `gh release create ${{ github.ref_name }}`
 - 自动生成 release notes（基于 PR 标题）
-- 上传 `dist/` 目录为 zip / tarball
+- 上传 `apps/cli/dist/` 等 workspace 构建产物为 tarball
 
 ### 4.4 Docker 镜像
 - 登录 GitHub Container Registry (`ghcr.io`)
@@ -101,9 +101,9 @@
 流程：
 1. 确保当前分支是 `main`，工作区干净
 2. 读取或计算新版本号
-3. 更新 `package.json` version
+3. 按依赖顺序更新所有 workspace `package.json` version（`package.json`、`apps/cli/package.json`、`packages/*/package.json`）
 4. 更新 `CHANGELOG.md`（追加版本小节）
-5. `git add package.json CHANGELOG.md`
+5. `git add package.json apps/cli/package.json packages/*/package.json CHANGELOG.md`
 6. `git commit -m "release: v<version>"`
 7. `git tag v<version>`
 8. `git push origin main --tags`
@@ -133,7 +133,7 @@
 
 ## 7. 安装脚本升级
 
-当前 `scripts/install.sh` 和 `install.ps1` 通过 `git clone` 安装源码并本地构建。改为：
+`scripts/install.sh` 和 `install.ps1` 已从 GitHub Releases 下载预构建产物。流程：
 
 1. 从 GitHub Releases API 获取最新 release（或指定 `PHUS_VERSION`）
 2. 下载对应平台的预构建 tarball / zip（包含 `dist/` 和 `node_modules`）
@@ -145,9 +145,9 @@
 ### 构建产物格式
 
 每个 release 上传：
-- `phus-<version>.tgz` — npm package（`npm pack` 输出）
-- `phus-<version>-linux-x64.tar.gz` — 预构建 Linux 包
-- `phcr.io/phus/phus:<version>` — Docker 镜像
+- `phus-<version>.tar.gz` — 预构建 CLI 包（含 `apps/cli/dist`、`apps/cli/package.json`、`pnpm-lock.yaml`）
+- `phus-homebrew-<version>-darwin.tar.gz` / `linux.tar.gz` — 自包含 Homebrew 包
+- `ghcr.io/<owner>/phus:<version>` — Docker 镜像
 
 ---
 
@@ -179,22 +179,22 @@
 
 ## 10. 实施步骤
 
-1. 添加 `.github/workflows/ci.yml`
-2. 添加 `.github/workflows/release.yml`
-3. 添加 `scripts/release.sh`
-4. 初始化 `CHANGELOG.md`
-5. 更新 `package.json` files/publishConfig
-6. 更新 `scripts/install.sh` / `install.ps1` 从 release 下载
-7. 更新 `documents/Deployment.md` 说明发布流程
-8. 跑一遍 `pnpm typecheck && pnpm test && pnpm build` 验证
+1. 确认 `.github/workflows/ci.yml` 包含 binary smoke
+2. 确认 `.github/workflows/release.yml` 按 `@phus/shared` → `@phus/core` → `@phus/runtime` → `@phus/tui` → `@phus/cli` 顺序发布
+3. 确认 `scripts/release.sh` 更新所有 workspace 版本号
+4. 确认 `CHANGELOG.md` 已初始化
+5. 确认每个 workspace `package.json` 包含 `files` + `publishConfig.access: public`
+6. 确认 `scripts/install.sh` / `install.ps1` 从 GitHub Release 下载并重建 native deps
+7. 更新 `documents/Deployment.md` / `Release-System.md` 说明发布流程
+8. 跑一遍 `pnpm typecheck && pnpm lint && pnpm test && pnpm build` 验证
 
 ---
 
 ## 11. 验收标准
 
-- [ ] PR/push 到 main 自动跑 CI
-- [ ] 推送 `v*` tag 自动发布 npm + GitHub Release + Docker
-- [ ] `./scripts/release.sh patch` 能本地完成版本升级并推送 tag
-- [ ] 安装脚本能从 GitHub Release 下载并运行
-- [ ] `CHANGELOG.md` 随版本自动更新
-- [ ] 所有现有测试继续通过
+- [x] PR/push 到 main 自动跑 CI
+- [x] 推送 `v*` tag 自动发布 npm + GitHub Release + Docker
+- [x] `./scripts/release.sh patch` 能本地完成版本升级并推送 tag
+- [x] 安装脚本能从 GitHub Release 下载并运行
+- [x] `CHANGELOG.md` 随版本自动更新
+- [x] 所有现有测试继续通过

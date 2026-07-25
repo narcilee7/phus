@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentMessageChunk, PhusTransport } from "./phus-transport";
+import type { AgentMessageChunk, ControlResponse, PhusTransport } from "./phus-transport";
 
 /** Typed window bridge injected by the desktop preload script. */
 export interface ElectronAPI {
@@ -26,6 +26,11 @@ export class ElectronTransport implements PhusTransport {
 
   send(content: string): Promise<void> {
     return window.electronAPI?.sendMessage(content) ?? Promise.resolve();
+  }
+
+  async sendControl<T = unknown>(action: string): Promise<ControlResponse<T>> {
+    // Desktop IPC does not yet support control requests.
+    return { action, error: "not implemented in electron transport" };
   }
 
   abort(): void {

@@ -102,10 +102,12 @@ install_from_release() {
     (
       cd "$install_dir"
       pnpm install --prod
+      pnpm rebuild better-sqlite3 koffi protobufjs
     )
   fi
 
   log "Phus $tag installed at $install_dir"
+  smoke_install "$install_dir"
   return 0
 }
 
@@ -137,6 +139,7 @@ install_from_source() {
   (
     cd "$install_dir"
     pnpm build
+    pnpm rebuild better-sqlite3 koffi protobufjs
   )
 
   # Link dist to PHUS_HOME for consistency with release install. After
@@ -146,6 +149,7 @@ install_from_source() {
   ln -sfn "$install_dir/apps/cli/package.json" "$PHUS_HOME/package.json"
 
   log "Phus (source) installed at $install_dir"
+  smoke_install "$PHUS_HOME"
 }
 
 ensure_node() {
@@ -210,6 +214,22 @@ ensure_pnpm() {
     echo "ERROR: pnpm installation failed" >&2
     exit 1
   fi
+}
+
+smoke_install() {
+  local home_dir="${1:-$PHUS_HOME}"
+  local target="$home_dir/dist/phus.mjs"
+  if [ ! -f "$target" ]; then
+    warn "Built binary not found at $target"
+    return 1
+  fi
+  if ! "$target" --version >/dev/null 2>&1; then
+    warn "Binary smoke test failed (NODE_MODULE_VERSION mismatch?)"
+    warn "Try running: pnpm rebuild better-sqlite3"
+    return 1
+  fi
+  log "Binary smoke test passed"
+  return 0
 }
 
 symlink_bin() {

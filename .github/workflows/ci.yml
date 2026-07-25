@@ -119,6 +119,11 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Smoke test built binary
+        run: |
+          node apps/cli/dist/phus.mjs --version
+          node apps/cli/dist/phus.mjs health
+
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4
         with:

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Phus design system — shadcn/ui-style component library on Radix + Tailwind. Reusable across apps/web, apps/mobile, apps/desktop. TUI lives in @phus/tui (pi-tui, no React).",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

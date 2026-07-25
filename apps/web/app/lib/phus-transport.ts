@@ -6,11 +6,21 @@
  */
 
 export interface AgentMessageChunk {
-  type: "text" | "tool_call" | "tool_result" | "error" | "status";
+  type: "text" | "tool_call" | "tool_result" | "error" | "status" | "system" | "control_response";
   content?: string;
   toolCall?: { id: string; name: string; arguments: Record<string, unknown> };
   toolResult?: { id: string; output: unknown };
   status?: "connected" | "disconnected" | "idle" | "busy";
+  error?: string;
+  event?: string;
+  clientId?: string;
+  action?: string;
+  data?: unknown;
+}
+
+export interface ControlResponse<T = unknown> {
+  action: string;
+  data?: T;
   error?: string;
 }
 
@@ -21,6 +31,9 @@ export interface PhusTransport {
   /** Send a user message. */
   send(content: string): Promise<void>;
 
+  /** Send a control request and await the matching response. */
+  sendControl<T = unknown>(action: string, sessionId?: string): Promise<ControlResponse<T>>;
+
   /** Abort the current turn. */
   abort(): void;
 
@@ -29,6 +42,9 @@ export interface PhusTransport {
 
   /** Register a connection-status handler. Returns an unsubscribe function. */
   onStatus(handler: (status: AgentMessageChunk["status"]) => void): () => void;
+
+  /** Register a control-response handler. Returns an unsubscribe function. */
+  onControlResponse?(handler: (response: ControlResponse<unknown>) => void): () => void;
 
   /** Request the current model label (best-effort). */
   getModelLabel(): Promise<string>;
@@ -41,6 +57,9 @@ export function createNoopTransport(): PhusTransport {
   return {
     name: "noop",
     async send() {},
+    async sendControl() {
+      return { action: "noop", error: "not connected" };
+    },
     abort() {},
     onMessage() {
       return () => {};

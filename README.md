@@ -134,6 +134,8 @@ pnpm gateway --websocket 8080 --sse 8081
 
 Run `phus setup` for an interactive configuration wizard that writes `phus.config.yaml`.
 
+> **Troubleshooting:** If `phus` fails with `NODE_MODULE_VERSION` mismatch, run `pnpm rebuild better-sqlite3` (or `pnpm rebuild` to rebuild all native modules).
+
 ## Architecture
 
 ```

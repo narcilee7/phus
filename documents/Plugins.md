@@ -62,7 +62,7 @@ interface PluginContext {
 }
 ```
 
-`hooks` is the same registry the core uses — see [`src/core/hook.ts`](../src/core/hook.ts) for the full API.
+`hooks` is the same registry the core uses — see [`packages/core/src/runtime/hook/registry.ts`](../packages/core/src/runtime/hook/registry.ts) for the full API.
 
 ---
 
@@ -241,6 +241,6 @@ PHUS_LOG_LEVEL=debug phus gateway --websocket 8080
 
 ## What's *not* a plugin (yet)
 
-- **Meta tools** — currently hard-coded in [`src/core/meta.ts`](../src/core/meta.ts). Adding `ctx.registerMetaTool(...)` would be straightforward; PRs welcome.
+- **Meta tools** — currently hard-coded in [`packages/runtime/src/infra/meta/index.ts`](../packages/runtime/src/infra/meta/index.ts). Adding `ctx.registerMetaTool(...)` would be straightforward; PRs welcome.
 - **Tape providers** — only SQLite is built in. The `Tape` class could be made pluggable.
 - **Custom models / providers** — use Pi's built-in providers; add a new Pi provider if you need something we don't ship.

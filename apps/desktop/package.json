@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Phus desktop host — Electron app with embedded Phus runtime. Loads the Next.js renderer from @phus/web and bridges it to the local agent via IPC.",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/main/index.js",
   "scripts": {
