@@ -145,10 +145,11 @@ export class EmailChannel implements ChannelAdapter {
             replyToAddress: msg.from?.address,
           },
           address: this.buildAddress(
+            { messageId: msg.messageId, inReplyTo: msg.inReplyTo, references: msg.references },
             msg.from?.address ?? msg.from?.text ?? "unknown",
-            msg.messageId,
-            String(msg.uid),
           ),
+          subjectId: msg.from?.address,
+          displayName: msg.from?.text,
         });
 
         try {
@@ -217,12 +218,15 @@ export class EmailChannel implements ChannelAdapter {
     };
   }
 
-  private buildAddress(fromAddress: string, messageId?: string, uid?: string): SessionAddress {
+  private buildAddress(parsed: EmailThreadHeaders, fromAddress: string): SessionAddress {
+    const rootId = deriveEmailThreadRootId(parsed);
     return {
       channel: "email",
       scope: `mailbox:${this.config.mailbox ?? "INBOX"}`,
-      conversationKey: `from:${fromAddress}`,
-      threadKey: messageId ? `msg:${messageId}` : (uid ? `uid:${uid}` : undefined),
+      conversationKey: rootId ? `thread:${rootId}` : `from:${fromAddress}`,
+      threadKey: parsed.messageId && parsed.messageId !== rootId
+        ? `msg:${parsed.messageId}`
+        : undefined,
     };
   }
 }
@@ -234,6 +238,26 @@ interface FetchedMessage {
   from?: { address?: string; text?: string };
   to?: string;
   text?: string;
+  inReplyTo?: string;
+  references?: string[];
+}
+
+export interface EmailThreadHeaders {
+  messageId?: string;
+  inReplyTo?: string;
+  references?: string[];
+}
+
+/** Return the most stable id for an email thread:
+ *   references[0] is the original message id in RFC 5322 chains,
+ *   inReplyTo is the direct parent (one-step link),
+ *   messageId is the start of a new thread. */
+export function deriveEmailThreadRootId(parsed: EmailThreadHeaders): string {
+  if (parsed.references && parsed.references.length > 0) {
+    return parsed.references[0]!;
+  }
+  if (parsed.inReplyTo) return parsed.inReplyTo;
+  return parsed.messageId ?? "";
 }
 
 function fetchUnseenMessages(opts: {
@@ -300,6 +324,12 @@ function fetchUnseenMessages(opts: {
                     ? parsed.to.map((a: any) => a.text).join(", ")
                     : parsed.to?.text,
                   text: parsed.text ?? undefined,
+                  inReplyTo: parsed.inReplyTo ?? undefined,
+                  references: Array.isArray(parsed.references)
+                    ? parsed.references
+                    : (typeof parsed.references === "string" && parsed.references
+                      ? parsed.references.split(/\s+/).filter(Boolean)
+                      : undefined),
                 });
               } catch (parseErr: any) {
                 logger.warn("channel.email.parse_failed", { seqno, error: parseErr.message });

@@ -4,7 +4,7 @@
 // so install / Dockerfile / systemd paths agree on a stable binary name
 // (the legacy `dist/phus.mjs` path is preserved across the Stage-2 split).
 
-import { renameSync, existsSync } from "node:fs";
+import { renameSync, existsSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 
 const dist = process.argv[2];
@@ -22,6 +22,7 @@ if (!existsSync(from)) {
 }
 
 renameSync(from, to);
+chmodSync(to, 0o755);
 
 // Also rename the source map if it exists (tsc emits one next to the .js).
 const fromMap = join(dist, "main.js.map");

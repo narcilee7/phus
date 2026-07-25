@@ -50,6 +50,7 @@
     "coverage/**",
     "*.config.ts",
     "*.config.js",
+    "next-env.d.ts",
     "packages/tui/src/vendor/**"
   ],
   "overrides": [

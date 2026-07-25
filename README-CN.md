@@ -5,10 +5,11 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/narcilee7/phus/releases/latest"><img src="https://img.shields.io/github/v/release/narcilee7/phus" alt="CLI 版本" align="middle"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" align="middle"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20" align="middle">
   <img src="https://img.shields.io/badge/pnpm-10%2B-orange" alt="pnpm 10+" align="middle">
-  <a href="README.md" align="middle">English</a>
+  <a href="README.md"><img src="https://img.shields.io/badge/docs-English-blue" alt="English" align="middle"></a>
 </p>
 
 ---
@@ -72,6 +73,44 @@ Agent 通过 6 个工具与真实世界交互：
 - `bash` 拦截 `rm -rf /`、fork 炸弹、`curl|sh`、`dd if=`、`chmod -R 777 /`、`mkfs`
 - 策略在 `before_tool_call` 阶段执行 — 对**所有**工具生效，包括元工具，覆盖**所有**频道
 - SubAgent 继承相同的工具列表和安全规则 — 无逃逸通道
+
+## 安装
+
+任选其一。
+
+### Homebrew（macOS / Linux）
+
+```bash
+brew tap narcilee7/phus https://github.com/narcilee7/phus.git
+brew install phus
+phus --version
+```
+
+### npm
+
+```bash
+npm install -g @phus/cli
+phus --version
+```
+
+### GitHub Release
+
+从 [GitHub Releases](https://github.com/narcilee7/phus/releases) 下载最新归档，解压后运行：
+
+```bash
+tar -xzf phus-<version>.tar.gz
+./phus-<version>/bin/phus --version
+```
+
+### 源码构建
+
+```bash
+git clone https://github.com/narcilee7/phus.git
+cd phus
+pnpm install
+pnpm build
+./apps/cli/dist/phus.mjs --version
+```
 
 ## 快速开始
 

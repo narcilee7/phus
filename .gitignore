@@ -147,6 +147,9 @@ vite.config.ts.timestamp-*
 *.sqlite-shm
 *.sqlite-wal
 
+# Release artifacts built by CI
+release/
+
 # Test/coverage
 coverage
 *.lcov

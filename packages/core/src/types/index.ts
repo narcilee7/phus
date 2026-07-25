@@ -20,6 +20,7 @@ export type {
   RegisterOptions,
   TapeLike,
   SkillRegistryLike,
+  SessionContextLike,
   TapeAnchorRef,
 } from "./hooks/index.js";
 

@@ -119,6 +119,9 @@ export class SlackChannel implements ChannelAdapter {
         messageTs: message.ts,
       },
       address: this.buildAddress(channelId, message.thread_ts as string | undefined, message.ts as string),
+      subjectId: userId,
+      displayName: (message as { user_profile?: { display_name?: string; real_name?: string } }).user_profile?.display_name
+        ?? (message as { user_profile?: { display_name?: string; real_name?: string } }).user_profile?.real_name,
     });
 
     try {

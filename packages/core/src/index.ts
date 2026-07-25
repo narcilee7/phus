@@ -51,6 +51,10 @@ export type {
 	SessionAutoCompactArgs,
 } from "./session/session-tape.js";
 
+// ── Session identity catalog
+export { SessionIdentityStore, IdentityMergeConflictError } from "./session/session-identity.js";
+export type { SessionIdentity, IdentitySubject } from "./session/session-identity.js";
+
 // ── Scheduler types
 export type { Schedule, FiredSchedule, SchedulerOptions } from "./types/scheduler/index.js";
 

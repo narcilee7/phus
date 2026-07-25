@@ -87,6 +87,8 @@ export class TelegramChannel implements ChannelAdapter {
         chatType: chat.type,
       },
       address: this.buildAddress(chatId, ctx.message?.message_thread_id as number | undefined),
+      subjectId: userId,
+      displayName: username,
     });
 
     try {

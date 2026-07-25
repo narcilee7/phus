@@ -16,7 +16,9 @@
     "./components/*": "./dist/components/*",
     "./hooks/*": "./dist/hooks/*",
     "./lib/*": "./dist/lib/*",
-    "./styles/*": "./dist/styles/*"
+    "./styles/*": "./dist/styles/*",
+    "./tailwind.config.mjs": "./tailwind.config.mjs",
+    "./postcss.config.mjs": "./postcss.config.mjs"
   },
   "files": [
     "dist",
