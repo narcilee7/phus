@@ -1,12 +1,7 @@
 /* src/styles/globals.css
  *
- * Tailwind v3 base + shadcn CSS variables. The same variables drive
- * every component in src/components/ui/*. Consumers import this CSS
- * once at the app root and the components pick up the design tokens.
- *
- * Dark mode is class-based (`.dark` on the root), so consumers can
- * toggle themes without re-rendering. Light is the default; dark is
- * the default in apps where the ambient light is dark.
+ * Phus design tokens. A Sisyphus/stone palette: warm neutrals, ember
+ * accents, and class-based dark mode. Import once at the app root.
  */
 
 @tailwind base;
@@ -15,26 +10,26 @@
 
 @layer base {
 	:root {
-		--background: 0 0% 100%;
-		--foreground: 222.2 84% 4.9%;
-		--card: 0 0% 100%;
-		--card-foreground: 222.2 84% 4.9%;
-		--popover: 0 0% 100%;
-		--popover-foreground: 222.2 84% 4.9%;
-		--primary: 222.2 47.4% 11.2%;
-		--primary-foreground: 210 40% 98%;
-		--secondary: 210 40% 96.1%;
-		--secondary-foreground: 222.2 47.4% 11.2%;
-		--muted: 210 40% 96.1%;
-		--muted-foreground: 215.4 16.3% 46.9%;
-		--accent: 210 40% 96.1%;
-		--accent-foreground: 222.2 47.4% 11.2%;
-		--destructive: 0 84.2% 60.2%;
-		--destructive-foreground: 210 40% 98%;
-		--border: 214.3 31.8% 91.4%;
-		--input: 214.3 31.8% 91.4%;
-		--ring: 222.2 84% 4.9%;
-		--radius: 0.5rem;
+		--background: 30 6% 98%;
+		--foreground: 30 10% 10%;
+		--card: 30 6% 100%;
+		--card-foreground: 30 10% 10%;
+		--popover: 30 6% 100%;
+		--popover-foreground: 30 10% 10%;
+		--primary: 30 8% 18%;
+		--primary-foreground: 30 6% 98%;
+		--secondary: 30 6% 93%;
+		--secondary-foreground: 30 10% 15%;
+		--muted: 30 6% 92%;
+		--muted-foreground: 30 5% 45%;
+		--accent: 24 95% 53%;
+		--accent-foreground: 30 6% 98%;
+		--destructive: 0 84% 60%;
+		--destructive-foreground: 0 0% 98%;
+		--border: 30 8% 88%;
+		--input: 30 8% 88%;
+		--ring: 24 95% 53%;
+		--radius: 0.625rem;
 
 		--font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
 			"Helvetica Neue", Arial;
@@ -43,25 +38,25 @@
 	}
 
 	.dark {
-		--background: 222.2 84% 4.9%;
-		--foreground: 210 40% 98%;
-		--card: 222.2 84% 4.9%;
-		--card-foreground: 210 40% 98%;
-		--popover: 222.2 84% 4.9%;
-		--popover-foreground: 210 40% 98%;
-		--primary: 210 40% 98%;
-		--primary-foreground: 222.2 47.4% 11.2%;
-		--secondary: 217.2 32.6% 17.5%;
-		--secondary-foreground: 210 40% 98%;
-		--muted: 217.2 32.6% 17.5%;
-		--muted-foreground: 215 20.2% 65.1%;
-		--accent: 217.2 32.6% 17.5%;
-		--accent-foreground: 210 40% 98%;
-		--destructive: 0 62.8% 30.6%;
-		--destructive-foreground: 210 40% 98%;
-		--border: 217.2 32.6% 17.5%;
-		--input: 217.2 32.6% 17.5%;
-		--ring: 212.7 26.8% 83.9%;
+		--background: 30 8% 6%;
+		--foreground: 30 6% 96%;
+		--card: 30 8% 8%;
+		--card-foreground: 30 6% 96%;
+		--popover: 30 8% 8%;
+		--popover-foreground: 30 6% 96%;
+		--primary: 30 6% 94%;
+		--primary-foreground: 30 10% 8%;
+		--secondary: 30 6% 15%;
+		--secondary-foreground: 30 6% 94%;
+		--muted: 30 6% 14%;
+		--muted-foreground: 30 5% 55%;
+		--accent: 24 95% 53%;
+		--accent-foreground: 30 6% 98%;
+		--destructive: 0 62% 30%;
+		--destructive-foreground: 0 0% 98%;
+		--border: 30 6% 18%;
+		--input: 30 6% 18%;
+		--ring: 24 95% 53%;
 	}
 }
 
@@ -70,7 +65,7 @@
 		@apply border-border;
 	}
 	body {
-		@apply bg-background text-foreground;
+		@apply bg-background text-foreground antialiased;
 		font-family: var(--font-sans);
 	}
 }

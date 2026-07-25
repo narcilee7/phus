@@ -87,13 +87,18 @@ export class WebSocketChannel implements ChannelAdapter {
       return;
     }
 
+    const address = this.buildAddress(clientId, this.readThread(socket));
     const envelope = makeEnvelopeFromChat({
       channel: this.name,
       chatId: clientId,
       from: clientId,
       content: text,
-      address: this.buildAddress(clientId, this.readThread(socket)),
+      address,
     });
+    const override = this.sessionOverrides.get(clientId);
+    if (override) {
+      (envelope as any).sessionId = override;
+    }
 
     try {
       await this.agent?.turn(envelope, this);
@@ -103,13 +108,19 @@ export class WebSocketChannel implements ChannelAdapter {
     }
   }
 
-  private parseControlMessage(text: string): { action: string; sessionId?: string } | undefined {
+  private parseControlMessage(
+    text: string,
+  ):
+    | { action: string; sessionId?: string; clientId?: string; title?: string }
+    | undefined {
     try {
       const parsed = JSON.parse(text) as Record<string, unknown>;
       if (parsed.type === "control" && typeof parsed.action === "string") {
         return {
           action: parsed.action,
           sessionId: typeof parsed.sessionId === "string" ? parsed.sessionId : undefined,
+          clientId: typeof parsed.clientId === "string" ? parsed.clientId : undefined,
+          title: typeof parsed.title === "string" ? parsed.title : undefined,
         };
       }
     } catch {
@@ -118,10 +129,12 @@ export class WebSocketChannel implements ChannelAdapter {
     return undefined;
   }
 
+  private sessionOverrides = new Map<string, import("@phus/core/types/brand.js").SessionId>();
+
   private async handleControlMessage(
     socket: WebSocket,
     clientId: string,
-    control: { action: string; sessionId?: string },
+    control: { action: string; sessionId?: string; clientId?: string; title?: string },
   ): Promise<void> {
     const agent = this.agent;
     if (!agent) {
@@ -161,6 +174,39 @@ export class WebSocketChannel implements ChannelAdapter {
             updatedAt: p.updatedAt,
           }));
           this.sendToSocket(socket, { type: "control_response", action: control.action, data: plans });
+          break;
+        }
+        case "get_current_session": {
+          const id = this.sessionOverrides.get(clientId) ?? agent.getCurrentSessionId();
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: { id } });
+          break;
+        }
+        case "get_model_label": {
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: agent.getModelLabel() });
+          break;
+        }
+        case "use_session": {
+          if (!control.sessionId) {
+            this.sendToSocket(socket, { type: "control_response", action: control.action, error: "sessionId required" });
+            break;
+          }
+          const session = agent.getSession(control.sessionId);
+          if (!session) {
+            this.sendToSocket(socket, { type: "control_response", action: control.action, error: "session not found" });
+            break;
+          }
+          if (session.status === "closed" || session.status === "archived") {
+            agent.reopenSession(session.id);
+          }
+          this.sessionOverrides.set(clientId, session.id);
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: { id: session.id, title: session.title ?? session.id } });
+          break;
+        }
+        case "new_session": {
+          const address = this.buildAddress(clientId, this.readThread(socket));
+          const session = agent.createSession(address, { title: control.title });
+          this.sessionOverrides.set(clientId, session.id);
+          this.sendToSocket(socket, { type: "control_response", action: control.action, data: { id: session.id, title: session.title ?? session.id } });
           break;
         }
         default:

@@ -7,6 +7,10 @@ export interface WebSocketTransportConfig {
   clientId?: string;
 }
 
+type PendingMessage =
+  | { kind: "text"; content: string }
+  | { kind: "control"; payload: string };
+
 /**
  * Browser transport that talks to a Phus WebSocketChannel (usually served by
  * `phus gateway`).
@@ -18,7 +22,7 @@ export class WebSocketTransport implements PhusTransport {
   private readonly statusHandlers = new Set<(status: AgentMessageChunk["status"]) => void>();
   private readonly controlHandlers = new Set<(response: ControlResponse<unknown>) => void>();
   private readonly clientId: string;
-  private pending: string[] = [];
+  private pending: PendingMessage[] = [];
   private closed = false;
   private controlPending = new Map<string, (response: ControlResponse<unknown>) => void>();
 
@@ -35,8 +39,12 @@ export class WebSocketTransport implements PhusTransport {
 
     socket.onopen = () => {
       this.emitStatus("connected");
-      for (const content of this.pending) {
-        this.sendRaw(content);
+      for (const item of this.pending) {
+        if (item.kind === "text") {
+          this.sendRaw(item.content);
+        } else {
+          socket.send(item.payload);
+        }
       }
       this.pending = [];
     };
@@ -86,14 +94,13 @@ export class WebSocketTransport implements PhusTransport {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.sendRaw(content);
     } else {
-      this.pending.push(content);
+      this.pending.push({ kind: "text", content });
     }
   }
 
   async sendControl<T = unknown>(action: string, sessionId?: string): Promise<ControlResponse<T>> {
     return new Promise((resolve) => {
-      const payload = JSON.stringify({ type: "control", action, sessionId });
-      // Resolve on the first matching response; timeout after 5s.
+      const payload = JSON.stringify({ type: "control", action, sessionId, clientId: this.clientId });
       const timer = window.setTimeout(() => {
         this.controlPending.delete(action);
         resolve({ action, error: "timeout" } as ControlResponse<T>);
@@ -105,7 +112,7 @@ export class WebSocketTransport implements PhusTransport {
       if (this.socket?.readyState === WebSocket.OPEN) {
         this.socket.send(payload);
       } else {
-        this.pending.push(payload);
+        this.pending.push({ kind: "control", payload });
       }
     });
   }
@@ -140,6 +147,12 @@ export class WebSocketTransport implements PhusTransport {
   }
 
   async getModelLabel(): Promise<string> {
+    try {
+      const response = await this.sendControl<string>("get_model_label");
+      if (typeof response.data === "string") return response.data;
+    } catch {
+      // fall back to default label
+    }
     return "websocket/unknown";
   }
 

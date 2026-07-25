@@ -28,7 +28,7 @@ export class ElectronTransport implements PhusTransport {
     return window.electronAPI?.sendMessage(content) ?? Promise.resolve();
   }
 
-  async sendControl<T = unknown>(action: string): Promise<ControlResponse<T>> {
+  async sendControl<T = unknown>(action: string, _sessionId?: string): Promise<ControlResponse<T>> {
     // Desktop IPC does not yet support control requests.
     return { action, error: "not implemented in electron transport" };
   }
