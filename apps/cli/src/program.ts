@@ -5,9 +5,31 @@
 // `register(program)` function. `buildProgram()` assembles them in
 // order, then drains the plugin CLI command queue before parsing.
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { drainPendingCliCommands } from "@phus/runtime/infra/plugins/cli-queue.js";
 import type { ResolvedConfig } from "@phus/runtime/infra/config/index.js";
+
+function findPackageJson(startDir: string): string | undefined {
+  let dir = startDir;
+  while (dir !== dirname(dir)) {
+    const candidate = resolve(dir, "package.json");
+    try {
+      readFileSync(candidate, "utf-8");
+      return candidate;
+    } catch {
+      dir = dirname(dir);
+    }
+  }
+  return undefined;
+}
+
+const packageJsonPath = findPackageJson(dirname(fileURLToPath(import.meta.url)));
+const cliVersion = packageJsonPath
+  ? (JSON.parse(readFileSync(packageJsonPath, "utf-8")) as { version: string }).version
+  : "0.0.0";
 
 import { registerChatCommand } from "./commands/chat.js";
 import { registerRunCommand } from "./commands/run.js";
@@ -37,7 +59,7 @@ export function buildProgram(): Command {
   program
     .name("phus")
     .description("⛰️  Phus — self-evolving agent. Push the stone up the mountain.")
-    .version("0.1.0");
+    .version(cliVersion);
 
   // Register every built-in command. Order does not matter for
   // dispatch; we keep the lifecycle-relevant ones first.

@@ -57,7 +57,7 @@ export function initLogger(opts: { file: string; level: string }): void {
         level: (label) => ({ level: label }),
       },
     },
-    pino.destination({ dest: file, sync: false, mkdir: true }),
+    pino.destination({ dest: file, sync: true, mkdir: true }),
   );
 }
 

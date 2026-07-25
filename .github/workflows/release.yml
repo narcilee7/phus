@@ -19,6 +19,8 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     needs: [ci]
+    outputs:
+      version: ${{ steps.dist-tag.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -136,6 +138,60 @@ jobs:
             --title "Phus ${{ steps.dist-tag.outputs.version }}" \
             "release/phus-${{ steps.dist-tag.outputs.version }}.tar.gz" \
             "release/phus-latest.tar.gz"
+
+  homebrew:
+    name: Pack Homebrew archive
+    needs: [release]
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            asset_suffix: darwin
+          - os: ubuntu-latest
+            asset_suffix: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Pack Homebrew archive
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          # Self-contained archive for `brew install phus`. Uses pnpm deploy
+          # so all workspace deps + npm deps are bundled without symlinks
+          # that would break after extraction.
+          deploy_dir="$(mktemp -d)"
+          staging_dir="$(mktemp -d)"
+          pnpm deploy --filter @phus/cli --prod --legacy "$deploy_dir"
+          mkdir -p "$staging_dir/phus-$VERSION"
+          cp -R "$deploy_dir"/* "$staging_dir/phus-$VERSION"/"
+          tar -czf "release/phus-homebrew-$VERSION-${{ matrix.asset_suffix }}.tar.gz" -C "$staging_dir" "phus-$VERSION"
+          rm -rf "$deploy_dir" "$staging_dir"
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          gh release upload "${{ github.ref_name }}" \
+            "release/phus-homebrew-$VERSION-${{ matrix.asset_suffix }}.tar.gz"
 
   docker:
     name: Docker

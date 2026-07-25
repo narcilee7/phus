@@ -5,10 +5,11 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/narcilee7/phus/releases/latest"><img src="https://img.shields.io/github/v/release/narcilee7/phus" alt="CLI Version" align="middle"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT" align="middle"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node ≥20" align="middle">
   <img src="https://img.shields.io/badge/pnpm-10%2B-orange" alt="pnpm 10+" align="middle">
-  <a href="README-CN.md" align="middle" display="block">中文文档</a>
+  <a href="README-CN.md"><img src="https://img.shields.io/badge/docs-中文-red" alt="中文文档" align="middle"></a>
 </p>
 
 ---
@@ -72,6 +73,44 @@ Operator equivalence — the agent and you share the same boundary:
 - `bash` blocks `rm -rf /`, fork bombs, `curl|sh`, `dd if=`, `chmod -R 777 /`, `mkfs`
 - Policy enforced at `before_tool_call` — applies to **every** tool, including meta tools, across **every** channel
 - SubAgents inherit the same tool list and safety rules — no escape hatch
+
+## Install
+
+Choose one of the following.
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap narcilee7/phus
+brew install phus
+phus --version
+```
+
+### npm
+
+```bash
+npm install -g @phus/cli
+phus --version
+```
+
+### GitHub Release
+
+Download the latest archive from [GitHub Releases](https://github.com/narcilee7/phus/releases), extract it, and run:
+
+```bash
+tar -xzf phus-<version>.tar.gz
+./phus-<version>/bin/phus --version
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/narcilee7/phus.git
+cd phus
+pnpm install
+pnpm build
+./apps/cli/dist/phus.mjs --version
+```
 
 ## Quick start
 
