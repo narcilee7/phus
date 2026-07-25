@@ -1,7 +1,7 @@
 # Proposal: Session as the Aggregate Root
 
-> **Status:** Accepted — implementation in progress; Phases 1–5 landed by 2026-07-24  
-> **Decision:** Make `Session` the durable continuity boundary. Keep Tape as a session-owned append-only event log.  
+> **Status:** Accepted — implementation in progress; Phases 1–5 landed by 2026-07-24
+> **Decision:** Make `Session` the durable continuity boundary. Keep Tape as a session-owned append-only event log.
 > **Scope:** This document distinguishes shipped phases from target APIs that remain proposed.
 
 ---
@@ -180,11 +180,7 @@ These resources can influence a Session turn, but they are not duplicated into e
 The following types illustrate the intended contract. Names and fields may change during implementation, but the boundaries should remain.
 
 ```ts
-type SessionKind =
-  | "conversation"
-  | "scheduled"
-  | "subagent"
-  | "system";
+type SessionKind = "conversation" | "scheduled" | "subagent" | "system";
 
 type SessionStatus = "open" | "closed" | "archived";
 
@@ -250,7 +246,10 @@ Conceptual surface:
 
 ```ts
 interface SessionStore {
-  resolveOrCreate(address: SessionAddress, options?: CreateSessionOptions): Session;
+  resolveOrCreate(
+    address: SessionAddress,
+    options?: CreateSessionOptions,
+  ): Session;
   create(options: CreateSessionOptions): Session;
   get(id: SessionId): Session | undefined;
   findByAddress(address: SessionAddress): Session | undefined;
@@ -273,7 +272,10 @@ interface SessionManager {
   current(): Session | undefined;
   switchTo(id: SessionId): Promise<Session>;
   newSession(options: CreateSessionOptions): Promise<Session>;
-  withRuntime<T>(session: Session, run: (runtime: SessionRuntime) => Promise<T>): Promise<T>;
+  withRuntime<T>(
+    session: Session,
+    run: (runtime: SessionRuntime) => Promise<T>,
+  ): Promise<T>;
 }
 ```
 
@@ -386,19 +388,19 @@ A globally serialized “hydrate one Pi Agent, run, save, clear, repeat” strat
 
 Channels produce `Envelope` values and enough metadata to normalize a `SessionAddress`. They do not create Session rows themselves.
 
-| Channel | Session conversation boundary | Thread boundary | Routing-only identity | Notes |
-|---|---|---|---|---|
-| CLI chat | selected or named conversation | none | terminal/process | `/new` creates a new Session; it must not only clear messages. |
-| CLI one-shot | fresh Session by default | none | process | `--session <id>` explicitly resumes an existing Session. |
-| Telegram | bot scope + chat ID | forum topic/message thread ID when present | update/message ID | User ID is participant metadata, not Session identity. |
-| Slack | workspace + channel/DM ID | root `thread_ts` | event/message timestamp | Replies in one thread share a Session; separate threads do not. |
-| WebSocket | client-supplied `conversationId` | optional client-supplied thread | socket/client UUID | Missing conversation IDs create ephemeral Sessions and return a resumable Session ID. |
-| SSE | client-supplied `conversationId` | optional client-supplied thread | connection/client ID | Reconnect continuity must not depend on one HTTP connection. |
-| Email | mailbox/account scope + conversation root | `References`/`In-Reply-To` root | IMAP UID | Fall back to `Message-ID` for a new thread. Sender is participant metadata. |
-| Scheduler | stable schedule identity | optional isolated run ID | timer invocation | Default: repeated firings are turns in one scheduled Session. |
-| Subagent | generated child identity | plan/step origin | worker invocation | Always records `parentSessionId`. |
-| System | explicit runtime/system identity | purpose-specific | process | Replaces new writes to magic `_system`. |
-| WhatsApp | reserved chat/conversation key | provider thread key if available | webhook delivery ID | Adapter is currently a placeholder; semantics are reserved now. |
+| Channel      | Session conversation boundary             | Thread boundary                            | Routing-only identity   | Notes                                                                                 |
+| ------------ | ----------------------------------------- | ------------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------- |
+| CLI chat     | selected or named conversation            | none                                       | terminal/process        | `/new` creates a new Session; it must not only clear messages.                        |
+| CLI one-shot | fresh Session by default                  | none                                       | process                 | `--session <id>` explicitly resumes an existing Session.                              |
+| Telegram     | bot scope + chat ID                       | forum topic/message thread ID when present | update/message ID       | User ID is participant metadata, not Session identity.                                |
+| Slack        | workspace + channel/DM ID                 | root `thread_ts`                           | event/message timestamp | Replies in one thread share a Session; separate threads do not.                       |
+| WebSocket    | client-supplied `conversationId`          | optional client-supplied thread            | socket/client UUID      | Missing conversation IDs create ephemeral Sessions and return a resumable Session ID. |
+| SSE          | client-supplied `conversationId`          | optional client-supplied thread            | connection/client ID    | Reconnect continuity must not depend on one HTTP connection.                          |
+| Email        | mailbox/account scope + conversation root | `References`/`In-Reply-To` root            | IMAP UID                | Fall back to `Message-ID` for a new thread. Sender is participant metadata.           |
+| Scheduler    | stable schedule identity                  | optional isolated run ID                   | timer invocation        | Default: repeated firings are turns in one scheduled Session.                         |
+| Subagent     | generated child identity                  | plan/step origin                           | worker invocation       | Always records `parentSessionId`.                                                     |
+| System       | explicit runtime/system identity          | purpose-specific                           | process                 | Replaces new writes to magic `_system`.                                               |
+| WhatsApp     | reserved chat/conversation key            | provider thread key if available           | webhook delivery ID     | Adapter is currently a placeholder; semantics are reserved now.                       |
 
 ### 6.1 Transport disconnects
 
@@ -550,8 +552,8 @@ Switching Sessions must save and hydrate atomically. CLI/TUI feedback should not
 Current plugins can read:
 
 ```ts
-hookCtx.sessionId
-hookCtx.tape
+hookCtx.sessionId;
+hookCtx.tape;
 ```
 
 Both remain available during migration. Add a session-aware contract rather than changing all plugins at once:

@@ -18,6 +18,13 @@ export interface SessionAddress {
   threadKey?: string;
 }
 
+export interface SessionAddress {
+  channel: string;
+  scope: string;
+  conversationKey: string;
+  threadKey?: string;
+}
+
 export type OutboundType = "text" | "image" | "reaction";
 
 export type EnvelopType = "text" | "image" | "reaction" | "command";

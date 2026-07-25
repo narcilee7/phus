@@ -8,6 +8,7 @@ import type { ChannelAdapter, ChannelStatus } from "./base.js";
 import { makeEnvelopeFromChat } from "./base.js";
 import type { Outbound } from "@phus/core/types/channel/index.js";
 import type { SessionAddress } from "@phus/core/types/session/index.js";
+import type { SessionAddress } from "@phus/core/types/session/index.js";
 import type { PhusAgent } from "../bridge/pi-agent.js";
 import { logger } from "../infra/logging.js";
 
@@ -26,6 +27,7 @@ export class SlackChannel implements ChannelAdapter {
   private agent?: PhusAgent;
   private closed = false;
   private readonly allowedUsers: Set<string>;
+  private teamId = "unknown";
   private teamId = "unknown";
 
   constructor(private readonly config: SlackChannelConfig = {}) {
@@ -51,6 +53,16 @@ export class SlackChannel implements ChannelAdapter {
       appToken,
       socketMode: true,
     });
+
+    try {
+      const auth = await this.app.client.auth.test();
+      const id = (auth as { team_id?: string }).team_id;
+      if (id) this.teamId = id;
+    } catch (err) {
+      logger.warn("channel.slack.team_lookup_failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     try {
       const auth = await this.app.client.auth.test();
@@ -134,6 +146,16 @@ export class SlackChannel implements ChannelAdapter {
         // ignore secondary send errors
       }
     }
+  }
+
+  private buildAddress(channelId: string, threadTs?: string, rootTs?: string): SessionAddress {
+    const thread = threadTs ?? (rootTs ? rootTs : undefined);
+    return {
+      channel: "slack",
+      scope: `team:${this.teamId}`,
+      conversationKey: `channel:${channelId}`,
+      threadKey: thread ? `thread:${thread}` : undefined,
+    };
   }
 
   private buildAddress(channelId: string, threadTs?: string, rootTs?: string): SessionAddress {

@@ -2,10 +2,12 @@
 // Telegram channel — polling bot with optional user/chat allow-lists.
 
 import { createHash } from "node:crypto";
+import { createHash } from "node:crypto";
 import { Telegraf } from "telegraf";
 import type { ChannelAdapter, ChannelStatus } from "./base.js";
 import { makeEnvelopeFromChat } from "./base.js";
 import type { Outbound } from "@phus/core/types/channel/index.js";
+import type { SessionAddress } from "@phus/core/types/session/index.js";
 import type { SessionAddress } from "@phus/core/types/session/index.js";
 import type { PhusAgent } from "../bridge/pi-agent.js";
 import { logger } from "../infra/logging.js";
@@ -27,6 +29,7 @@ export class TelegramChannel implements ChannelAdapter {
   private readonly allowedUsers: Set<string>;
   private readonly allowedChats: Set<string>;
   private botTokenHash = "default";
+  private botTokenHash = "default";
 
   constructor(private readonly config: TelegramChannelConfig = {}) {
     this.allowedUsers = normalizeSet(config.allowedUsers ?? envList("TELEGRAM_ALLOW_USERS"));
@@ -44,6 +47,7 @@ export class TelegramChannel implements ChannelAdapter {
     }
 
     this.agent = agent;
+    this.botTokenHash = createHash("sha1").update(token).digest("hex").slice(0, 8);
     this.botTokenHash = createHash("sha1").update(token).digest("hex").slice(0, 8);
     this.bot = new Telegraf(token);
 
@@ -101,6 +105,17 @@ export class TelegramChannel implements ChannelAdapter {
         // ignore secondary send errors
       }
     }
+  }
+
+  private buildAddress(chatId: string, messageThreadId?: number): SessionAddress {
+    return {
+      channel: "telegram",
+      scope: `bot:${this.botTokenHash}`,
+      conversationKey: `chat:${chatId}`,
+      threadKey: typeof messageThreadId === "number"
+        ? `topic:${messageThreadId}`
+        : undefined,
+    };
   }
 
   private buildAddress(chatId: string, messageThreadId?: number): SessionAddress {
